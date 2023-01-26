@@ -127,3 +127,17 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Additional ignores
+
+./Data/*
+./src/Generated_trajectories/*
+./trained_models/*
+*.xyz
+*.model
+*.png
+*.pdf
+
+# Data files and arcihves
+*.csv
+*.tar.gz
