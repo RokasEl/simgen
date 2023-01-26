@@ -202,7 +202,7 @@ class MaceSimilarityScore(ScoreModel):
         )  # (embed_dim, num_old_data, num_new_data)
 
         squared_distance_matrix = torch.sum(embedding_deltas**2, dim=0)
-
+        squared_distance_matrix[squared_distance_matrix <= 1e-16] = 0
         return squared_distance_matrix
 
     def _get_log_kernel_density(self, embedding, t):
@@ -215,8 +215,11 @@ class MaceSimilarityScore(ScoreModel):
         # pick 5 closest neighbors
         # sorted_distance_kernel = sorted_distance_kernel[:5, :]  # (5, num_new_data)
         # variance = sorted_distance_kernel[:10, :].mean(dim=0) # (num_new_data)
-        variance = 1e-5
-        density = torch.exp(-squared_distances / (2 * variance)).mean(
+        variance = 1e-8
+        inverse_temperature = 1 / (t + 1e-10)
+        density = torch.exp(
+            -inverse_temperature * squared_distances / (2 * variance)
+        ).mean(
             dim=0
         )  # (num_new_data)
         log_density = torch.log(density)

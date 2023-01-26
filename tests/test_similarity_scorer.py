@@ -1,3 +1,4 @@
+import einops
 import numpy as np
 import pytest
 import torch
@@ -125,5 +126,18 @@ def test_log_kernel_density_of_training_data_much_higher_than_new_data(
 def test_gradient_of_log_kernel_density_is_close_to_zero_for_training_data(
     mace_similarity_scorer, training_molecules
 ):
-    gradients = [mace_similarity_scorer(mol, t=1) for mol in training_molecules]
-    assert np.allclose(gradients, 0.0, atol=1e-10)
+    gradients = [mace_similarity_scorer(mol, t=0) for mol in training_molecules]
+    for grad in gradients:
+        assert np.allclose(grad, 0.0, atol=1e-10)
+
+
+def test_slightly_perturbed_training_molecules_have_non_zero_gradient(
+    mace_similarity_scorer, training_molecules
+):
+    for mol in training_molecules:
+        mol.set_positions(
+            mol.get_positions() + 1e-2 * np.random.randn(*mol.get_positions().shape)
+        )
+    gradients = [mace_similarity_scorer(mol, t=0) for mol in training_molecules]
+    for grad in gradients:
+        assert np.any(grad != 0.0)
