@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "moldiff"
+version = "0.1"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    {name = "Rokas Elijošius", email = "re344@cam.ac.uk"}
+]
+
+[tool.setuptools.packages.find]
+where=["moldiff"]
