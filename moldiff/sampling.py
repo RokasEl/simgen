@@ -1,4 +1,5 @@
 import abc
+import warnings
 from typing import List
 
 import einops
@@ -7,9 +8,8 @@ import torch
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
 from mace.modules.utils import get_edge_vectors_and_lengths
-from mace.tools import init_device, torch_geometric
+from mace.tools import torch_geometric
 
-DEVICE = init_device("cuda")
 #################### Base Classes ####################
 
 
@@ -99,6 +99,143 @@ class ASECalculatorScoreModel(ScoreModel):
         return X.get_forces()
 
 
+class MaceSimilarityScore(ScoreModel):
+    def __init__(
+        self,
+        mace_model,
+        z_table,
+        training_data: List,
+        device: str = "cuda",
+    ):
+        self.model = mace_model
+        self.z_table = z_table
+        self.device = device
+        self.reference_embeddings = self._get_reference_embeddings(training_data)
+
+    def __call__(self, atoms, t):
+        atomic_data = self._to_atomic_data(atoms)
+        emb = self._get_node_embeddings(atomic_data)
+        log_dens = self._get_log_kernel_density(emb, t)
+        grad = self._get_gradient(atomic_data, log_dens)
+        if np.isnan(grad).any():
+            print("nan in grad")
+            grad = np.nan_to_num(grad, nan=0)
+            return grad
+        # limit the norm of the gradient to 1e4
+        grad_norm = np.linalg.norm(grad, axis=1)
+        limit_to_grad_ratio = np.clip(1e4 / grad_norm, 0, 1)[:, None]
+        grad = grad * limit_to_grad_ratio
+        return grad
+
+    def _to_atomic_data(self, atoms):
+        conf = config_from_atoms(atoms)
+        atomic_data = AtomicData.from_config(
+            conf, z_table=self.z_table, cutoff=self.model.r_max
+        ).to(self.device)
+        atomic_data.positions.requires_grad = True
+        return atomic_data
+
+    @staticmethod
+    def _get_gradient(inp_atoms: AtomicData, log_dens: torch.Tensor):
+        grad = torch.autograd.grad(
+            outputs=log_dens,
+            inputs=inp_atoms.positions,
+            grad_outputs=torch.ones_like(log_dens),
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        return grad.detach().cpu().numpy()
+
+    @staticmethod
+    def _handle_grad_magnitude(grad):
+        # overlapping atoms can cause nans or very large gradients
+        # convert nans to zeros
+        if np.isnan(grad).any() or np.isinf(grad).any():
+            warnings.warn("nan or inf in grad")
+            grad = np.nan_to_num(grad, nan=0, posinf=0, neginf=0)
+        # limit the norm of the gradient to 10 for each atom
+        grad_norm = np.linalg.norm(grad, axis=1) + 1e-8  # (n_atoms,)
+        normalisation = np.clip(10 / grad_norm, 0, 1)[:, None]  # (n_atoms, 1)
+        grad = grad * normalisation
+        return grad
+
+    def _get_node_embeddings(self, data: AtomicData):
+        # Embeddings
+        node_feats = self.model.node_embedding(data.node_attrs)
+        vectors, lengths = get_edge_vectors_and_lengths(
+            positions=data.positions, edge_index=data.edge_index, shifts=data.shifts
+        )
+        edge_attrs = self.model.spherical_harmonics(vectors)
+        edge_feats = self.model.radial_embedding(lengths)
+        node_feats_all = []
+        for interaction, product, _ in zip(
+            self.model.interactions, self.model.products, self.model.readouts
+        ):
+            node_feats, sc = interaction(
+                node_attrs=data.node_attrs,
+                node_feats=node_feats,
+                edge_attrs=edge_attrs,
+                edge_feats=edge_feats,
+                edge_index=data.edge_index,
+            )
+            node_feats = product(
+                node_feats=node_feats, sc=sc, node_attrs=data.node_attrs
+            )
+            node_feats_all.append(node_feats)
+        if len(node_feats_all) == 1:
+            return node_feats_all[0]
+        else:
+            return torch.concatenate(node_feats_all, dim=-1)
+
+    def _get_reference_embeddings(self, training_data):
+        configs = [config_from_atoms(atoms) for atoms in training_data]
+        data_loader = torch_geometric.dataloader.DataLoader(
+            dataset=[
+                AtomicData.from_config(
+                    config, z_table=self.z_table, cutoff=self.model.r_max
+                )
+                for config in configs
+            ],  # type:ignore
+            batch_size=128,
+            shuffle=False,
+            drop_last=False,
+        )
+        ref_embeddings = []
+        with torch.no_grad():
+            for data in data_loader:
+                data = data.to(self.device)
+                ref_embeddings.append(self._get_node_embeddings(data))
+        return torch.concatenate(ref_embeddings, dim=0)
+
+    def _calculate_distance_matrix(self, embedding):
+        embedding_deltas = einops.rearrange(
+            embedding, "num_new_data embed_dim  -> embed_dim () num_new_data"
+        ) - einops.rearrange(
+            self.reference_embeddings,
+            "num_old_data embed_dim  -> embed_dim num_old_data () ",
+        )  # (embed_dim, num_old_data, num_new_data)
+
+        squared_distance_matrix = torch.sum(embedding_deltas**2, dim=0)
+        squared_distance_matrix[squared_distance_matrix <= 1e-12] = 0
+        return squared_distance_matrix
+
+    def _get_log_kernel_density(self, embedding, t):
+
+        squared_distances = self._calculate_distance_matrix(
+            embedding
+        )  # (num_old_data, num_new_data)
+        variance = 1e-6
+        log_temp = -4 + 6 * t
+        inverse_temperature = 1 / 10**log_temp
+        density = torch.exp(
+            -inverse_temperature * squared_distances / (2 * variance)
+        ).mean(
+            dim=0
+        )  # (num_new_data)
+        log_density = torch.log(density)
+        return log_density
+
+
 #################### Samplers ####################
 
 
@@ -145,8 +282,8 @@ class LangevinSampler(Sampler):
             else self.get_dynamic_step_size_modifier(score, noise, eta=self.eta)
         )
         # step_size_modifier = np.clip(step_size_modifier, 1e-6, 1e6)
-        # step_size *= step_size_modifier
-        force_term = step_size * score * step_size_modifier
+        step_size *= step_size_modifier
+        force_term = step_size * score
         drag_term = step_size * self.drag_coefficient * self.drag(X, X_prev)
         brownian_term = np.sqrt(2 * step_size * self.temperature) * noise
         X.positions += force_term + drag_term + brownian_term
@@ -170,115 +307,5 @@ class LangevinSampler(Sampler):
         noise_norm = np.linalg.norm(noise, axis=1).mean()
         step_size_modifier = (
             self.signal_to_noise_ratio * noise_norm / (score_norm + eta)
-        )
+        ) ** 2
         return step_size_modifier
-
-
-class MaceSimilarityScore(ScoreModel):
-    def __init__(
-        self,
-        mace_model,
-        z_table,
-        training_data: List,
-    ):
-        self.model = mace_model
-        self.z_table = z_table
-        self.reference_embeddings = self._get_reference_embeddings(training_data)
-
-    def __call__(self, atoms, t):
-        conf = config_from_atoms(atoms)
-        atomic_data = AtomicData.from_config(
-            conf, z_table=self.z_table, cutoff=self.model.r_max
-        ).to(DEVICE)
-        emb = self._get_node_embeddings(atomic_data)
-        log_dens = self._get_log_kernel_density(emb, t)
-        grad = torch.autograd.grad(
-            outputs=log_dens,
-            inputs=atomic_data.positions,
-            grad_outputs=torch.ones_like(log_dens),
-            create_graph=True,
-            only_inputs=True,
-        )[0]
-        grad = grad.detach().cpu().numpy()
-        if np.isnan(grad).any():
-            print("nan in grad")
-            grad = np.nan_to_num(grad, nan=0)
-            return grad
-        # limit the norm of the gradient to 1e4
-        grad_norm = np.linalg.norm(grad, axis=1)
-        limit_to_grad_ratio = np.clip(1e4 / grad_norm, 0, 1)[:, None]
-        grad = grad * limit_to_grad_ratio
-        return grad
-
-    def _get_node_embeddings(self, data):
-        data.positions.requires_grad = True
-        # Embeddings
-        node_feats = self.model.node_embedding(data.node_attrs)
-        vectors, lengths = get_edge_vectors_and_lengths(
-            positions=data.positions, edge_index=data.edge_index, shifts=data.shifts
-        )
-        edge_attrs = self.model.spherical_harmonics(vectors)
-        edge_feats = self.model.radial_embedding(lengths)
-        node_feats_all = []
-        for interaction, product, readout in zip(
-            self.model.interactions, self.model.products, self.model.readouts
-        ):
-            node_feats, sc = interaction(
-                node_attrs=data.node_attrs,
-                node_feats=node_feats,
-                edge_attrs=edge_attrs,
-                edge_feats=edge_feats,
-                edge_index=data.edge_index,
-            )
-            node_feats = product(
-                node_feats=node_feats, sc=sc, node_attrs=data.node_attrs
-            )
-            node_feats_all.append(node_feats)
-        if len(node_feats_all) == 1:
-            return node_feats_all[0]
-        else:
-            return torch.concatenate(node_feats_all, dim=-1)
-
-    def _get_reference_embeddings(self, training_data):
-        configs = [config_from_atoms(atoms) for atoms in training_data]
-        data_loader = torch_geometric.dataloader.DataLoader(
-            dataset=[
-                AtomicData.from_config(
-                    config, z_table=self.z_table, cutoff=self.model.r_max
-                )
-                for config in configs
-            ],  # type:ignore
-            batch_size=128,
-            shuffle=False,
-            drop_last=False,
-        )
-        ref_embeddings = []
-        with torch.no_grad():
-            for data in data_loader:
-                data = data.to(DEVICE)
-                ref_embeddings.append(self._get_node_embeddings(data))
-        return torch.concatenate(ref_embeddings, dim=0)
-
-    def _get_log_kernel_density(self, embedding, t):
-        embedding_deltas = einops.rearrange(
-            embedding, "num_new_data embed_dim  -> embed_dim () num_new_data"
-        ) - einops.rearrange(
-            self.reference_embeddings,
-            "num_old_data embed_dim  -> embed_dim num_old_data () ",
-        )  # (embed_dim, num_old_data, num_new_data)
-
-        distance_kernel = torch.sum(
-            embedding_deltas**2, dim=0
-        )  # (num_old_data, num_new_data)
-        # dynamically set the length scale based on closest 10 neighbors
-        sorted_distance_kernel, _ = torch.sort(distance_kernel, dim=0)
-        # pick 5 closest neighbors
-        sorted_distance_kernel = sorted_distance_kernel[:5, :]  # (5, num_new_data)
-        # variance = sorted_distance_kernel[:10, :].mean(dim=0) # (num_new_data)
-        variance = 1
-        density = torch.exp(-sorted_distance_kernel / (2 * variance)).mean(
-            dim=0
-        )  # (num_new_data)
-        log_density = torch.log(density)
-        log_density = torch.nan_to_num(log_density, posinf=1000, neginf=-1000)
-        return log_density

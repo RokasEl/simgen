@@ -1,5 +1,6 @@
 import numpy as np
 from ase import Atoms
+from ase.build import molecule
 
 QM9_PROPERTIES = (
     "rotational_constants",
@@ -84,3 +85,11 @@ def read_qm9_xyz(filename):
     # since we are reading optimised geometries, set the forces to 0
     atoms.arrays["forces"] = np.zeros((natoms, 3))
     return atoms
+
+
+def initialize_mol(molecule_str="C6H6"):
+    try:
+        mol = molecule(molecule_str)
+    except:
+        mol = Atoms(molecule_str)
+    return mol
