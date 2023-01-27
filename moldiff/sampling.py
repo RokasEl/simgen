@@ -5,10 +5,12 @@ from typing import List
 import einops
 import numpy as np
 import torch
+from ase import Atoms
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
 from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import torch_geometric
+from quippy.descriptors import Descriptor
 
 #################### Base Classes ####################
 
@@ -83,7 +85,7 @@ class ScoreModelContainer(ScoreModel):
 
 
 class GaussianScoreModel(ScoreModel):
-    def __init__(self, spring_constant=1):
+    def __init__(self, spring_constant: float = 1.0):
         self.spring_constant = spring_constant
 
     def __call__(self, X, t):
@@ -99,6 +101,67 @@ class ASECalculatorScoreModel(ScoreModel):
         return X.get_forces()
 
 
+class SOAPSimilarityModel(ScoreModel):
+    def __init__(
+        self,
+        training_data: List[Atoms],
+        soap_features="soap l_max=6 n_max=12 cutoff=5.0 atom_sigma=0.5",
+    ):
+        self.descriptor_calculator = Descriptor(soap_features)
+        self.reference_embeddings = self._get_reference_embeddings(training_data)
+
+    def __call__(self, X, t):
+        descriptor_data = self.descriptor_calculator.calc(X, grad=True)
+        gradient = self._calculate_gradients(descriptor_data)
+        return gradient
+
+    def _calculate_gradients(self, descriptor_data):
+        # deltas shape (embed_dim, num_old_data, num_new_data)
+        # squared_distance_matrix shape (num_old_data, num_new_data)
+        embedding = descriptor_data["data"]
+        deltas, squared_distance_matrix = self._calculate_distance_matrix(embedding)
+        exponents = np.exp(
+            -squared_distance_matrix
+        )  # shape (num_old_data, num_new_data)
+        embedding_gradients = descriptor_data["grad_data"]
+        num_atoms_sq = embedding_gradients.shape[0]
+        num_atoms = int(np.sqrt(num_atoms_sq))
+        embedding_gradients = einops.rearrange(
+            embedding_gradients,
+            "(dummy num_atoms) space embed_dim -> dummy num_atoms space embed_dim",
+            num_atoms=num_atoms,
+        )
+        embedding_gradients = einops.reduce(
+            embedding_gradients,
+            "num_atoms dummy space embed_dim -> num_atoms space embed_dim",
+            "sum",
+        )
+        numerator = np.einsum(
+            "ijk,kli->jkl", deltas, embedding_gradients
+        )  # (num_old_data, num_new_data, 3)
+        numerator = np.einsum("ij,ijk->jk", exponents, numerator)  # (num_new_data, 3)
+        denum = exponents.sum(axis=0)  # (num_new_data, )
+        grad = numerator / denum[:, None]  # (num_new_data, 3)
+        return grad
+
+    def _get_reference_embeddings(self, training_data):
+        reference_embeddings = []
+        for atoms in training_data:
+            reference_embeddings.append(self.descriptor_calculator.calc(atoms)["data"])
+        return np.concatenate(reference_embeddings)
+
+    def _calculate_distance_matrix(self, embedding):
+        embedding_deltas = einops.rearrange(
+            embedding, "num_new_data embed_dim  -> embed_dim () num_new_data"
+        ) - einops.rearrange(
+            self.reference_embeddings,
+            "num_old_data embed_dim  -> embed_dim num_old_data () ",
+        )  # (embed_dim, num_old_data, num_new_data)
+
+        squared_distance_matrix = np.sum(embedding_deltas**2, axis=0)
+        return embedding_deltas, squared_distance_matrix
+
+
 class MaceSimilarityScore(ScoreModel):
     def __init__(
         self,
@@ -111,20 +174,16 @@ class MaceSimilarityScore(ScoreModel):
         self.z_table = z_table
         self.device = device
         self.reference_embeddings = self._get_reference_embeddings(training_data)
+        self.temperature_scale = self._calibrate_variance_scale()
 
     def __call__(self, atoms, t):
         atomic_data = self._to_atomic_data(atoms)
         emb = self._get_node_embeddings(atomic_data)
-        log_dens = self._get_log_kernel_density(emb, t)
+        log_dens = self._get_log_kernel_density(
+            emb, t, atomic_numbers=atoms.get_atomic_numbers()
+        )
         grad = self._get_gradient(atomic_data, log_dens)
-        if np.isnan(grad).any():
-            print("nan in grad")
-            grad = np.nan_to_num(grad, nan=0)
-            return grad
-        # limit the norm of the gradient to 1e4
-        grad_norm = np.linalg.norm(grad, axis=1)
-        limit_to_grad_ratio = np.clip(1e4 / grad_norm, 0, 1)[:, None]
-        grad = grad * limit_to_grad_ratio
+        grad = self._handle_grad_magnitude(grad)
         return grad
 
     def _to_atomic_data(self, atoms):
@@ -219,21 +278,40 @@ class MaceSimilarityScore(ScoreModel):
         squared_distance_matrix[squared_distance_matrix <= 1e-12] = 0
         return squared_distance_matrix
 
-    def _get_log_kernel_density(self, embedding, t):
+    def _get_log_kernel_density(self, embedding, t, atomic_numbers):
 
         squared_distances = self._calculate_distance_matrix(
             embedding
         )  # (num_old_data, num_new_data)
-        variance = 1e-6
-        log_temp = -4 + 6 * t
-        inverse_temperature = 1 / 10**log_temp
-        density = torch.exp(
-            -inverse_temperature * squared_distances / (2 * variance)
-        ).mean(
-            dim=0
-        )  # (num_new_data)
-        log_density = torch.log(density)
+        temperature = self.temperature_scale(t)
+        inverse_temperature = 1 / temperature
+        element_variances = torch.ones(
+            (squared_distances.shape[1], 1), device=self.device
+        )
+        element_variances[atomic_numbers == 1] = 1 / 500
+        # density = torch.exp(
+        #     -inverse_temperature * squared_distances / (2*element_variances.T)
+        # ).mean(
+        #     dim=0
+        # )  # (num_new_data)
+        # log_density = torch.log(density)
+        log_density = (1 - inverse_temperature * squared_distances).mean(dim=0)
         return log_density
+
+    def _calibrate_variance_scale(self):
+        rand_idx = np.random.randint(self.reference_embeddings.shape[0], size=100)
+        sample_reference_data = self.reference_embeddings[rand_idx]
+        distances_in_reference_data = self._calculate_distance_matrix(
+            sample_reference_data
+        ).flatten()
+        min_quantile = 1e-3
+        lower_bound = distances_in_reference_data.quantile(min_quantile)
+        upper_bound = distances_in_reference_data.quantile(1 - min_quantile)
+        # Set the temperature scale so that at t=1 environments away by `upper_bound` are rescaled to be distance 1 away
+        # And at t=0 environments away by `lower_bound` are rescaled to be distance 1 away
+        lower_temp, upper_temp = torch.log(lower_bound), torch.log(upper_bound)
+        sigmoid = lambda t: 1 / (1 + np.exp(-5 * (t - 0.5)))
+        return lambda t: torch.exp(lower_temp + (upper_temp - lower_temp) * sigmoid(t))
 
 
 #################### Samplers ####################
@@ -275,6 +353,7 @@ class LangevinSampler(Sampler):
 
     def step(self, X, t, step_size, X_prev=None):
         score = self.score_model(X, t)
+        X.arrays["forces"] = score
         noise = np.random.normal(size=X.positions.shape)
         step_size_modifier = (
             1
