@@ -138,6 +138,52 @@ def test_slightly_perturbed_training_molecules_have_non_zero_gradient(
         mol.set_positions(
             mol.get_positions() + 1e-2 * np.random.randn(*mol.get_positions().shape)
         )
-    gradients = [mace_similarity_scorer(mol, t=0) for mol in training_molecules]
+    gradients = [mace_similarity_scorer(mol, t=1) for mol in training_molecules]
     for grad in gradients:
         assert np.any(grad != 0.0)
+
+
+def test_unseen_molecules_have_finite_gradients(mace_similarity_scorer, test_molecules):
+    gradients = [mace_similarity_scorer(mol, t=1) for mol in test_molecules]
+    for grad in gradients:
+        assert np.any(grad != 0.0)
+
+
+def test_nan_gradient_when_overlapping_atoms(mace_similarity_scorer):
+    mol = initialize_mol("H2")
+    mol.set_positions(np.array([[0, 0, 0], [0, 0, 0.01]]))
+    atomic_data = mace_similarity_scorer._to_atomic_data(mol)
+    embedding = mace_similarity_scorer._get_node_embeddings(atomic_data)
+    log_dens = mace_similarity_scorer._get_log_kernel_density(embedding, 1)
+    grad = mace_similarity_scorer._get_gradient(atomic_data, log_dens)
+    assert np.any(np.isnan(grad))
+
+
+@pytest.mark.parametrize(
+    "grad, expected_out",
+    [
+        (
+            np.ones((5, 3)) * np.nan,
+            np.zeros((5, 3)),
+        ),
+        (
+            np.ones((5, 3)),
+            np.ones((5, 3)),
+        ),
+        (
+            np.zeros((5, 3)),
+            np.zeros((5, 3)),
+        ),
+        (
+            np.ones((5, 3)) * np.inf,
+            np.zeros((5, 3)),
+        ),
+        (
+            np.ones((5, 3)) * np.array([[100000], [1], [1], [1], [1]]),
+            np.ones((5, 3)) * np.array([[10 / np.sqrt(3)], [1], [1], [1], [1]]),
+        ),
+    ],
+)
+def test_gradient_magnitude_handler(mace_similarity_scorer, grad, expected_out):
+    grad = mace_similarity_scorer._handle_grad_magnitude(grad)
+    np.testing.assert_allclose(grad, expected_out, atol=1e-6)

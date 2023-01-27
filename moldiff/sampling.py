@@ -1,4 +1,5 @@
 import abc
+import warnings
 from typing import List
 
 import einops
@@ -145,6 +146,19 @@ class MaceSimilarityScore(ScoreModel):
         )[0]
         return grad.detach().cpu().numpy()
 
+    @staticmethod
+    def _handle_grad_magnitude(grad):
+        # overlapping atoms can cause nans or very large gradients
+        # convert nans to zeros
+        if np.isnan(grad).any() or np.isinf(grad).any():
+            warnings.warn("nan or inf in grad")
+            grad = np.nan_to_num(grad, nan=0, posinf=0, neginf=0)
+        # limit the norm of the gradient to 10 for each atom
+        grad_norm = np.linalg.norm(grad, axis=1) + 1e-8  # (n_atoms,)
+        normalisation = np.clip(10 / grad_norm, 0, 1)[:, None]  # (n_atoms, 1)
+        grad = grad * normalisation
+        return grad
+
     def _get_node_embeddings(self, data: AtomicData):
         # Embeddings
         node_feats = self.model.node_embedding(data.node_attrs)
@@ -202,7 +216,7 @@ class MaceSimilarityScore(ScoreModel):
         )  # (embed_dim, num_old_data, num_new_data)
 
         squared_distance_matrix = torch.sum(embedding_deltas**2, dim=0)
-        squared_distance_matrix[squared_distance_matrix <= 1e-16] = 0
+        squared_distance_matrix[squared_distance_matrix <= 1e-12] = 0
         return squared_distance_matrix
 
     def _get_log_kernel_density(self, embedding, t):
@@ -210,20 +224,15 @@ class MaceSimilarityScore(ScoreModel):
         squared_distances = self._calculate_distance_matrix(
             embedding
         )  # (num_old_data, num_new_data)
-        # dynamically set the length scale based on closest 10 neighbors
-        # sorted_distance_kernel, _ = torch.sort(squared_distances, dim=0)
-        # pick 5 closest neighbors
-        # sorted_distance_kernel = sorted_distance_kernel[:5, :]  # (5, num_new_data)
-        # variance = sorted_distance_kernel[:10, :].mean(dim=0) # (num_new_data)
-        variance = 1e-8
-        inverse_temperature = 1 / (t + 1e-10)
+        variance = 1e-6
+        log_temp = -4 + 6 * t
+        inverse_temperature = 1 / 10**log_temp
         density = torch.exp(
             -inverse_temperature * squared_distances / (2 * variance)
         ).mean(
             dim=0
         )  # (num_new_data)
         log_density = torch.log(density)
-        log_density = torch.nan_to_num(log_density, posinf=1000, neginf=-1000)
         return log_density
 
 
@@ -273,8 +282,8 @@ class LangevinSampler(Sampler):
             else self.get_dynamic_step_size_modifier(score, noise, eta=self.eta)
         )
         # step_size_modifier = np.clip(step_size_modifier, 1e-6, 1e6)
-        # step_size *= step_size_modifier
-        force_term = step_size * score * step_size_modifier
+        step_size *= step_size_modifier
+        force_term = step_size * score
         drag_term = step_size * self.drag_coefficient * self.drag(X, X_prev)
         brownian_term = np.sqrt(2 * step_size * self.temperature) * noise
         X.positions += force_term + drag_term + brownian_term
@@ -298,5 +307,5 @@ class LangevinSampler(Sampler):
         noise_norm = np.linalg.norm(noise, axis=1).mean()
         step_size_modifier = (
             self.signal_to_noise_ratio * noise_norm / (score_norm + eta)
-        )
+        ) ** 2
         return step_size_modifier
