@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import ase
@@ -22,16 +23,27 @@ mace.tools.set_default_dtype("float64")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def main():
+def init_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_path", type=str, default="./trained_models/MACE_3bpa_run-123.model"
+    )
+    parser.add_argument("--num_steps", type=int, default=100)
+    parser.add_argument("--data_path", type=str, default="./Data/qm9_data/")
+    parser.add_argument("--save_path", type=str, default="./trajectories/test.xyz")
+    return parser.parse_args()
+
+
+def main(model_path, num_steps, data_path, save_path):
     # Initialize score models
-    model = torch.load("./trained_models/MACE_3bpa_run-123.model")
+    model = torch.load(model_path)
     model.to("cuda")
     model.eval()
 
     rng = np.random.default_rng(0)
     # select 1000 random molecules from the qm9 dataset
     training_data = [
-        read_qm9_xyz(f"./Data/qm9_data/dsgdb9nsd_{i:06d}.xyz")
+        read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
         for i in rng.choice(133885, 512, replace=False)
     ]
     training_data = list(
@@ -42,7 +54,7 @@ def main():
         model, z_table, training_data=training_data, device=DEVICE
     )
     # score_model = SOAPSimilarityModel(training_data=training_data)
-    num_steps = 100
+    num_steps = num_steps
 
     # kernel_strength = np.sin(np.pi * np.linspace(0, 1, 1000)) ** 2
     kernel_strength = np.ones(1000)
@@ -66,7 +78,7 @@ def main():
 
     # Generation
     mol = initialize_mol("C6H6")
-    destination = "./scripts/Generated_trajectories/test.xyz"
+    destination = save_path
     if os.path.exists(destination):
         os.remove(destination)
     mol.set_positions(1 * np.random.randn(*mol.positions.shape))
@@ -83,4 +95,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = init_args()
+    main(args.model_path, args.num_steps, args.data_path, args.save_path)
