@@ -20,6 +20,13 @@ class ScoreModel(abc.ABC):
     def __call__(self, X, t) -> np.ndarray:
         pass
 
+    @staticmethod
+    def _normalise_score(score):
+        # score (n_nodes, 3)
+        expected_norm = np.sqrt(3)
+        actual_norm = np.linalg.norm(score, axis=1) + 1e-6
+        return score / actual_norm[:, None] * expected_norm
+
 
 class Sampler(abc.ABC):
     @abc.abstractmethod
@@ -110,9 +117,11 @@ class SOAPSimilarityModel(ScoreModel):
         self.descriptor_calculator = Descriptor(soap_features)
         self.reference_embeddings = self._get_reference_embeddings(training_data)
 
-    def __call__(self, X, t):
+    def __call__(self, X, t, normalise_grad=True):
         descriptor_data = self.descriptor_calculator.calc(X, grad=True)
         gradient = self._calculate_gradients(descriptor_data)
+        if normalise_grad:
+            gradient = self._normalise_score(gradient)
         return gradient
 
     def _calculate_gradients(self, descriptor_data):
@@ -121,28 +130,34 @@ class SOAPSimilarityModel(ScoreModel):
         embedding = descriptor_data["data"]
         deltas, squared_distance_matrix = self._calculate_distance_matrix(embedding)
         exponents = np.exp(
-            -squared_distance_matrix
+            -squared_distance_matrix * 1000
         )  # shape (num_old_data, num_new_data)
         embedding_gradients = descriptor_data["grad_data"]
-        num_atoms_sq = embedding_gradients.shape[0]
-        num_atoms = int(np.sqrt(num_atoms_sq))
-        embedding_gradients = einops.rearrange(
-            embedding_gradients,
-            "(dummy num_atoms) space embed_dim -> dummy num_atoms space embed_dim",
-            num_atoms=num_atoms,
+        # need to use the gradient index to sum over the flattned first dimension
+        gradient_index = descriptor_data["grad_index_0based"]
+        embedding_gradients = self._sum_over_split_gradients(
+            embedding_gradients, gradient_index
         )
-        embedding_gradients = einops.reduce(
+        numerator = einops.einsum(
+            deltas,
             embedding_gradients,
-            "num_atoms dummy space embed_dim -> num_atoms space embed_dim",
-            "sum",
+            "embed_dim num_old_data num_new_data, num_new_data space embed_dim -> num_old_data num_new_data space",
         )
-        numerator = np.einsum(
-            "ijk,kli->jkl", deltas, embedding_gradients
-        )  # (num_old_data, num_new_data, 3)
-        numerator = np.einsum("ij,ijk->jk", exponents, numerator)  # (num_new_data, 3)
+        numerator = einops.einsum(
+            exponents,
+            numerator,
+            "num_old_data num_new_data, num_old_data num_new_data space -> num_new_data space",
+        )
         denum = exponents.sum(axis=0)  # (num_new_data, )
         grad = numerator / denum[:, None]  # (num_new_data, 3)
         return grad
+
+    @staticmethod
+    def _sum_over_split_gradients(gradient_array, index_array):
+        num_atoms = index_array.max() + 1
+        summed_array = np.zeros((num_atoms, *gradient_array.shape[1:]))
+        np.add.at(summed_array, index_array[:, 0], gradient_array)
+        return summed_array
 
     def _get_reference_embeddings(self, training_data):
         reference_embeddings = []
@@ -176,14 +191,16 @@ class MaceSimilarityScore(ScoreModel):
         self.reference_embeddings = self._get_reference_embeddings(training_data)
         self.temperature_scale = self._calibrate_variance_scale()
 
-    def __call__(self, atoms, t):
+    def __call__(self, atoms, t, normalise_grad=True):
         atomic_data = self._to_atomic_data(atoms)
         emb = self._get_node_embeddings(atomic_data)
         log_dens = self._get_log_kernel_density(
             emb, t, atomic_numbers=atoms.get_atomic_numbers()
         )
         grad = self._get_gradient(atomic_data, log_dens)
-        grad = self._handle_grad_magnitude(grad)
+        grad = self._handle_grad_nans(grad)
+        if normalise_grad:
+            grad = self._normalise_score(grad)
         return grad
 
     def _to_atomic_data(self, atoms):
@@ -206,16 +223,12 @@ class MaceSimilarityScore(ScoreModel):
         return grad.detach().cpu().numpy()
 
     @staticmethod
-    def _handle_grad_magnitude(grad):
+    def _handle_grad_nans(grad):
         # overlapping atoms can cause nans or very large gradients
         # convert nans to zeros
         if np.isnan(grad).any() or np.isinf(grad).any():
             warnings.warn("nan or inf in grad")
             grad = np.nan_to_num(grad, nan=0, posinf=0, neginf=0)
-        # limit the norm of the gradient to 10 for each atom
-        grad_norm = np.linalg.norm(grad, axis=1) + 1e-8  # (n_atoms,)
-        normalisation = np.clip(10 / grad_norm, 0, 1)[:, None]  # (n_atoms, 1)
-        grad = grad * normalisation
         return grad
 
     def _get_node_embeddings(self, data: AtomicData):
