@@ -81,9 +81,23 @@ def test_log_kernel_density_of_training_data_much_higher_than_new_data(
 def test_gradient_of_log_kernel_density_is_close_to_zero_for_training_data(
     mace_similarity_scorer, training_molecules
 ):
-    gradients = [mace_similarity_scorer(mol, t=0) for mol in training_molecules]
+    gradients = [
+        mace_similarity_scorer(mol, t=0, normalise_grad=False)
+        for mol in training_molecules
+    ]
     for grad in gradients:
         assert np.allclose(grad, 0.0, atol=1e-10)
+
+
+def test_gradient_at_high_temperature_non_zero_even_for_training_data(
+    mace_similarity_scorer, training_molecules
+):
+    gradients = [
+        mace_similarity_scorer(mol, t=1, normalise_grad=False)
+        for mol in training_molecules
+    ]
+    for grad in gradients:
+        assert np.all(np.linalg.norm(grad, axis=1) > 0)
 
 
 def test_slightly_perturbed_training_molecules_have_non_zero_gradient(
@@ -95,23 +109,13 @@ def test_slightly_perturbed_training_molecules_have_non_zero_gradient(
         )
     gradients = [mace_similarity_scorer(mol, t=1) for mol in training_molecules]
     for grad in gradients:
-        assert np.any(grad != 0.0)
+        assert np.all(grad != 0.0)
 
 
 def test_unseen_molecules_have_finite_gradients(mace_similarity_scorer, test_molecules):
     gradients = [mace_similarity_scorer(mol, t=1) for mol in test_molecules]
     for grad in gradients:
-        assert np.any(grad != 0.0)
-
-
-def test_nan_gradient_when_overlapping_atoms(mace_similarity_scorer):
-    mol = initialize_mol("H2")
-    mol.set_positions(np.array([[0, 0, 0], [0, 0, 0.01]]))
-    atomic_data = mace_similarity_scorer._to_atomic_data(mol)
-    embedding = mace_similarity_scorer._get_node_embeddings(atomic_data)
-    log_dens = mace_similarity_scorer._get_log_kernel_density(embedding, 1)
-    grad = mace_similarity_scorer._get_gradient(atomic_data, log_dens)
-    assert np.any(np.isnan(grad))
+        assert np.all(np.linalg.norm(grad, axis=1) != 0.0)
 
 
 @pytest.mark.parametrize(
