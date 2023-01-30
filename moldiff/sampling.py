@@ -116,6 +116,7 @@ class SOAPSimilarityModel(ScoreModel):
         soap_features="soap l_max=6 n_max=12 cutoff=5.0 atom_sigma=0.5",
     ):
         self.descriptor_calculator = Descriptor(soap_features)
+        self.training_data = training_data
         self.reference_embeddings = self._get_reference_embeddings(training_data)
         to_corrupt = random.sample(training_data, 3)
         for atoms in to_corrupt:
@@ -215,21 +216,29 @@ class MaceSimilarityScore(ScoreModel):
         self.model = mace_model
         self.z_table = z_table
         self.device = device
-        (
-            self.reference_embeddings,
-            self.corrupted_ref_embeddings,
-        ) = self._get_reference_embeddings(training_data)
-        self.temperature_scale = self._calibrate_variance_scale()
+        self.training_data = training_data
 
     def __call__(self, atoms, t, normalise_grad=True):
         atomic_data = self._to_atomic_data(atoms)
         emb = self._get_node_embeddings(atomic_data)
+        reference_atoms = random.sample(self.training_data, 64)
+        corrupted_atoms = self._corrupt_atoms(reference_atoms, t)
+        self.reference_embeddings = self._get_reference_embeddings(corrupted_atoms)
         log_dens = self._get_log_kernel_density(emb, t)
         grad = self._get_gradient(atomic_data, log_dens)
         grad = self._handle_grad_nans(grad)
         if normalise_grad:
             grad = self._normalise_score(grad)
         return grad
+
+    def _corrupt_atoms(self, atoms_list, t):
+        corrupted = [x.copy() for x in atoms_list]
+        for mol in corrupted:
+            mol.set_positions(
+                mol.get_positions() * np.sqrt(1 - t)
+                + np.random.normal(0, t, mol.get_positions().shape)
+            )
+        return corrupted
 
     def _to_atomic_data(self, atoms):
         conf = config_from_atoms(atoms)
@@ -301,33 +310,13 @@ class MaceSimilarityScore(ScoreModel):
             shuffle=False,
             drop_last=False,
         )
-        corrupted_atoms = random.sample(training_data, k=5)
-        for atoms in corrupted_atoms:
-            atoms.set_positions(np.random.randn(*atoms.positions.shape))
-        corrupted_configs = [config_from_atoms(atoms) for atoms in corrupted_atoms]
-        data_loader_corrupted = torch_geometric.dataloader.DataLoader(
-            dataset=[
-                AtomicData.from_config(
-                    config, z_table=self.z_table, cutoff=self.model.r_max
-                )
-                for config in corrupted_configs
-            ],  # type:ignore
-            batch_size=128,
-            shuffle=False,
-            drop_last=False,
-        )
         ref_embeddings = []
-        corrupted_embeddings = []
         with torch.no_grad():
             for data in data_loader:
                 data = data.to(self.device)
                 ref_embeddings.append(self._get_node_embeddings(data))
-            for data in data_loader_corrupted:
-                data = data.to(self.device)
-                corrupted_embeddings.append(self._get_node_embeddings(data))
         ref_embeddings = torch.concatenate(ref_embeddings, dim=0)
-        corrupted_embeddings = torch.concatenate(corrupted_embeddings, dim=0)
-        return ref_embeddings, corrupted_embeddings
+        return ref_embeddings
 
     def _calculate_distance_matrix(self, embedding):
         embedding_deltas = einops.rearrange(
@@ -346,31 +335,9 @@ class MaceSimilarityScore(ScoreModel):
         squared_distances = self._calculate_distance_matrix(
             embedding
         )  # (num_old_data, num_new_data)
-        temperature = self.temperature_scale(t)
-        inverse_temperature = 1 / temperature
-        density = torch.exp(-inverse_temperature * squared_distances / (2)).mean(
-            dim=0
-        )  # (num_new_data)
+        density = torch.exp(-squared_distances / (2)).mean(dim=0)  # (num_new_data)
         log_density = torch.log(density)
         return log_density
-
-    def _calibrate_variance_scale(self):
-        rand_idx = np.random.randint(self.reference_embeddings.shape[0], size=10)
-        sample_reference_data = self.reference_embeddings[rand_idx]
-        distances_in_reference_data = self._calculate_distance_matrix(
-            sample_reference_data
-        ).flatten()
-        distances_to_corrupted_data = self._calculate_distance_matrix(
-            self.corrupted_ref_embeddings
-        ).flatten()
-        min_quantile = 1e-3
-        lower_bound = distances_in_reference_data.quantile(min_quantile) + 1e-6
-        upper_bound = distances_to_corrupted_data.quantile(1 - min_quantile)
-        # Set the temperature scale so that at t=1 environments away by `upper_bound` are rescaled to be distance 1 away
-        # And at t=0 environments away by `lower_bound` are rescaled to be distance 1 away
-        lower_temp, upper_temp = torch.log(lower_bound), torch.log(upper_bound)
-        sigmoid = lambda t: 1 / (1 + np.exp(-1 * (t - 0.5)))
-        return lambda t: torch.exp(lower_temp + (upper_temp - lower_temp) * sigmoid(t))
 
 
 #################### Samplers ####################
