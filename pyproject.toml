@@ -1,5 +1,6 @@
 [build-system]
 requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "moldiff"
@@ -12,4 +13,5 @@ authors = [
 ]
 
 [tool.setuptools.packages.find]
-where=["moldiff"]
+where = ["."]
+include = ["moldiff"] 
