@@ -26,7 +26,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def init_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_path", type=str, default="./trained_models/MACE_3bpa_run-123.model"
+        "--model_path", type=str, default="./models/MACE_3bpa_run-123.model"
     )
     parser.add_argument("--num_steps", type=int, default=100)
     parser.add_argument("--data_path", type=str, default="./Data/qm9_data/")

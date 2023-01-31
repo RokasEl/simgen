@@ -9,7 +9,6 @@
 #SBATCH --time=01:00:00
 #SBATCH --mail-type END
 #SBATCH --mail-type FAIL
-#SBATCH --output=R-%x_slurm.log
 #SBATCH -p ampere
 #SBATCH --array=1-10%20
 
@@ -28,4 +27,5 @@ IFS=';' read -r -a arrIN <<<"$PARAMETERS"
 python3 scripts/generate_mols.py --molecule_str ${arrIN[0]} \
     --langevin_temp ${arrIN[1]} \
     --seed ${arrIN[2]} \
-    --save_path ${arrIN[3]}
+    --save_path ${arrIN[3]} \
+    --data_path ${arrIN[4]}
