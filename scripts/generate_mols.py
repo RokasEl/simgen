@@ -30,7 +30,9 @@ def init_args():
     )
     parser.add_argument("--num_steps", type=int, default=100)
     parser.add_argument("--data_path", type=str, default="./Data/qm9_data/")
-    parser.add_argument("--save_path", type=str, default="./trajectories/test.xyz")
+    parser.add_argument(
+        "--save_path", type=str, default="./scripts/Generated_trajectories/test.xyz"
+    )
     return parser.parse_args()
 
 
