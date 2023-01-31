@@ -33,16 +33,21 @@ def init_args():
     parser.add_argument(
         "--save_path", type=str, default="./scripts/Generated_trajectories/test.xyz"
     )
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--molecule_str", type=str, default="C6H6")
+    parser.add_argument("--langevin_temp", type=float, default=0.01)
     return parser.parse_args()
 
 
-def main(model_path, num_steps, data_path, save_path):
+def main(
+    model_path, num_steps, data_path, save_path, seed, molecule_str, langevin_temp
+):
     # Initialize score models
     model = torch.load(model_path)
     model.to("cuda")
     model.eval()
 
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(seed)
     # select 1000 random molecules from the qm9 dataset
     training_data = [
         read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
@@ -73,17 +78,17 @@ def main(model_path, num_steps, data_path, save_path):
     corrector = LangevinSampler(
         score_model=scorer,
         signal_to_noise_ratio=0.1,
-        temperature=0.01,
+        temperature=langevin_temp,
         adjust_step_size=False,
     )
     noise_scheduler = ArrayScheduler(np.linspace(1e-4, 1e-2, 1000), num_steps=num_steps)
 
     # Generation
-    mol = initialize_mol("C6H6")
+    mol = initialize_mol(molecule_str)
     destination = save_path
     if os.path.exists(destination):
         os.remove(destination)
-    mol.set_positions(1 * np.random.randn(*mol.positions.shape))
+    mol.set_positions(1 * rng.normal(size=mol.positions.shape))
     ase.io.write(destination, mol, append=True)
     for step_num in reversed(range(num_steps - 1)):
         scaled_time, beta = noise_scheduler(step_num + 1)
@@ -98,4 +103,12 @@ def main(model_path, num_steps, data_path, save_path):
 
 if __name__ == "__main__":
     args = init_args()
-    main(args.model_path, args.num_steps, args.data_path, args.save_path)
+    main(
+        args.model_path,
+        args.num_steps,
+        args.data_path,
+        args.save_path,
+        args.seed,
+        args.molecule_str,
+        args.langevin_temp,
+    )
