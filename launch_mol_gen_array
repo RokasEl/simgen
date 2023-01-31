@@ -10,7 +10,7 @@
 #SBATCH --mail-type END
 #SBATCH --mail-type FAIL
 #SBATCH -p ampere
-#SBATCH --array=1-10%20
+#SBATCH --array=1-20%10
 
 # Load libraries
 . /etc/profile.d/modules.sh
@@ -28,4 +28,5 @@ python3 scripts/generate_mols.py --molecule_str ${arrIN[0]} \
     --langevin_temp ${arrIN[1]} \
     --seed ${arrIN[2]} \
     --save_path ${arrIN[3]} \
-    --data_path ${arrIN[4]}
+    --data_path ${arrIN[4]} \
+    --num_steps ${arrIN[5]}
