@@ -30,10 +30,7 @@ def main():
 
     rng = np.random.default_rng(0)
     # select 1000 random molecules from the qm9 dataset
-    training_data = [
-        read_qm9_xyz(f"./Data/qm9_data/dsgdb9nsd_{i:06d}.xyz")
-        for i in rng.choice(133885, 512, replace=False)
-    ]
+    training_data = [initialize_mol("C6H6")]
     training_data = list(
         filter(lambda atoms: "F" not in atoms.get_chemical_formula(), training_data)
     )
@@ -47,7 +44,7 @@ def main():
     # kernel_strength = np.sin(np.pi * np.linspace(0, 1, 1000)) ** 2
     kernel_strength = np.ones(1000)
     restorative_strength = np.linspace(0, 1, 1000)
-    restorative_scorer = GaussianScoreModel(spring_constant=0.25)
+    restorative_scorer = GaussianScoreModel(spring_constant=0.1)
     model_strengths = np.stack([kernel_strength, restorative_strength], axis=1)
     score_model_scheduler = ArrayScheduler(model_strengths, num_steps=num_steps)
     scorer = ScoreModelContainer(
@@ -59,7 +56,7 @@ def main():
     corrector = LangevinSampler(
         score_model=scorer,
         signal_to_noise_ratio=0.1,
-        temperature=0.01,
+        temperature=0.005,
         adjust_step_size=False,
     )
     noise_scheduler = ArrayScheduler(np.linspace(1e-4, 1e-2, 1000), num_steps=num_steps)
