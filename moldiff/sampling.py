@@ -202,8 +202,8 @@ class SOAPSimilarityModel(ScoreModel):
         # Set the temperature scale so that at t=1 environments away by `upper_bound` are rescaled to be distance 1 away
         # And at t=0 environments away by `lower_bound` are rescaled to be distance 1 away
         lower_temp, upper_temp = np.log(lower_bound), np.log(upper_bound)
-        sigmoid = lambda t: 1 / (1 + np.exp(-1 * (t - 0.5)))
-        return lambda t: np.exp(lower_temp + (upper_temp - lower_temp) * sigmoid(t))
+        time_fun = lambda t: np.sin(np.pi * t / 2)
+        return lambda t: np.exp(lower_temp + (upper_temp - lower_temp) * time_fun(t))
 
 
 class MaceSimilarityScore(ScoreModel):
@@ -373,8 +373,8 @@ class MaceSimilarityScore(ScoreModel):
         # Set the temperature scale so that at t=1 environments away by `upper_bound` are rescaled to be distance 1 away
         # And at t=0 environments away by `lower_bound` are rescaled to be distance 1 away
         lower_temp, upper_temp = torch.log(lower_bound), torch.log(upper_bound)
-        sigmoid = lambda t: 1 / (1 + np.exp(-1 * (t - 0.5)))
-        return lambda t: torch.exp(lower_temp + (upper_temp - lower_temp) * sigmoid(t))
+        time_fun = lambda t: np.sin(np.pi * t / 2)
+        return lambda t: torch.exp(lower_temp + (upper_temp - lower_temp) * time_fun(t))
 
 
 #################### Samplers ####################
