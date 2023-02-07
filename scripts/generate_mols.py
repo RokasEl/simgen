@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import ase
@@ -22,15 +23,36 @@ mace.tools.set_default_dtype("float64")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def main():
+def init_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_path", type=str, default="./models/MACE_3bpa_run-123.model"
+    )
+    parser.add_argument("--num_steps", type=int, default=100)
+    parser.add_argument("--data_path", type=str, default="./Data/qm9_data/")
+    parser.add_argument(
+        "--save_path", type=str, default="./scripts/Generated_trajectories/test.xyz"
+    )
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--molecule_str", type=str, default="C6H6")
+    parser.add_argument("--langevin_temp", type=float, default=0.01)
+    return parser.parse_args()
+
+
+def main(
+    model_path, num_steps, data_path, save_path, seed, molecule_str, langevin_temp
+):
     # Initialize score models
-    model = torch.load("./models/MACE_3bpa_run-123.model")
+    model = torch.load(model_path)
     model.to("cuda")
     model.eval()
 
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(seed)
     # select 1000 random molecules from the qm9 dataset
-    training_data = [initialize_mol("C6H6")]
+    training_data = [
+        read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
+        for i in rng.choice(133885, 512, replace=False)
+    ]
     training_data = list(
         filter(lambda atoms: "F" not in atoms.get_chemical_formula(), training_data)
     )
@@ -39,12 +61,12 @@ def main():
         model, z_table, training_data=training_data, device=DEVICE
     )
     # score_model = SOAPSimilarityModel(training_data=training_data)
-    num_steps = 100
+    num_steps = num_steps
 
     # kernel_strength = np.sin(np.pi * np.linspace(0, 1, 1000)) ** 2
     kernel_strength = np.ones(1000)
     restorative_strength = np.linspace(0, 1, 1000)
-    restorative_scorer = GaussianScoreModel(spring_constant=0.1)
+    restorative_scorer = GaussianScoreModel(spring_constant=0.5)
     model_strengths = np.stack([kernel_strength, restorative_strength], axis=1)
     score_model_scheduler = ArrayScheduler(model_strengths, num_steps=num_steps)
     scorer = ScoreModelContainer(
@@ -56,17 +78,17 @@ def main():
     corrector = LangevinSampler(
         score_model=scorer,
         signal_to_noise_ratio=0.1,
-        temperature=0.005,
+        temperature=langevin_temp,
         adjust_step_size=False,
     )
     noise_scheduler = ArrayScheduler(np.linspace(1e-4, 1e-2, 1000), num_steps=num_steps)
 
     # Generation
-    mol = initialize_mol("C6H6")
-    destination = "./scripts/Generated_trajectories/small_perturbation_on_benzene_sim_kernel_only.xyz"
+    mol = initialize_mol(molecule_str)
+    destination = save_path
     if os.path.exists(destination):
         os.remove(destination)
-    mol.set_positions(mol.positions + 0.6 * np.random.randn(*mol.positions.shape))
+    mol.set_positions(1 * rng.normal(size=mol.positions.shape))
     ase.io.write(destination, mol, append=True)
     for step_num in reversed(range(num_steps - 1)):
         scaled_time, beta = noise_scheduler(step_num + 1)
@@ -74,10 +96,19 @@ def main():
         ase.io.write(destination, mol, append=True)
         scaled_time, beta = noise_scheduler(step_num)
         previous_state = mol.copy()
-        for _ in range(10):  # 10 steps of MD
+        for _ in range(5):  # 10 steps of MD
             mol = corrector.step(mol, scaled_time, beta, X_prev=previous_state)
             ase.io.write(destination, mol, append=True)
 
 
 if __name__ == "__main__":
-    main()
+    args = init_args()
+    main(
+        args.model_path,
+        args.num_steps,
+        args.data_path,
+        args.save_path,
+        args.seed,
+        args.molecule_str,
+        args.langevin_temp,
+    )

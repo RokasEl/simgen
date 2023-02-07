@@ -233,6 +233,15 @@ class MaceSimilarityScore(ScoreModel):
             grad = self._normalise_score(grad)
         return grad
 
+    def _corrupt_atoms(self, atoms_list, t):
+        corrupted = [x.copy() for x in atoms_list]
+        for mol in corrupted:
+            mol.set_positions(
+                mol.get_positions() * np.sqrt(1 - t)
+                + np.random.normal(0, t, mol.get_positions().shape)
+            )
+        return corrupted
+
     def _to_atomic_data(self, atoms):
         conf = config_from_atoms(atoms)
         atomic_data = AtomicData.from_config(
@@ -305,9 +314,7 @@ class MaceSimilarityScore(ScoreModel):
         )
         k = min(5, len(training_data))
         corrupted_atoms = random.sample(training_data, k=k)
-        corrupted_atoms = [atoms.copy() for atoms in corrupted_atoms]
-        for atoms in corrupted_atoms:
-            atoms.set_positions(np.random.randn(*atoms.positions.shape))
+        corrupted_atoms = self._corrupt_atoms(corrupted_atoms, t=1)
         corrupted_configs = [config_from_atoms(atoms) for atoms in corrupted_atoms]
         data_loader_corrupted = torch_geometric.dataloader.DataLoader(
             dataset=[
