@@ -14,4 +14,5 @@ repos:
     rev: 5.11.2
     hooks:
     - id: isort
-    name: isort (python)
+      args: ["--profile", "black", "--line-length=72"]
+      name: isort (python)

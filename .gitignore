@@ -129,7 +129,6 @@ dmypy.json
 .pyre/
 
 # Additional ignores
-
 ./Data/*
 ./src/Generated_trajectories/*
 ./trained_models/*
@@ -138,6 +137,10 @@ dmypy.json
 *.png
 *.pdf
 
+# By default ignore notebooks
+*.ipynb
+
 # Data files and arcihves
 *.csv
 *.tar.gz
+*.avi
