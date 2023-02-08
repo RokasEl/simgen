@@ -245,7 +245,7 @@ class MaceSimilarityScore(ScoreModel):
     def _to_atomic_data(self, atoms):
         conf = config_from_atoms(atoms)
         atomic_data = AtomicData.from_config(
-            conf, z_table=self.z_table, cutoff=self.model.r_max
+            conf, z_table=self.z_table, cutoff=self.model.r_max.item()
         ).to(self.device)
         atomic_data.positions.requires_grad = True
         return atomic_data
@@ -304,7 +304,7 @@ class MaceSimilarityScore(ScoreModel):
         data_loader = torch_geometric.dataloader.DataLoader(
             dataset=[
                 AtomicData.from_config(
-                    config, z_table=self.z_table, cutoff=self.model.r_max
+                    config, z_table=self.z_table, cutoff=self.model.r_max.item()
                 )
                 for config in configs
             ],  # type:ignore
@@ -319,7 +319,7 @@ class MaceSimilarityScore(ScoreModel):
         data_loader_corrupted = torch_geometric.dataloader.DataLoader(
             dataset=[
                 AtomicData.from_config(
-                    config, z_table=self.z_table, cutoff=self.model.r_max
+                    config, z_table=self.z_table, cutoff=self.model.r_max.item()
                 )
                 for config in corrupted_configs
             ],  # type:ignore
