@@ -136,6 +136,7 @@ dmypy.json
 *.model
 *.png
 *.pdf
+*.pt
 
 # By default ignore notebooks
 *.ipynb
