@@ -109,6 +109,72 @@ class EDMLossFn:
         return weight, loss
 
 
+class ModelWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        noise_embed_dim=16,  # Dimension of the noise embedding.
+        **model_kwargs,  # Keyword arguments for the underlying model.
+    ):
+        super().__init__()
+        self.model = EnergyMACEDiffusion(
+            noise_embed_dim=noise_embed_dim, **model_kwargs
+        )
+
+    def forward(self, batch_dict, sigma, **model_kwargs):
+        sigma = sigma.to(torch.float64).reshape(-1, 1)
+
+        c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
+
+        model_input_dict = batch_dict.copy()
+        model_input_dict["positions"] = c_in * model_input_dict[
+            "positions"
+        ] + sigma**2 * torch.randn_like(model_input_dict["positions"])
+
+        model_input_dict["node_attrs"] = c_in * model_input_dict[
+            "node_attrs"
+        ] + sigma**2 * torch.randn_like(model_input_dict["node_attrs"])
+
+        D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
+        D_x["node_forces"] = c_out * D_x["node_forces"]
+        D_x["forces"] = c_out * D_x["forces"]
+        D_x["positions"] = c_skip * batch_dict["positions"] + D_x["forces"]
+        D_x["node_attrs"] = c_skip * batch_dict["node_attrs"] + D_x["node_forces"]
+        D_x["node_attrs"] = F.softmax(D_x["node_attrs"], dim=1)
+        return D_x
+
+    def compute_prefactors(self, sigma):
+        c_skip = 1
+        c_out = -1 * sigma
+        c_in = 1 / (1 + sigma**2).sqrt()
+        c_noise = sigma.log() / 4
+        return c_skip, c_out, c_in, c_noise
+
+
+class TessLossFn:
+    def __init__(self, P_mean=-0.9, P_std=0.2, sigma_data=0.5):
+        self.P_mean = P_mean
+        self.P_std = P_std
+        self.sigma_data = sigma_data
+
+    def __call__(self, batch_dict, model, training=False):
+        num_graphs = batch_dict["ptr"].numel() - 1
+        log_time = self.P_mean + self.P_std**2 * torch.randn(num_graphs)
+        times = torch.exp(log_time).to(batch_dict["positions"].device)
+        molecule_times = times[batch_dict["batch"].to(torch.long)]
+        molecule_sigmas = self._sigma_fn(molecule_times)
+        weight = 1 / molecule_times
+        D_yn = model(batch_dict, molecule_sigmas, training=training)
+        loss = (
+            weight * (D_yn["node_attrs"] - batch_dict["node_attrs"]).pow(2).sum(dim=1)
+            + (D_yn["positions"] - batch_dict["positions"]).pow(2).sum(dim=1)
+            + (D_yn["total_energy"]).pow(2)
+        )
+        return weight, loss
+
+    def _sigma_fn(self, t):
+        return (0.5 * 19.9 * t**2 + 0.1 * t - 1).exp().sqrt()
+
+
 class EnergyMACEDiffusion(MACE):
     def __init__(self, noise_embed_dim, *args, **kwargs):
         super().__init__(*args, **kwargs)
