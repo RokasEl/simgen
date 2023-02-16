@@ -10,6 +10,8 @@ from moldiff.networks import (
     EDMAtomDataPreconditioning,
     EDMLossFn,
     EnergyMACEDiffusion,
+    ModelWrapper,
+    TessLossFn,
 )
 from moldiff.utils import initialize_mol
 
@@ -32,8 +34,8 @@ def main():
         ],
         num_interactions=2,
         num_elements=2,
-        hidden_irreps=o3.Irreps("128x0e + 128x1o"),
-        MLP_irreps=o3.Irreps("128x0e"),
+        hidden_irreps=o3.Irreps("64x0e + 64x1o"),
+        MLP_irreps=o3.Irreps("64x0e"),
         gate=torch.nn.functional.silu,
         atomic_energies=atomic_energies,
         avg_num_neighbors=8,
@@ -42,7 +44,7 @@ def main():
     )
     # model = EnergyMACEDiffusion(noise_embed_dim=16, **model_config)
     model = EDMAtomDataPreconditioning(
-        sigma_max=10, noise_embed_dim=32, **model_config
+        noise_embed_dim=32, sigma_data=1, **model_config
     ).to(DEVICE)
     mol = initialize_mol("C6H6")
     config = data.Configuration(
@@ -50,24 +52,27 @@ def main():
         positions=mol.positions,
         energy=-1.5,
     )
-    atomic_data = data.AtomicData.from_config(config, z_table=Z_TABLE, cutoff=3.0)
+    atomic_data = data.AtomicData.from_config(config, z_table=Z_TABLE, cutoff=10.0)
     data_loader = torch_geometric.dataloader.DataLoader(
-        dataset=[atomic_data] * 16,
-        batch_size=16,
+        dataset=[atomic_data] * 32,
+        batch_size=32,
         shuffle=True,
         drop_last=False,
     )
-    batch = next(iter(data_loader)).to(DEVICE).to_dict()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    for i in range(200):
+    loss_fn = EDMLossFn(P_mean=-1.2, P_std=0.8, sigma_data=1)
+    batch_data = next(iter(data_loader)).to(DEVICE)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    for i in range(1000):
         optimizer.zero_grad()
-        weight, loss = EDMLossFn()(batch, model, training=True)
+        weight, loss = loss_fn(batch_data, model, training=True)
         model_loss = (weight * loss).mean()
         model_loss.backward()
-        clip_grad_norm_(model.parameters(), 10.0)
+        clip_grad_norm_(model.parameters(), 1000.0)
         optimizer.step()
         if i % 10 == 0:
-            print(loss.mean().item())
+            print(
+                loss.mean().item(),
+            )
     # save model
     torch.save(model.state_dict(), "model.pt")
 

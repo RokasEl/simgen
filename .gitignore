@@ -144,4 +144,7 @@ dmypy.json
 # Data files and arcihves
 *.csv
 *.tar.gz
+
+# Movie files
 *.avi
+*.mp4

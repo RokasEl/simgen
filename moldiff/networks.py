@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from e3nn import o3
@@ -54,27 +55,17 @@ class EDMAtomDataPreconditioning(torch.nn.Module):
             noise_embed_dim=noise_embed_dim, **model_kwargs
         )
 
-    def forward(self, batch_dict, sigma, **model_kwargs):
-        sigma = sigma.to(torch.float64).reshape(-1, 1)
-
+    def forward(self, model_input_dict, sigma, **model_kwargs):
         c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
 
-        model_input_dict = batch_dict.copy()
-        model_input_dict["positions"] = c_in * (
-            model_input_dict["positions"]
-            + sigma**2 * torch.randn_like(model_input_dict["positions"])
-        )
-        model_input_dict["node_attrs"] = c_in * (
-            model_input_dict["node_attrs"]
-            + sigma**2 * torch.randn_like(model_input_dict["node_attrs"])
-        )
+        model_input_dict["positions"] = c_in * model_input_dict["positions"]
+        model_input_dict["node_attrs"] = c_in * model_input_dict["node_attrs"]
 
         D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
         D_x["node_forces"] = c_out * D_x["node_forces"]
         D_x["forces"] = c_out * D_x["forces"]
-        D_x["positions"] = c_skip * batch_dict["positions"] + D_x["forces"]
-        D_x["node_attrs"] = c_skip * batch_dict["node_attrs"] + D_x["node_forces"]
-        D_x["node_attrs"] = F.softmax(D_x["node_attrs"], dim=1)
+        D_x["positions"] = c_skip * model_input_dict["positions"] + D_x["forces"]
+        D_x["node_attrs"] = c_skip * model_input_dict["node_attrs"] + D_x["node_forces"]
         return D_x
 
     def compute_prefactors(self, sigma):
@@ -94,18 +85,28 @@ class EDMLossFn:
         self.P_std = P_std
         self.sigma_data = sigma_data
 
-    def __call__(self, batch_dict, model, training=False):
-        num_graphs = batch_dict["ptr"].numel() - 1
-        log_sigmas = self.P_mean + self.P_std**2 * torch.randn(num_graphs)
-        sigmas = torch.exp(log_sigmas).to(batch_dict["positions"].device)
-        molecule_sigmas = sigmas[batch_dict["batch"].to(torch.long)]
+    def __call__(self, batch_data, model, training=False):
+        model_input = batch_data.clone()
+        uncorrupted_data_dict = batch_data.to_dict()
+        num_graphs = uncorrupted_data_dict["ptr"].numel() - 1
+        log_sigmas = self.P_mean + self.P_std * torch.randn(num_graphs)
+        sigmas = torch.exp(log_sigmas).to(uncorrupted_data_dict["positions"].device)
+        molecule_sigmas = sigmas[uncorrupted_data_dict["batch"].to(torch.long)]
+        molecule_sigmas = molecule_sigmas.to(torch.float64).reshape(-1, 1)
         weight = (molecule_sigmas**2 + self.sigma_data**2) / (
             molecule_sigmas * self.sigma_data
         ) ** 2
-        D_yn = model(batch_dict, molecule_sigmas, training=training)
-        loss = ((D_yn["positions"] - batch_dict["positions"]) ** 2).sum(dim=1) + (
-            (D_yn["node_attrs"] - batch_dict["node_attrs"]) ** 2
-        ).sum(dim=1)
+        corrupted_data_dict = model_input.to_dict()
+        corrupted_data_dict["positions"] += molecule_sigmas * torch.randn_like(
+            corrupted_data_dict["positions"]
+        )
+        corrupted_data_dict["node_attrs"] += molecule_sigmas * torch.randn_like(
+            corrupted_data_dict["node_attrs"]
+        )
+        D_yn = model(corrupted_data_dict, molecule_sigmas, training=training)
+        loss = ((D_yn["positions"] - uncorrupted_data_dict["positions"]) ** 2).sum(
+            dim=1
+        ) + ((D_yn["node_attrs"] - uncorrupted_data_dict["node_attrs"]) ** 2).sum(dim=1)
         return weight, loss
 
 
@@ -120,12 +121,11 @@ class ModelWrapper(torch.nn.Module):
             noise_embed_dim=noise_embed_dim, **model_kwargs
         )
 
-    def forward(self, batch_dict, sigma, **model_kwargs):
+    def forward(self, model_input_dict, sigma, **model_kwargs):
         sigma = sigma.to(torch.float64).reshape(-1, 1)
 
         c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
 
-        model_input_dict = batch_dict.copy()
         model_input_dict["positions"] = c_in * model_input_dict[
             "positions"
         ] + sigma**2 * torch.randn_like(model_input_dict["positions"])
@@ -137,42 +137,53 @@ class ModelWrapper(torch.nn.Module):
         D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
         D_x["node_forces"] = c_out * D_x["node_forces"]
         D_x["forces"] = c_out * D_x["forces"]
-        D_x["positions"] = c_skip * batch_dict["positions"] + D_x["forces"]
-        D_x["node_attrs"] = c_skip * batch_dict["node_attrs"] + D_x["node_forces"]
-        D_x["node_attrs"] = F.softmax(D_x["node_attrs"], dim=1)
+        D_x["positions"] = c_skip * model_input_dict["positions"] + D_x["forces"]
+        D_x["node_attrs"] = c_skip * model_input_dict["node_attrs"] + D_x["node_forces"]
         return D_x
 
     def compute_prefactors(self, sigma):
         c_skip = 1
-        c_out = -1 * sigma
-        c_in = 1 / (1 + sigma**2).sqrt()
-        c_noise = sigma.log() / 4
+        c_out = sigma
+        c_in = 1 - sigma
+        c_noise = sigma
         return c_skip, c_out, c_in, c_noise
 
 
 class TessLossFn:
-    def __init__(self, P_mean=-0.9, P_std=0.2, sigma_data=0.5):
+    def __init__(self, P_mean=-0.8, P_std=0.5):
         self.P_mean = P_mean
         self.P_std = P_std
-        self.sigma_data = sigma_data
+        self.pi = torch.as_tensor(np.pi)
 
-    def __call__(self, batch_dict, model, training=False):
-        num_graphs = batch_dict["ptr"].numel() - 1
+    def __call__(self, batch_data, model, training=False):
+        model_input = batch_data.clone()
+        uncorrupted_dict = batch_data.to_dict()
+        num_graphs = uncorrupted_dict["ptr"].numel() - 1
         log_time = self.P_mean + self.P_std**2 * torch.randn(num_graphs)
-        times = torch.exp(log_time).to(batch_dict["positions"].device)
-        molecule_times = times[batch_dict["batch"].to(torch.long)]
-        molecule_sigmas = self._sigma_fn(molecule_times)
+        times = torch.exp(log_time).to(uncorrupted_dict["positions"].device)
+        molecule_times = times[uncorrupted_dict["batch"].to(torch.long)]
+        molecule_sigmas = self._sigma_fn(molecule_times).unsqueeze(-1)
         weight = 1 / molecule_times
-        D_yn = model(batch_dict, molecule_sigmas, training=training)
+
+        corrupted_data_dict = model_input.to_dict()
+        corrupted_data_dict["positions"] += molecule_sigmas * torch.randn_like(
+            corrupted_data_dict["positions"]
+        )
+        corrupted_data_dict["node_attrs"] += molecule_sigmas * torch.randn_like(
+            corrupted_data_dict["node_attrs"]
+        )
+
+        D_yn = model(corrupted_data_dict, molecule_sigmas, training=training)
         loss = (
-            weight * (D_yn["node_attrs"] - batch_dict["node_attrs"]).pow(2).sum(dim=1)
-            + (D_yn["positions"] - batch_dict["positions"]).pow(2).sum(dim=1)
-            + (D_yn["total_energy"]).pow(2)
+            weight
+            * (D_yn["node_attrs"] - uncorrupted_dict["node_attrs"]).pow(2).sum(dim=1)
+            + (D_yn["positions"] - uncorrupted_dict["positions"]).pow(2).sum(dim=1)
+            + (D_yn["node_energy"]).pow(2)
         )
         return weight, loss
 
     def _sigma_fn(self, t):
-        return (0.5 * 19.9 * t**2 + 0.1 * t - 1).exp().sqrt()
+        return torch.sin(self.pi * t / 2) ** 2 + 1e-5
 
 
 class EnergyMACEDiffusion(MACE):
@@ -258,7 +269,7 @@ class EnergyMACEDiffusion(MACE):
             compute_virials=False,
         )
         node_forces = compute_forces(
-            energy=node_energy, positions=data["node_attrs"], training=training
+            energy=total_energy, positions=data["node_attrs"], training=training
         )
         return {
             "energy": total_energy,
