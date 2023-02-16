@@ -9,6 +9,7 @@ import torch
 from ase import Atoms
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
+from mace.modules.blocks import TensorProductWeightsBlock
 from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import torch_geometric
 from quippy.descriptors import Descriptor
@@ -27,6 +28,15 @@ class ScoreModel(abc.ABC):
         expected_norm = np.sqrt(3)
         actual_norm = np.linalg.norm(score, axis=1) + 1e-20
         return score / actual_norm[:, None] * expected_norm
+
+    @staticmethod
+    def _calculate_squared_embedding_scale(training_embeddings):
+        scale = einops.reduce(training_embeddings**2, "n d -> d", "mean")
+        scale = scale * np.sqrt(len(scale))
+        if (scale == 0).any():
+            warnings.warn("Scale is zero for some features. Setting to 1e-16")
+            scale[scale == 0] = 1e-16
+        return scale
 
 
 class Sampler(abc.ABC):
@@ -221,6 +231,9 @@ class MaceSimilarityScore(ScoreModel):
             self.reference_embeddings,
             self.corrupted_ref_embeddings,
         ) = self._get_reference_embeddings(training_data)
+        self.embedding_scale = self._calculate_squared_embedding_scale(
+            training_embeddings=self.reference_embeddings
+        )
         self.temperature_scale = self._calibrate_variance_scale()
 
     def __call__(self, atoms, t, normalise_grad=True):
@@ -347,9 +360,9 @@ class MaceSimilarityScore(ScoreModel):
             self.reference_embeddings,
             "num_old_data embed_dim  -> embed_dim num_old_data () ",
         )  # (embed_dim, num_old_data, num_new_data)
-
-        squared_distance_matrix = torch.sum(embedding_deltas**2, dim=0)
-        squared_distance_matrix[squared_distance_matrix <= 1e-12] = 0
+        scale = einops.rearrange(self.embedding_scale, "embed_dim -> embed_dim () ()")
+        embedding_deltas = embedding_deltas**2 / scale
+        squared_distance_matrix = torch.sum(embedding_deltas, dim=0)
         return squared_distance_matrix
 
     def _get_log_kernel_density(self, embedding, t):
