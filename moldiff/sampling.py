@@ -1,4 +1,5 @@
 import abc
+import logging
 import random
 import warnings
 from typing import List
@@ -9,9 +10,7 @@ import torch
 from ase import Atoms
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
-from mace.modules.blocks import TensorProductWeightsBlock
 from mace.modules.models import MACE
-from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import torch_geometric
 from quippy.descriptors import Descriptor
 
@@ -26,7 +25,7 @@ class ScoreModel(abc.ABC):
     @staticmethod
     def _normalise_score(score):
         # score (n_nodes, 3)
-        expected_norm = np.sqrt(3)
+        expected_norm = 5.0
         actual_norm = np.linalg.norm(score, axis=1) + 1e-20
         return score / actual_norm[:, None] * expected_norm
 
@@ -361,6 +360,14 @@ class MaceSimilarityScore(ScoreModel):
             dim=0
         )  # (num_new_data)
         log_density = torch.log(density) * temperature
+        logging.debug(f"t={t:.2f}, log_density={log_density}")
+        logging.debug(f"Density: {density}")
+        # Grab info about the first atom
+        logging.debug(f"Squared distances: {squared_distances[:, 0]}")
+        # min, max and median
+        logging.debug(
+            f"Min: {squared_distances[:, 0].min()}, Max: {squared_distances[:, 0].max()}, Median: {squared_distances[:, 0].median()}"
+        )
         return log_density
 
     def _calibrate_variance_scale(self):

@@ -1,3 +1,8 @@
+import logging
+import os
+import sys
+from typing import Optional, Union
+
 import numpy as np
 from ase import Atoms
 from ase.build import molecule
@@ -93,3 +98,30 @@ def initialize_mol(molecule_str="C6H6"):
     except:
         mol = Atoms(molecule_str)
     return mol
+
+
+# Taken from MACE
+def setup_logger(
+    level: Union[int, str] = logging.INFO,
+    tag: Optional[str] = None,
+    directory: Optional[str] = None,
+):
+    logger = logging.getLogger()
+    logger.setLevel(level)
+
+    formatter = logging.Formatter(
+        "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    ch = logging.StreamHandler(stream=sys.stdout)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    if (directory is not None) and (tag is not None):
+        os.makedirs(name=directory, exist_ok=True)
+        path = os.path.join(directory, tag + ".log")
+        fh = logging.FileHandler(path)
+        fh.setFormatter(formatter)
+
+        logger.addHandler(fh)

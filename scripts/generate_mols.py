@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 
 import ase
@@ -15,7 +16,7 @@ from moldiff.sampling import (
     SOAPSimilarityModel,
     VarriancePreservingBackwardEulerSampler,
 )
-from moldiff.utils import initialize_mol, read_qm9_xyz
+from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
 
 mace.tools.set_default_dtype("float64")
 
@@ -26,7 +27,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def init_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_path", type=str, default="./models/MACE_3bpa_run-123.model"
+        "--model_path", type=str, default="./models/MACE_3bpa_dev_branch_run-123.model"
     )
     parser.add_argument("--num_steps", type=int, default=100)
     parser.add_argument("--data_path", type=str, default="./Data/qm9_data/")
@@ -42,9 +43,12 @@ def init_args():
 def main(
     model_path, num_steps, data_path, save_path, seed, molecule_str, langevin_temp
 ):
+    setup_logger(logging.DEBUG, "benzene", "./")
     # Initialize score models
     model = torch.load(model_path)
     model.to("cuda")
+    for param in model.parameters():
+        param.requires_grad = False
     model.eval()
 
     rng = np.random.default_rng(seed)
