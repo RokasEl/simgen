@@ -25,7 +25,7 @@ class ScoreModel(abc.ABC):
     @staticmethod
     def _normalise_score(score):
         # score (n_nodes, 3)
-        expected_norm = 5.0
+        expected_norm = np.sqrt(3)
         actual_norm = np.linalg.norm(score, axis=1) + 1e-20
         return score / actual_norm[:, None] * expected_norm
 
@@ -392,11 +392,17 @@ class MaceSimilarityScore(ScoreModel):
 #################### Samplers ####################
 
 
+def compute_geometric_centre(atoms):
+    positions = atoms.get_positions()
+    return np.mean(positions, axis=0)
+
+
 class VarriancePreservingBackwardEulerSampler(Sampler):
     def __init__(self, score_model: ScoreModel):
         self.score_model = score_model
 
     def step(self, X, t, beta: float):
+        X.positions = X.positions - compute_geometric_centre(X)
         score = self.score_model(X, t)
         X.positions = (2 - np.sqrt(1 - beta)) * X.positions + beta * score
         noise = np.random.normal(size=X.positions.shape)
@@ -427,6 +433,7 @@ class LangevinSampler(Sampler):
         self.temperature = temperature
 
     def step(self, X, t, step_size, X_prev=None):
+        X.positions = X.positions - compute_geometric_centre(X)
         score = self.score_model(X, t)
         X.arrays["forces"] = score
         noise = np.random.normal(size=X.positions.shape)
