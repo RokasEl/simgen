@@ -10,6 +10,7 @@ from ase import Atoms
 from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
 from mace.modules.blocks import TensorProductWeightsBlock
+from mace.modules.models import MACE
 from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import torch_geometric
 from quippy.descriptors import Descriptor
@@ -219,7 +220,7 @@ class SOAPSimilarityModel(ScoreModel):
 class MaceSimilarityScore(ScoreModel):
     def __init__(
         self,
-        mace_model,
+        mace_model: MACE,
         z_table,
         training_data: List,
         device: str = "cuda",
@@ -285,31 +286,15 @@ class MaceSimilarityScore(ScoreModel):
 
     def _get_node_embeddings(self, data: AtomicData):
         # Embeddings
-        node_feats = self.model.node_embedding(data.node_attrs)
-        vectors, lengths = get_edge_vectors_and_lengths(
-            positions=data.positions, edge_index=data.edge_index, shifts=data.shifts
+        node_feats = self.model.get_node_invariant_descriptors(
+            data, track_gradient_on_positions=True
         )
-        edge_attrs = self.model.spherical_harmonics(vectors)
-        edge_feats = self.model.radial_embedding(lengths)
-        node_feats_all = []
-        for interaction, product, _ in zip(
-            self.model.interactions, self.model.products, self.model.readouts
-        ):
-            node_feats, sc = interaction(
-                node_attrs=data.node_attrs,
-                node_feats=node_feats,
-                edge_attrs=edge_attrs,
-                edge_feats=edge_feats,
-                edge_index=data.edge_index,
-            )
-            node_feats = product(
-                node_feats=node_feats, sc=sc, node_attrs=data.node_attrs
-            )
-            node_feats_all.append(node_feats)
-        if len(node_feats_all) == 1:
-            return node_feats_all[0]
-        else:
-            return torch.concatenate(node_feats_all, dim=-1)
+        node_feats = einops.reduce(
+            node_feats,
+            "num_nodes interactions embed_dim -> num_nodes embed_dim",
+            "mean",
+        )
+        return node_feats
 
     def _get_reference_embeddings(self, training_data):
         configs = [config_from_atoms(atoms) for atoms in training_data]
@@ -375,7 +360,7 @@ class MaceSimilarityScore(ScoreModel):
         density = torch.exp(-inverse_temperature * squared_distances / (2)).mean(
             dim=0
         )  # (num_new_data)
-        log_density = torch.log(density)
+        log_density = torch.log(density) * temperature
         return log_density
 
     def _calibrate_variance_scale(self):
@@ -388,7 +373,7 @@ class MaceSimilarityScore(ScoreModel):
             self.corrupted_ref_embeddings
         ).flatten()
         min_quantile = 1e-3
-        lower_bound = distances_in_reference_data.quantile(min_quantile) + 1e-10
+        lower_bound = distances_in_reference_data.quantile(min_quantile) + 1e-16
         upper_bound = distances_to_corrupted_data.quantile(1 - min_quantile)
         # Set the temperature scale so that at t=1 environments away by `upper_bound` are rescaled to be distance 1 away
         # And at t=0 environments away by `lower_bound` are rescaled to be distance 1 away

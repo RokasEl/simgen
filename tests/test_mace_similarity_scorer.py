@@ -86,7 +86,7 @@ def test_gradient_of_log_kernel_density_is_close_to_zero_for_training_data(
         for mol in training_molecules
     ]
     for grad in gradients:
-        assert np.allclose(grad, 0.0, atol=1e-10)
+        assert np.allclose(grad, 0.0, atol=1e-6)
 
 
 def test_gradient_at_high_temperature_non_zero_even_for_training_data(

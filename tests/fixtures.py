@@ -16,8 +16,31 @@ torch.set_default_dtype(torch.float64)
 
 @pytest.fixture
 def training_molecules():
-    mol_strs = ["C6H6", "CH4", "CH3OH", "CH3CH2OH"]
+    mol_strs = [
+        "C2H2",
+        "C6H6",
+        "CH4",
+        "CH3OH",
+    ]
     atoms = [initialize_mol(mol_str) for mol_str in mol_strs]
+    atoms[1].set_positions(
+        np.array(
+            [
+                [0.695, 1.20377531, 0.0],
+                [-0.695, 1.20377531, 0.0],
+                [-1.39, 0.0, 0.0],
+                [-0.695, -1.20377531, 0.0],
+                [0.695, -1.20377531, 0.0],
+                [1.39, 0.0, 0.0],
+                [1.24, 2.147743, 0.0],
+                [-1.24, 2.147743, 0.0],
+                [-2.48, 0.0, 0.0],
+                [-1.24, -2.147743, 0.0],
+                [1.24, -2.147743, 0.0],
+                [2.48, 0.0, 0.0],
+            ]
+        )
+    )
     return atoms
 
 
