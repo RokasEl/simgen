@@ -288,10 +288,9 @@ class MaceSimilarityScore(ScoreModel):
         node_feats = self.model.get_node_invariant_descriptors(
             data, track_gradient_on_positions=True
         )
-        node_feats = einops.reduce(
+        node_feats = einops.rearrange(
             node_feats,
-            "num_nodes interactions embed_dim -> num_nodes embed_dim",
-            "mean",
+            "num_nodes interactions embed_dim -> num_nodes (interactions embed_dim)",
         )
         return node_feats
 
