@@ -1,18 +1,15 @@
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+import einops
 import numpy as np
 import torch
 import torch.nn.functional as F
 from e3nn import o3
+from mace.data.atomic_data import AtomicData
 from mace.modules.blocks import LinearNodeEmbeddingBlock
 from mace.modules.models import MACE
-from mace.modules.utils import (
-    compute_fixed_charge_dipole,
-    compute_forces,
-    get_edge_vectors_and_lengths,
-    get_outputs,
-    get_symmetric_displacement,
-)
+from mace.modules.utils import compute_forces, get_outputs
 from mace.tools.scatter import scatter_sum
 
 # Many ideas from https://github.com/NVlabs/edm/
@@ -36,24 +33,19 @@ class PositionalEmbedding(torch.nn.Module):
         return x
 
 
-class EDMAtomDataPreconditioning(torch.nn.Module):
+class EDMModelWrapper(torch.nn.Module):
     def __init__(
         self,
+        model,
         sigma_min=0,  # Minimum supported noise level.
         sigma_max=50,  # Maximum supported noise level.
         sigma_data=0.5,  # Expected standard deviation of the training data.
-        model_type="SomeModel",  # Class name of the underlying model.
-        noise_embed_dim=16,  # Dimension of the noise embedding.
-        **model_kwargs,  # Keyword arguments for the underlying model.
     ):
         super().__init__()
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.sigma_data = sigma_data
-        # self.model = globals()[model_type](**model_kwargs)
-        self.model = EnergyMACEDiffusion(
-            noise_embed_dim=noise_embed_dim, **model_kwargs
-        )
+        self.model = model
 
     def forward(self, model_input_dict, sigma, **model_kwargs):
         c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
@@ -75,9 +67,6 @@ class EDMAtomDataPreconditioning(torch.nn.Module):
         c_noise = sigma.log() / 4
         return c_skip, c_out, c_in, c_noise
 
-    def round_sigma(self, sigma):
-        return torch.as_tensor(sigma)
-
 
 class EDMLossFn:
     def __init__(self, P_mean=-1.2, P_std=1.2, sigma_data=0.5):
@@ -85,29 +74,203 @@ class EDMLossFn:
         self.P_std = P_std
         self.sigma_data = sigma_data
 
-    def __call__(self, batch_data, model, training=False):
-        model_input = batch_data.clone()
-        uncorrupted_data_dict = batch_data.to_dict()
-        num_graphs = uncorrupted_data_dict["ptr"].numel() - 1
-        log_sigmas = self.P_mean + self.P_std * torch.randn(num_graphs)
-        sigmas = torch.exp(log_sigmas).to(uncorrupted_data_dict["positions"].device)
-        molecule_sigmas = sigmas[uncorrupted_data_dict["batch"].to(torch.long)]
+    def __call__(self, batch_data: AtomicData, model, **model_kwargs):
+        molecule_sigmas = self._generate_sigmas(batch_data)
+        weight = self._get_weight(molecule_sigmas)
+        model_input = self._get_corrupted_input(batch_data, molecule_sigmas)
+        D_yn = model(model_input.to_dict(), molecule_sigmas, **model_kwargs)
+        pos_loss, elem_loss = self._calculate_loss(batch_data, D_yn)
+        # reweight the element loss to penalise missing elements more when sigma is small
+        weighted_loss = weight * (pos_loss + elem_loss)
+        return weighted_loss.mean()
+
+    def _generate_sigmas(self, batch_data: AtomicData):
+        num_graphs = batch_data.num_graphs
+        device = batch_data.positions.device  # type: ignore
+        log_sigmas = self.P_mean + self.P_std * torch.randn(num_graphs).to(device)
+        sigmas = torch.exp(log_sigmas)
+        molecule_sigmas = sigmas[batch_data.batch.to(torch.long)]  # type: ignore
         molecule_sigmas = molecule_sigmas.to(torch.float64).reshape(-1, 1)
-        weight = (molecule_sigmas**2 + self.sigma_data**2) / (
+        return molecule_sigmas
+
+    def _get_weight(self, molecule_sigmas: torch.Tensor):
+        return (molecule_sigmas**2 + self.sigma_data**2) / (
             molecule_sigmas * self.sigma_data
         ) ** 2
-        corrupted_data_dict = model_input.to_dict()
-        corrupted_data_dict["positions"] += molecule_sigmas * torch.randn_like(
-            corrupted_data_dict["positions"]
+
+    @staticmethod
+    def _calculate_loss(
+        original_data: AtomicData, reconstructed_data: Dict[str, torch.Tensor]
+    ):
+        position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
+        position_loss = einops.reduce(
+            position_loss, "num_nodes cartesians -> num_nodes", "sum"
         )
-        corrupted_data_dict["node_attrs"] += molecule_sigmas * torch.randn_like(
-            corrupted_data_dict["node_attrs"]
+        element_loss = (
+            original_data.node_attrs - reconstructed_data["node_attrs"]
+        ) ** 2
+        element_loss = einops.reduce(
+            element_loss, "num_nodes elements -> num_nodes", "sum"
         )
-        D_yn = model(corrupted_data_dict, molecule_sigmas, training=training)
-        loss = ((D_yn["positions"] - uncorrupted_data_dict["positions"]) ** 2).sum(
-            dim=1
-        ) + ((D_yn["node_attrs"] - uncorrupted_data_dict["node_attrs"]) ** 2).sum(dim=1)
-        return weight, loss
+        return position_loss, element_loss
+
+    @staticmethod
+    def _get_corrupted_input(batch_data: AtomicData, molecule_sigmas: torch.Tensor):
+        model_input = batch_data.clone()
+        model_input.positions += molecule_sigmas * torch.randn_like(
+            model_input.positions
+        )
+        model_input.node_attrs += molecule_sigmas * torch.randn_like(
+            model_input.node_attrs
+        )
+        model_input.node_attrs = model_input.node_attrs  # TODO: Discuss this line
+        return model_input
+
+
+@dataclass
+class SamplerNoiseParameters:
+    sigma_min: float = 0.1
+    sigma_max: float = 30
+    rho: float = 7
+    S_churn: float = (
+        0.0  # Churn rate of the noise level. 0 corresponds to an ODE solver.
+    )
+    S_min: float = 0.0
+    S_max: float = float("inf")
+    S_noise: float = 1
+
+
+@dataclass
+class GradLogP:
+    positions: torch.Tensor
+    node_attrs: torch.Tensor
+
+
+class EDMSampler:
+    def __init__(
+        self,
+        model,
+        sampler_noise_parameters=SamplerNoiseParameters(),
+        device="cuda" if torch.cuda.is_available() else "cpu",
+    ):
+        self.model = model
+        self.device = device
+        self.noise_parameters = sampler_noise_parameters
+
+    def generate_samples(
+        self,
+        batch_data: AtomicData,
+        num_steps=20,
+        track_trajectory=False,
+        **model_kwargs,
+    ):
+        sigmas = self._get_sigma_schedule(num_steps=num_steps)
+
+        # Initialize the sample to gaussian noise.
+        # sigmas[0] is the initial and largest noise level.
+        x_next: AtomicData = self._initialize_sample(batch_data, sigmas[0])
+        trajectories = []
+        if track_trajectory:
+            trajectories = [x_next.clone()]
+        # Main sampling loop. A second order Heun integrator is used.
+        # read the integrator parameters from the noise parameters.
+        S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
+        for i, (sigma_cur, sigma_next) in enumerate(zip(sigmas[:-1], sigmas[1:])):
+            x_cur = x_next.clone()
+
+            # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
+            gamma = (
+                min(S_churn / num_steps, np.sqrt(2) - 1)
+                if S_min <= sigma_cur <= S_max
+                else 0
+            )
+            # Added noise depends on the current noise level. So, it decreases over the course of the integration.
+            sigma_increased = sigma_cur * (1 + gamma)
+            # Add noise to the current sample.
+            noise_level = (sigma_increased**2 - sigma_cur**2).sqrt() * S_noise
+            x_cur.positions += torch.randn_like(x_cur.positions) * noise_level
+            x_cur.node_attrs += torch.randn_like(x_cur.node_attrs) * noise_level
+            x_increased = x_cur
+
+            # Euler step.
+            x_increased.positions.grad = None
+            x_increased.node_attrs.grad = None
+            D_x_increased = self.model(
+                x_increased.to_dict(), sigma_increased, **model_kwargs
+            )
+
+            grad_log_P_noisy = GradLogP(
+                positions=(x_increased.positions - D_x_increased["positions"])
+                / sigma_increased,
+                node_attrs=(x_increased.node_attrs - D_x_increased["node_attrs"])
+                / sigma_increased,
+            )
+            x_next = x_cur.clone()
+            x_next.positions += (
+                sigma_next - sigma_increased
+            ) * grad_log_P_noisy.positions
+            x_next.node_attrs += (
+                sigma_next - sigma_increased
+            ) * grad_log_P_noisy.node_attrs
+
+            # Apply 2nd order correction.
+            if i < num_steps - 1:
+                x_next.positions.grad = None
+                x_next.node_attrs.grad = None
+                D_x_next = self.model(x_next.to_dict(), sigma_next, **model_kwargs)
+                grad_log_P_correction = GradLogP(
+                    positions=(x_next.positions - D_x_next["positions"]) / sigma_next,
+                    node_attrs=(x_next.node_attrs - D_x_next["node_attrs"])
+                    / sigma_next,
+                )
+                x_next = x_increased.clone()
+                x_next.positions += (
+                    (sigma_next - sigma_increased)
+                    * (grad_log_P_correction.positions + grad_log_P_noisy.positions)
+                    / 2
+                )
+                x_next.node_attrs += (
+                    (sigma_next - sigma_increased)
+                    * (grad_log_P_correction.node_attrs + grad_log_P_noisy.node_attrs)
+                    / 2
+                )
+                if track_trajectory:
+                    trajectories.append(x_next.clone())
+        if track_trajectory:
+            return x_next, trajectories
+        return x_next, []
+
+    def _get_integrator_parameters(self):
+        return (
+            self.noise_parameters.S_churn,
+            self.noise_parameters.S_min,
+            self.noise_parameters.S_max,
+            self.noise_parameters.S_noise,
+        )
+
+    def _get_sigma_schedule(self, num_steps: int):
+        step_indices = torch.arange(num_steps).to(self.device)
+        sigma_max, sigma_min, rho = (
+            self.noise_parameters.sigma_max,
+            self.noise_parameters.sigma_min,
+            self.noise_parameters.rho,
+        )
+        max_noise_rhod = sigma_max ** (1 / rho)
+        min_noise_rhod = sigma_min ** (1 / rho)
+        noise_interpolation = (
+            step_indices / (num_steps - 1) * (min_noise_rhod - max_noise_rhod)
+        )
+        sigmas = (max_noise_rhod + noise_interpolation) ** rho
+        # Add a zero sigma at the end to get the sample.
+        sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1]).to(self.device)])
+        return sigmas
+
+    @staticmethod
+    def _initialize_sample(batch_data: AtomicData, sigma: torch.Tensor) -> AtomicData:
+        x_next = batch_data
+        x_next.positions = sigma * torch.randn_like(x_next.positions)
+        x_next.node_attrs = sigma * torch.randn_like(x_next.node_attrs)
+        return x_next
 
 
 class ModelWrapper(torch.nn.Module):
