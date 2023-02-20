@@ -94,12 +94,13 @@ def main(data_path, model_path, restart=False):
 
     optimizer = Lion(model.parameters(), lr=PARAMS["lr"])
     for epoch in range(PARAMS["epochs"]):
-        for batch_data in data_loader:
+        for i, batch_data in enumerate(data_loader):
             batch_data = batch_data.to(DEVICE)
             optimizer.zero_grad()
             loss = loss_fn(batch_data, model, training=True)
             loss.backward()
             clip_grad_norm_(model.parameters(), 1000.0)
+            wandb.log({"loss": loss.item()})
             optimizer.step()
         logging.info(f"Epoch {epoch}: {loss.item()}")
     # save model
