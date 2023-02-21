@@ -11,15 +11,15 @@ from torch.nn.utils.clip_grad import clip_grad_norm_
 torch.set_default_dtype(torch.float64)
 from functools import partial
 
+from fire import Fire
+from lion_pytorch import Lion
+
+import wandb
 from moldiff.diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
     EnergyMACEDiffusion,
 )
-from fire import Fire
-from lion_pytorch import Lion
-
-import wandb
 from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
@@ -48,10 +48,9 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 5e-4,
-    "batch_size": 64,
-    "epochs": 3,
-    "warmup_steps": 1000,
+    "lr": 1e-4,
+    "batch_size": 128,
+    "epochs": 200,
 }
 
 

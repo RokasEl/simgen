@@ -56,11 +56,11 @@ def main():
     )
     batch_data = next(iter(data_loader)).to(DEVICE)
     noise_params = SamplerNoiseParameters(
-        sigma_max=10, sigma_min=2e-3, S_churn=40, S_min=0.01, S_noise=1.003
+        sigma_max=30, sigma_min=2e-3, S_churn=40, S_min=0.01, S_noise=1.003
     )
     sampler = EDMSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
     final, trajectories = sampler.generate_samples(
-        batch_data, num_steps=20, track_trajectory=True, training=True
+        batch_data, num_steps=30, track_trajectory=True, training=True
     )
     trajectories.append(final)
     atoms = [atomic_data_to_ase(x.to_dict()) for x in trajectories]
