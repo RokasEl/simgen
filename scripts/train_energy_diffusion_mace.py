@@ -5,6 +5,7 @@ import torch
 from e3nn import o3
 from mace import data, modules, tools
 from mace.tools import torch_geometric
+from mace.tools.scripts_utils import get_dataset_from_xyz
 from torch.nn.utils.clip_grad import clip_grad_norm_
 
 torch.set_default_dtype(torch.float64)
@@ -74,17 +75,12 @@ def main(data_path="./Data/qm9_data", model_path="test_model.pt", restart=False)
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    rng = np.random.default_rng(0)
-    training_data = [
-        read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
-        for i in rng.choice(133885, 2048, replace=False)
-    ]
+    _, all_train_configs = data.load_from_xyz(
+        file_path=data_path,
+        config_type_weights={},
+    )
     to_atomic_data = partial(data.AtomicData.from_config, z_table=Z_TABLE, cutoff=10.0)
-    training_data = [
-        data.Configuration(atomic_numbers=d.get_atomic_numbers(), positions=d.positions)
-        for d in training_data
-    ]
-    training_data = [to_atomic_data(conf) for conf in training_data]
+    training_data = [to_atomic_data(conf) for conf in all_train_configs]
     data_loader = torch_geometric.dataloader.DataLoader(
         dataset=training_data,  # type: ignore
         batch_size=PARAMS["batch_size"],
