@@ -130,6 +130,7 @@ dmypy.json
 
 # Additional ignores
 ./Data/*
+wandb/*
 ./src/Generated_trajectories/*
 ./trained_models/*
 ./logs/*

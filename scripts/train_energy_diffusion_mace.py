@@ -10,7 +10,6 @@ from torch.nn.utils.clip_grad import clip_grad_norm_
 torch.set_default_dtype(torch.float64)
 from functools import partial
 
-import wandb
 from diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
@@ -19,9 +18,10 @@ from diffusion_tools import (
 from fire import Fire
 from lion_pytorch import Lion
 
+import wandb
 from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
 
-Z_TABLE = tools.AtomicNumberTable([1, 6])
+Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
@@ -35,7 +35,7 @@ MACE_CONFIG = dict(
         "RealAgnosticResidualInteractionBlock"
     ],
     num_interactions=2,
-    num_elements=2,
+    num_elements=len(Z_TABLE.zs),
     hidden_irreps=o3.Irreps("64x0e + 64x1o"),
     MLP_irreps=o3.Irreps("64x0e"),
     gate=torch.nn.functional.silu,
@@ -47,20 +47,21 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 1e-2,
+    "lr": 5e-4,
     "batch_size": 64,
     "epochs": 3,
     "warmup_steps": 1000,
 }
 
 
-def main(data_path, model_path, restart=False):
+def main(data_path="./Data/qm9_data", model_path="test_model.pt", restart=False):
     setup_logger(
         level=logging.DEBUG, tag="train_energy_diffusion_mace", directory="./logs/"
     )
     wandb.init(
         # set the wandb project where this run will be logged
         project="energy-diffusion",
+        entity="rokasel",
         # track hyperparameters and run metadata
         config=PARAMS,
         save_code=True,
@@ -80,7 +81,7 @@ def main(data_path, model_path, restart=False):
     ]
     to_atomic_data = partial(data.AtomicData.from_config, z_table=Z_TABLE, cutoff=10.0)
     training_data = [
-        data.Configuration(atomic_numbers=d.atomic_numbers, positions=d.positions)
+        data.Configuration(atomic_numbers=d.get_atomic_numbers(), positions=d.positions)
         for d in training_data
     ]
     training_data = [to_atomic_data(conf) for conf in training_data]
