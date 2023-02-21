@@ -11,7 +11,7 @@ from torch.nn.utils.clip_grad import clip_grad_norm_
 torch.set_default_dtype(torch.float64)
 from functools import partial
 
-from diffusion_tools import (
+from moldiff.diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
     EnergyMACEDiffusion,
