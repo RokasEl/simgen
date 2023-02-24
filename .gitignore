@@ -139,6 +139,8 @@ wandb/*
 *.png
 *.pdf
 *.pt
+# temporary files
+*temp*
 
 # By default ignore notebooks
 *.ipynb
