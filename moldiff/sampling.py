@@ -109,6 +109,9 @@ class GaussianScoreModel(ScoreModel):
     def __call__(self, X, t):
         return -X.positions * self.spring_constant
 
+    def get_energy(self, X, t):
+        return np.sum(X.positions**2) * self.spring_constant
+
 
 class ASECalculatorScoreModel(ScoreModel):
     def __init__(self, calculator):
@@ -117,6 +120,10 @@ class ASECalculatorScoreModel(ScoreModel):
     def __call__(self, X, t):
         X.set_calculator(self.calculator)
         return X.get_forces()
+
+    def get_energy(self, X, t):
+        X.set_calculator(self.calculator)
+        return X.get_potential_energy()
 
 
 class SOAPSimilarityModel(ScoreModel):

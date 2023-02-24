@@ -34,14 +34,14 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def main():
-    save_dict = torch.load("./test_model.pt", map_location=DEVICE)
+    save_dict = torch.load("./models/trained_energy_mace.pt", map_location=DEVICE)
     model = EnergyMACEDiffusion(noise_embed_dim=32, **save_dict["model_params"])
     model = EDMModelWrapper(model, sigma_data=1).to(DEVICE)
     model.load_state_dict(save_dict["model_state_dict"])
     model.eval()
     for param in model.parameters():
         param.requires_grad = False
-    mol = initialize_mol("C15")
+    mol = initialize_mol("C20")
     config = data.Configuration(
         atomic_numbers=mol.get_atomic_numbers(),
         positions=mol.positions,

@@ -146,6 +146,7 @@ wandb/*
 # Data files and arcihves
 *.csv
 *.tar.gz
+*.pkl
 
 # Movie files
 *.avi
