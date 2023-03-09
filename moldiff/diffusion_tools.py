@@ -123,7 +123,6 @@ class EDMLossFn:
         model_input.node_attrs += molecule_sigmas * torch.randn_like(
             model_input.node_attrs
         )
-        model_input.node_attrs = model_input.node_attrs  # TODO: Discuss this line
         return model_input
 
 
@@ -312,7 +311,7 @@ class ModelWrapper(torch.nn.Module):
         return c_skip, c_out, c_in, c_noise
 
 
-class TessLossFn:
+class TestLossFn:
     def __init__(self, P_mean=-0.8, P_std=0.5):
         self.P_mean = P_mean
         self.P_std = P_std

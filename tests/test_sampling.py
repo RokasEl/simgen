@@ -23,13 +23,13 @@ from moldiff.sampling import ScoreModel
     ],
 )
 def test_calculate_squared_embedding_scale(training_embeddings, expected_scale):
-    scales = ScoreModel._calculate_squared_embedding_scale(training_embeddings)
+    scales = ScoreModel._calculate_reference_dot_prod(training_embeddings)
     np.testing.assert_array_equal(scales, expected_scale)
 
 
 def test_calculate_squared_embedding_scale_raises_warning_for_zero_scale():
     with pytest.warns(UserWarning):
-        scale = ScoreModel._calculate_squared_embedding_scale(
+        scale = ScoreModel._calculate_reference_dot_prod(
             np.array([[0, 0], [0, 0]], dtype=np.float64)
         )
         np.testing.assert_array_equal(scale, np.array([1e-16, 1e-16]))
