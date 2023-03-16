@@ -12,6 +12,7 @@ from mace.data import AtomicData
 from mace.data.utils import config_from_atoms
 from mace.modules.models import MACE
 from mace.tools import torch_geometric
+from mace.tools.scatter import scatter_mean
 from quippy.descriptors import Descriptor
 
 #################### Base Classes ####################
@@ -250,8 +251,9 @@ class MaceSimilarityScore(ScoreModel):
     def __call__(
         self, atomic_data, t, normalise_grad=False, calculate_element_grad=False
     ):
+        batch_index = atomic_data.batch
         emb = self._get_node_embeddings(atomic_data)
-        log_dens = self._get_log_kernel_density(emb, t)
+        log_dens = self._get_log_kernel_density(emb, batch_index, t)
         grad = self._get_gradient(atomic_data.positions, log_dens)
         grad = self._handle_grad_nans(grad)
         if calculate_element_grad:
@@ -279,7 +281,13 @@ class MaceSimilarityScore(ScoreModel):
         ).to(self.device)
         atomic_data.positions.requires_grad = True
         atomic_data.node_attrs.requires_grad = True
-        return atomic_data
+        data_loader = torch_geometric.dataloader.DataLoader(
+            dataset=[atomic_data],
+            batch_size=1,
+            shuffle=False,
+            drop_last=False,
+        )
+        return next(iter(data_loader))
 
     @staticmethod
     def _get_gradient(inp_tensor: torch.Tensor, log_dens: torch.Tensor):
@@ -365,14 +373,15 @@ class MaceSimilarityScore(ScoreModel):
         squared_distance_matrix = squared_distance_matrix / self.training_data_dot_prod
         return squared_distance_matrix
 
-    def _get_log_kernel_density(self, embedding, t):
+    def _get_log_kernel_density(self, embedding, batch_index, t):
 
         squared_distances = self._calculate_distance_matrix(
             embedding
         )  # (atoms, reference_atoms)
         squared_distances = squared_distances / 1.3 ** (t)
         # sum over reference atoms and mean over atoms
-        density = (-1 * squared_distances / 2).exp().sum(dim=-1).mean(dim=0)
+        density = (-1 * squared_distances / 2).exp().sum(dim=-1)
+        density = scatter_mean(density, batch_index, dim=0)
         log_density = torch.log(density)
         logging.debug(f"t={t:.2f}, log_density={log_density}")
         logging.debug(f"Density: {density}")
