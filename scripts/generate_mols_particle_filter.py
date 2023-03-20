@@ -32,7 +32,8 @@ def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
     pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
     pretrained_model = torch.load(pretrained_mace)
-    model = MACE(
+    print(pretrained_model)
+    model = ScaleShiftMACE(
         r_max=4.5,
         num_bessel=8,
         num_polynomial_cutoff=5,
@@ -49,6 +50,8 @@ def main():
         MLP_irreps=o3.Irreps("16x0e"),
         atomic_numbers=[1, 6, 7, 8, 9, 15, 16, 17, 35, 53],
         gate=torch.nn.functional.silu,
+        atomic_inter_scale=1.088502,
+        atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
     model.radial_embedding = RadialDistanceTransformBlock(

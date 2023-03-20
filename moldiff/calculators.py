@@ -184,6 +184,8 @@ class MaceSimilarityCalculator(Calculator):
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
         )
+        E0s = model.atomic_energies_fn.atomic_energies.detach().cpu().numpy()
+        self.E0s_dict: dict[int, float] = {z: E0 for z, E0 in zip(self.z_table.zs, E0s)}
 
     def __call__(self, atomic_data, t):
         batch_index = atomic_data.batch
@@ -191,6 +193,13 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = self._calculate_log_k(emb, t)
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
+        grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
+        if t < 0.3:
+            t = t.item() * 1 / 0.3
+            out = self.model(atomic_data)
+            forces = out["forces"].detach().cpu().numpy()
+            forces = self._clip_grad_norm(forces, max_norm=np.sqrt(3))
+            grad = grad * t + forces * (1 - t)
         return grad
 
     def calculate(
@@ -224,6 +233,20 @@ class MaceSimilarityCalculator(Calculator):
         force = self._handle_grad_nans(force)
         self.results["forces"] = force
 
+        if time < 0.3:
+            time = time * 1 / 0.3
+            out = self.model(batched.to_dict())
+            node_energies = out["node_energy"].detach().cpu().numpy()
+            shifted_energies = self.subtract_reference_energies(atoms, node_energies)
+            self.results["energies"] = (
+                1 - time
+            ) * shifted_energies + time * self.results["energies"]
+
+    def subtract_reference_energies(self, atoms, energies: np.ndarray):
+        zs = atoms.get_atomic_numbers()
+        reference_energies = np.array([self.E0s_dict[z] for z in zs])
+        return energies - reference_energies
+
     @staticmethod
     def _get_gradient(inp_tensor: torch.Tensor, log_dens: torch.Tensor):
         grad = torch.autograd.grad(
@@ -234,11 +257,14 @@ class MaceSimilarityCalculator(Calculator):
             only_inputs=True,
             retain_graph=True,
         )[0]
-        # limit the norm for each row to sqrt(3)
-        ratio = np.sqrt(3) / torch.norm(grad, dim=1, keepdim=True)
-        ratio = torch.where(ratio > 1, torch.ones_like(ratio), ratio)
-        grad = grad * ratio
         return grad.detach().cpu().numpy()
+
+    @staticmethod
+    def _clip_grad_norm(grad, max_norm=1):
+        norm = np.linalg.norm(grad, axis=1)
+        mask = norm > max_norm
+        grad[mask] = grad[mask] / norm[mask, None] * max_norm
+        return grad
 
     @staticmethod
     def _calculate_mean_dot_product(x):

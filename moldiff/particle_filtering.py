@@ -142,7 +142,7 @@ class ParticleFilterGenerator:
             energies = x.get_potential_energies()
             exp_energies = np.exp(energies)
             probibilities = exp_energies / exp_energies.sum()
-            change_rate = 1 - (step / self.num_steps) ** 4
+            change_rate = max(1 - (step / self.num_steps) ** 4, 0.1)
             probibilities = probibilities * len(probibilities) * change_rate
             mask = probibilities > np.random.rand(len(x))
             numbers = x.get_atomic_numbers()
@@ -179,14 +179,20 @@ class ParticleFilterGenerator:
         embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
         log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
         energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
+        beta = 1 / (sigma_cur * 1000)
+        probabilities = torch.softmax(-1 * beta * energies_v2, dim=0)
         debug_str = f"""
         Collecting at time {sigma_cur.item()}
         Particle energies: {energies_v2}
+        Probabilities: {probabilities}
         """
         debug_str = pprint.pformat(debug_str)
         logging.debug(debug_str)
-        max_density_idx = torch.argmin(energies_v2).item()
-        lowest_energy_atoms = atoms[max_density_idx]
+        collect_idx = np.random.choice(
+            len(atoms), p=probabilities.detach().cpu().numpy()
+        )
+        logging.debug(f"Collecting particle {collect_idx}")
+        lowest_energy_atoms = atoms[collect_idx]
         new_atomic_data = self.similarity_calculator.convert_to_atomic_data(
             lowest_energy_atoms
         )
