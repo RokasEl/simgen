@@ -5,8 +5,8 @@ from typing import List
 import ase
 import numpy as np
 import torch
-from calculators import MaceSimilarityCalculator
-from diffusion_tools import SamplerNoiseParameters
+from .calculators import MaceSimilarityCalculator
+from .diffusion_tools import SamplerNoiseParameters
 from mace.data import AtomicData
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
@@ -72,8 +72,8 @@ class ParticleFilterGenerator:
         self.sigmas = torch.concatenate(
             [
                 torch.linspace(10, 2.5, 20),
-                torch.linspace(2.5, 1, 80),
-                torch.linspace(0.95, 0.05, 400),
+                torch.linspace(2.5, 1, 40),
+                torch.linspace(0.95, 0.05, 200),
                 torch.logspace(-1.31, -3, 20),
             ]
         ).to(device)
@@ -257,9 +257,9 @@ class HeunIntegrator:
         forces = self.similarity_calculator(mol_increased, sigma_increased)
         forces = torch.tensor(forces, device=device)
         forces += (
-            -2
+            -1.5
             * mol_increased.positions
-            * torch.tanh(50 * sigma_cur**2)
+            * torch.tanh(60 * sigma_cur**2)
             # if not torch.all(forces == 0)
             # else 0
         )

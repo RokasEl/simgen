@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from e3nn import o3
-from particle_filtering import ParticleFilterGenerator
+from moldiff.particle_filtering import ParticleFilterGenerator
 
 torch.set_default_dtype(torch.float64)
 from ase import Atoms
@@ -52,7 +52,7 @@ def main():
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
     model.radial_embedding = RadialDistanceTransformBlock(
-        r_min=0.5, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+        r_min=0.7, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
     )
     model.to(DEVICE)
     for param in model.parameters():
@@ -60,10 +60,10 @@ def main():
     model.eval()
 
     rng = np.random.default_rng(0)
-    data_path = "./Data/qm9_data/"
+    data_path = "../data/qm9/"
     training_data = [
         read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
-        for i in rng.choice(133885, 128, replace=False)
+        for i in rng.choice(133885, 256, replace=False)
     ]
 
     z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
@@ -82,11 +82,11 @@ def main():
     particle_filter = ParticleFilterGenerator(
         score_model, num_steps=150, noise_params=noise_params
     )
-    mol = initialize_mol("C20")
+    mol = initialize_mol("C30")
     trajectories = particle_filter.generate(mol, num_particles=10)
     print(len(trajectories))
     ase_io.write(
-        "particle_filter_generation_CHONF_5.xyz",
+        "particle_filter_generation_CHONF_6.xyz",
         trajectories,
         format="extxyz",
         append=True,
