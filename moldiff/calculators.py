@@ -14,7 +14,7 @@ from mace.tools import AtomicNumberTable, torch_geometric
 from mace.tools.scatter import scatter_mean, scatter_sum
 from quippy.descriptors import Descriptor
 from tqdm import tqdm
-
+import logging
 
 # Writen by Tamas Stenczel
 class SoapSimilarityCalculator(Calculator):
@@ -194,12 +194,12 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
-        if t < 0.3:
-            t = t.item() * 1 / 0.3
+        if t < 0.25:
+            t = t.item() * 1 / 0.08
             out = self.model(atomic_data)
             forces = out["forces"].detach().cpu().numpy()
             forces = self._clip_grad_norm(forces, max_norm=np.sqrt(3))
-            grad = grad * t + forces * (1 - t)
+            grad = grad  + forces / 2
         return grad
 
     def calculate(
@@ -228,19 +228,24 @@ class MaceSimilarityCalculator(Calculator):
         molecule_energies = scatter_sum(node_energies, batched.batch, dim=0)
         self.results["energies"] = node_energies.detach().cpu().numpy()
         self.results["energy"] = molecule_energies.detach().cpu().numpy()
-
+        logging.debug(f"Node similarity energies: {self.results['energies']}")
         force = self._get_gradient(batched.positions, log_k)
         force = self._handle_grad_nans(force)
         self.results["forces"] = force
 
-        if time < 0.3:
-            time = time * 1 / 0.3
-            out = self.model(batched.to_dict())
-            node_energies = out["node_energy"].detach().cpu().numpy()
-            shifted_energies = self.subtract_reference_energies(atoms, node_energies)
-            self.results["energies"] = (
-                1 - time
-            ) * shifted_energies + time * self.results["energies"]
+        # if time < 1:
+        #     time = time * 1 / 1
+        #     out = self.model(batched.to_dict())
+        #     node_energies = out["node_energy"].detach().cpu().numpy()
+        #     shifted_energies = self.subtract_reference_energies(atoms, node_energies)
+        #     shifted_energies = shifted_energies
+        #     logging.debug(f"Node pretrained MACE energies: {shifted_energies}")
+        #     logging.debug(f"MACE multiplier: {1-time}, similarity multiplier: {time}")
+        #     shifted_energies = shifted_energies - shifted_energies[0]
+        #     self.results["energies"] = self.results["energies"] - self.results["energies"][0]
+        #     self.results["energies"] = (
+        #         1 - time
+        #     ) * shifted_energies + time * self.results["energies"]
 
     def subtract_reference_energies(self, atoms, energies: np.ndarray):
         zs = atoms.get_atomic_numbers()
@@ -327,7 +332,7 @@ class MaceSimilarityCalculator(Calculator):
     def _calculate_log_k(self, embedding, time):
         squared_distance_matrix = self._calculate_distance_matrix(embedding)
         # squared_distance_matrix = squared_distance_matrix / 1.5 ** (time)
-        additional_multiplier = 119 * (1 - (time / 5) ** 0.25) + 1 if time <= 5 else 1
+        additional_multiplier = 119 * (1 - (time / 10) ** 0.25) + 1 if time <= 10 else 1
         squared_distance_matrix = squared_distance_matrix * additional_multiplier
         log_k = torch.logsumexp(-squared_distance_matrix / 2, dim=1)
         return log_k

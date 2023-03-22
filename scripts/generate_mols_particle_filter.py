@@ -54,9 +54,9 @@ def main():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    model.radial_embedding = RadialDistanceTransformBlock(
-        r_min=0.7, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
-    )
+    # model.radial_embedding = RadialDistanceTransformBlock(
+    #     r_min=0.7, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+    # )
     model.to(DEVICE)
     for param in model.parameters():
         param.requires_grad = False
@@ -85,15 +85,18 @@ def main():
     particle_filter = ParticleFilterGenerator(
         score_model, num_steps=150, noise_params=noise_params
     )
-    mol = initialize_mol("C30")
-    trajectories = particle_filter.generate(mol, num_particles=10)
-    print(len(trajectories))
-    ase_io.write(
-        "particle_filter_generation_CHONF_6.xyz",
-        trajectories,
-        format="extxyz",
-        append=True,
-    )
+    destination = "./scripts/Generated_trajectories/particle_filter_small_mols/"
+    for i in range(100):
+        logging.debug(f"Generating molecule {i}")
+        size = rng.integers(3, 20)
+        mol = initialize_mol(f"C{size}")
+        trajectories = particle_filter.generate(mol, num_particles=10)
+        ase_io.write(
+            f"{destination}/CHONF_{i}_{size}.xyz",
+            trajectories,
+            format="extxyz",
+            append=True,
+        )
 
 
 if __name__ == "__main__":
