@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from e3nn import o3
+
 from moldiff.particle_filtering import ParticleFilterGenerator
 
 torch.set_default_dtype(torch.float64)
@@ -88,7 +89,7 @@ def main():
     destination = "./scripts/Generated_trajectories/particle_filter_small_mols/"
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
-        size = rng.integers(3, 20)
+        size = rng.integers(7, 25)
         mol = initialize_mol(f"C{size}")
         trajectories = particle_filter.generate(mol, num_particles=10)
         ase_io.write(
