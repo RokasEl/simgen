@@ -74,9 +74,7 @@ class ParticleFilterGenerator:
         self.sigmas = self._get_sigma_schedule(num_steps=num_steps)
         self.sigmas = torch.concatenate(
             [
-                torch.linspace(10, 2.5, 20),
-                torch.linspace(2.5, 1, 40),
-                torch.linspace(0.95, 0.05, 200),
+                torch.linspace(1, 0.05, 50),
                 torch.logspace(-1.31, -3, 20),
             ]
         ).to(device)
@@ -103,7 +101,7 @@ class ParticleFilterGenerator:
 
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
-            if step % 10 == 0 and num_particles > 1:
+            if step % 4 == 0 and num_particles > 1:
                 if swapped:
                     batched = self.collect(batched, sigma_next)
                     swapped = False
@@ -148,16 +146,16 @@ class ParticleFilterGenerator:
         atoms.info["time"] = self.sigmas[step].item()
         atoms.calc = self.similarity_calculator
         # beta should be 1e3 until sigma < 0.1, then loglinearly decrease to 1
-        sigma_cut = 0.5
+        sigma_cut = 0.2
         sigma = self.sigmas[step].item()
-        log_beta = -2 + np.max([0, 3 * (sigma_cut - sigma) / sigma_cut])
+        log_beta = -4 + np.max([0, 4 * (sigma_cut - sigma) / sigma_cut])
         beta = 10**log_beta
 
         energies = atoms.get_potential_energies()
         logging.debug(f"beta = {beta}, energies = {energies}")
         energies = energies * beta
         probabilities = softmax(energies)
-        num_change = np.ceil(0.1 * len(probabilities)).astype(int)
+        num_change = np.ceil(0.2 * len(probabilities)).astype(int)
 
         logging.debug(f"Element swap probabilities: {probabilities}")
         ensemble = [atoms.copy()]
@@ -334,15 +332,12 @@ class HeunIntegrator:
         # mol_cur.positions.requires_grad = True
 
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
-        gamma = (
-            min(S_churn / self.num_steps, np.sqrt(2) - 1)
-            if S_min <= sigma_cur <= S_max
-            else 0
-        )
+        gamma = S_churn if S_min <= sigma_cur <= S_max else 1
         # Added noise depends on the current noise level. So, it decreases over the course of the integration.
-        sigma_increased = sigma_cur * (1 + gamma)
+        sigma_increased = sigma_cur * gamma
         # Add noise to the current sample.
-        noise_level = torch.sqrt((sigma_increased**2 - sigma_cur**2)) * S_noise
+        noise_level = torch.sqrt(sigma_increased**2 - sigma_cur**2) * S_noise
+        noise_level = torch.max(noise_level, torch.tensor(1e-2).to(self.device))
         logging.debug(f"Current step: {step}")
         logging.debug(f"Noise added to positions: {noise_level:.2e}")
         with torch.no_grad():
@@ -359,7 +354,7 @@ class HeunIntegrator:
             -1
             * self.restorative_force_strength
             * mol_increased.positions
-            * torch.tanh(50 * sigma_cur**2)
+            * torch.tanh(20 * sigma_cur**2)
         )
 
         mol_next = clone(mol_cur)

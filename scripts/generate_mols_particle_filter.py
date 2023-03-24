@@ -32,7 +32,7 @@ from moldiff.sampling import MaceSimilarityScore
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
     sqrt_prefactor = 1.5664519
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
-    force_strength = 1 / (0.08 * bounding_sphere_diameter) ** 2
+    force_strength = 1 / (0.1 * bounding_sphere_diameter) ** 2
     return force_strength
 
 
@@ -96,7 +96,7 @@ def main():
         energies[i] = mol.get_potential_energy()
     logging.debug(f"Energies of training data: {energies}")
     noise_params = SamplerNoiseParameters(
-        sigma_max=10, sigma_min=2e-3, S_churn=80, S_min=2e-3, S_noise=1
+        sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
     destination = "./scripts/Generated_trajectories/particle_filter_small_mols/"
     for i in range(100):
