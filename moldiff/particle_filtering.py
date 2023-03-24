@@ -121,8 +121,11 @@ class ParticleFilterGenerator:
             )
             trajectories.append(self.atomic_data_to_ase(batched, self.z_table))
 
-        cleaned = self._clean_final_atoms(atomic_data=batched)
-        trajectories.append(self.atomic_data_to_ase(cleaned, self.z_table))
+        try:
+            cleaned = self._clean_final_atoms(atomic_data=batched)
+            trajectories.append(self.atomic_data_to_ase(cleaned, self.z_table))
+        except Exception as e:
+            logging.warning(f"Could not clean final atoms: {e}")
 
         if num_particles == 1:
             trajectories.append(self.atomic_data_to_ase(batched, self.z_table))
@@ -356,7 +359,7 @@ class HeunIntegrator:
             -1
             * self.restorative_force_strength
             * mol_increased.positions
-            * torch.tanh(25 * sigma_cur**2)
+            * torch.tanh(50 * sigma_cur**2)
         )
 
         mol_next = clone(mol_cur)
