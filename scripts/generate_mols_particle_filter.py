@@ -29,6 +29,25 @@ from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
 from moldiff.sampling import MaceSimilarityScore
 
 
+def smooth_combination_of_two_lines(
+    x, line_1_grad, line_2_grad, line_2_intercept, coupling_speed
+):
+    line_1 = line_1_grad * x
+    line_2 = line_2_grad * x + line_2_intercept
+    intersection_point = line_2_intercept / (line_1_grad - line_2_grad)
+    coupling = (np.tanh(coupling_speed * (x - intersection_point)) + 1) / 2
+    return (1 - coupling) * line_1 + coupling * line_2
+
+
+def calculate_restorative_force_strength(num_atoms: int | float) -> float:
+    line_parameters = (1.1869034, 0.22844787, 0.7899614, 0.06121747)
+    bounding_sphere_diameter = smooth_combination_of_two_lines(
+        num_atoms, *line_parameters
+    )
+    force_strength = 1 / (0.08 * bounding_sphere_diameter) ** 2
+    return force_strength
+
+
 def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
     pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
@@ -83,14 +102,21 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=80, S_min=2e-3, S_noise=1
     )
-    particle_filter = ParticleFilterGenerator(
-        score_model, num_steps=150, noise_params=noise_params
-    )
     destination = "./scripts/Generated_trajectories/particle_filter_small_mols/"
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(7, 25)
         mol = initialize_mol(f"C{size}")
+        restorative_force_strength = calculate_restorative_force_strength(size)
+        logging.debug(
+            f"Mol size {size}, restorative force strength {restorative_force_strength:.2f}"
+        )
+        particle_filter = ParticleFilterGenerator(
+            score_model,
+            num_steps=150,
+            noise_params=noise_params,
+            restorative_force_strength=restorative_force_strength,
+        )
         trajectories = particle_filter.generate(mol, num_particles=10)
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",

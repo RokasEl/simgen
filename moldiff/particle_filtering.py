@@ -61,6 +61,7 @@ class ParticleFilterGenerator:
         similarity_calculator: MaceSimilarityCalculator,
         num_steps=100,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        restorative_force_strength: float = 1.5,
         noise_params=SamplerNoiseParameters(),
     ):
         self.similarity_calculator = similarity_calculator
@@ -84,6 +85,7 @@ class ParticleFilterGenerator:
             similarity_calculator=similarity_calculator,
             num_steps=num_steps,
             sampler_noise_parameters=noise_params,
+            restorative_force_strength=restorative_force_strength,
         )
         self.num_steps = num_steps
 
@@ -307,14 +309,18 @@ class HeunIntegrator:
         similarity_calculator,
         sampler_noise_parameters=SamplerNoiseParameters(),
         num_steps=100,
+        restorative_force_strength: float = 1.5,
         device=torch.device("cuda")
         if torch.cuda.is_available()
         else torch.device("cpu"),
     ):
         self.similarity_calculator = similarity_calculator
         self.noise_parameters = sampler_noise_parameters
+        self.restorative_force_strength = restorative_force_strength
         self.num_steps = num_steps
         self.device = device
+        # TODO: remove num_steps dependency; can replace the final if statement with a condition
+        # on sigma being zero.
 
     def __call__(self, x: AtomicData, step: int, sigma_cur, sigma_next):
         """
@@ -347,11 +353,10 @@ class HeunIntegrator:
         forces = self.similarity_calculator(mol_increased, sigma_increased)
         forces = torch.tensor(forces, device=device)
         forces += (
-            -4
+            -1
+            * self.restorative_force_strength
             * mol_increased.positions
             * torch.tanh(25 * sigma_cur**2)
-            # if not torch.all(forces == 0)
-            # else 0
         )
 
         mol_next = clone(mol_cur)
