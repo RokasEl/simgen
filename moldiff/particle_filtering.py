@@ -155,7 +155,7 @@ class ParticleFilterGenerator:
         logging.debug(f"beta = {beta}, energies = {energies}")
         energies = energies * beta
         probabilities = softmax(energies)
-        num_change = np.ceil(0.2 * len(probabilities)).astype(int)
+        num_change = np.ceil(0.1 * len(probabilities)).astype(int)
 
         logging.debug(f"Element swap probabilities: {probabilities}")
         ensemble = [atoms.copy()]
