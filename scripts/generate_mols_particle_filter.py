@@ -29,22 +29,10 @@ from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
 from moldiff.sampling import MaceSimilarityScore
 
 
-def smooth_combination_of_two_lines(
-    x, line_1_grad, line_2_grad, line_2_intercept, coupling_speed
-):
-    line_1 = line_1_grad * x
-    line_2 = line_2_grad * x + line_2_intercept
-    intersection_point = line_2_intercept / (line_1_grad - line_2_grad)
-    coupling = (np.tanh(coupling_speed * (x - intersection_point)) + 1) / 2
-    return (1 - coupling) * line_1 + coupling * line_2
-
-
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
-    line_parameters = (1.1869034, 0.22844787, 0.7899614, 0.06121747)
-    bounding_sphere_diameter = smooth_combination_of_two_lines(
-        num_atoms, *line_parameters
-    )
-    force_strength = 1 / (0.08 * bounding_sphere_diameter) ** 2
+    sqrt_prefactor = 1.5664519
+    bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
+    force_strength = 1 / (0.1 * bounding_sphere_diameter) ** 2
     return force_strength
 
 
@@ -74,20 +62,28 @@ def main():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    # model.radial_embedding = RadialDistanceTransformBlock(
-    #     r_min=0.7, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
-    # )
+    model.radial_embedding = RadialDistanceTransformBlock(
+        r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+    )
     model.to(DEVICE)
     for param in model.parameters():
         param.requires_grad = False
     model.eval()
 
     rng = np.random.default_rng(0)
-    data_path = "../data/qm9/"
-    training_data = [
-        read_qm9_xyz(f"{data_path}/dsgdb9nsd_{i:06d}.xyz")
-        for i in rng.choice(133885, 256, replace=False)
-    ]
+    data_path = "../data/qm9_full_data.xyz"
+    all_data = ase_io.read(data_path, index=":", format="extxyz")
+    # Make sure we have a reference atom from molecules of all sizes
+    molecule_sizes = {len(mol) for mol in all_data}
+    training_data = []
+    for size in molecule_sizes:
+        size_mols = list(filter(lambda mol: len(mol) == size, all_data))
+        idx = rng.integers(0, len(size_mols))
+        training_data.append(size_mols[idx])
+    # now add further random molecules
+    too_add = 256 - len(training_data)
+    rand_mols = [x for x in rng.choice(all_data, size=too_add)]
+    training_data.extend(rand_mols)
 
     z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
     score_model = MaceSimilarityCalculator(
@@ -100,12 +96,12 @@ def main():
         energies[i] = mol.get_potential_energy()
     logging.debug(f"Energies of training data: {energies}")
     noise_params = SamplerNoiseParameters(
-        sigma_max=10, sigma_min=2e-3, S_churn=80, S_min=2e-3, S_noise=1
+        sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/particle_filter_small_mols/"
+    destination = "./scripts/Generated_trajectories/interpolate_forces/"
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
-        size = rng.integers(7, 25)
+        size = rng.integers(3, 29)
         mol = initialize_mol(f"C{size}")
         restorative_force_strength = calculate_restorative_force_strength(size)
         logging.debug(

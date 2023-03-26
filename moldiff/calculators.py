@@ -1,4 +1,5 @@
 """ASE calculator comparing SOAP similarity"""
+import logging
 import warnings
 from typing import List
 
@@ -14,7 +15,7 @@ from mace.tools import AtomicNumberTable, torch_geometric
 from mace.tools.scatter import scatter_mean, scatter_sum
 from quippy.descriptors import Descriptor
 from tqdm import tqdm
-import logging
+
 
 # Writen by Tamas Stenczel
 class SoapSimilarityCalculator(Calculator):
@@ -194,12 +195,12 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
-        if t < 0.25:
-            t = t.item() * 1 / 0.08
+        if t < 0.1:
+            t = t.item() * 1 / 0.1
             out = self.model(atomic_data)
             forces = out["forces"].detach().cpu().numpy()
-            forces = self._clip_grad_norm(forces, max_norm=np.sqrt(3))
-            grad = grad  + forces / 2
+            forces = self._clip_grad_norm(forces, max_norm=10)
+            grad = t * grad + (1 - t) * forces
         return grad
 
     def calculate(
@@ -282,6 +283,7 @@ class MaceSimilarityCalculator(Calculator):
         node_feats = self.model.get_node_invariant_descriptors(
             data, track_gradient_on_positions=True
         )  # type: ignore
+        node_feats = node_feats[:, :1, :]
         node_feats = einops.rearrange(
             node_feats,
             "num_nodes interactions embed_dim -> num_nodes (interactions embed_dim)",
