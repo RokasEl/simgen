@@ -14,8 +14,8 @@ from mace.tools.scatter import scatter_sum
 from mace.tools.torch_geometric import Batch
 from scipy.special import softmax
 
-from .calculators import MaceSimilarityCalculator
-from .diffusion_tools import SamplerNoiseParameters
+from moldiff.calculators import MaceSimilarityCalculator
+from moldiff.diffusion_tools import SamplerNoiseParameters
 
 
 def clone(atomic_data):
