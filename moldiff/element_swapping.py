@@ -1,0 +1,115 @@
+import numpy as np
+from ase import Atoms
+from mace.tools import AtomicNumberTable
+from scipy.special import softmax
+
+
+def prepare_atomic_data_for_element_swapping():
+    pass
+
+
+def replace_array_elements_at_indices_with_other_elements_in_z_table(
+    atomic_numbers: np.ndarray,
+    indices_to_replace: np.ndarray,
+    z_table: AtomicNumberTable,
+) -> np.ndarray:
+    x = atomic_numbers.copy()
+    for idx in indices_to_replace:
+        new_zs = np.setdiff1d(z_table.zs, x[idx])
+        x[idx] = np.random.choice(new_zs)
+    return x
+
+
+def swap_single_particle(
+    mol: Atoms, probabilities: np.ndarray, num_change: int, z_table: AtomicNumberTable
+) -> Atoms:
+    swapped_mol = mol.copy()
+    to_change = np.random.choice(
+        len(mol), size=num_change, replace=False, p=probabilities
+    )
+    new_zs = replace_array_elements_at_indices_with_other_elements_in_z_table(
+        mol.get_atomic_numbers(), to_change, z_table
+    )
+    swapped_mol.set_atomic_numbers(new_zs)
+    return swapped_mol
+
+
+def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list[Atoms]:
+    original_atomic_numbers = mol.get_atomic_numbers()
+    original_z = original_atomic_numbers[idx]
+    other_elements = np.setdiff1d(z_table.zs, original_z)
+    swapped_mols = []
+    for z in other_elements:
+        new_atomic_numbers = original_atomic_numbers.copy()
+        new_atomic_numbers[idx] = z
+        mol.set_atomic_numbers(new_atomic_numbers)
+        swapped_mols.append(mol.copy())
+    return swapped_mols
+
+
+def get_how_many_to_change(num_particles: int, beta: float) -> int:
+    p_change = np.exp(-beta)
+    num_change = np.random.binomial(num_particles, p_change)
+    return num_change
+
+
+def create_element_swapped_particles(
+    atoms: Atoms, beta: float, num_particles: int, z_table: AtomicNumberTable
+) -> list[Atoms]:
+    assert atoms.calc is not None
+    energies = atoms.get_potential_energies() * beta
+    probabilities = softmax(energies)
+    probabilities[probabilities < 1e-3] = 0
+
+    ensemble = [atoms.copy()]
+    to_generate = num_particles - 1
+    if np.count_nonzero(probabilities) == 1:
+        idx = np.argmax(probabilities).astype(int)
+        sweep_over_max_energy_atom = sweep_all_elements(atoms, idx, z_table)
+        ensemble.extend(sweep_over_max_energy_atom)
+        already_generated_num = len(ensemble)
+        to_generate = num_particles - already_generated_num
+        probabilities = np.ones(len(atoms)) / len(atoms)
+
+    if to_generate > 0:
+        non_zero_ps = np.count_nonzero(probabilities)
+        for _ in range(to_generate):
+            num_change = min(get_how_many_to_change(len(atoms), beta), non_zero_ps)
+            ensemble.append(
+                swap_single_particle(atoms, probabilities, num_change, z_table)
+            )
+
+    return ensemble
+
+
+# def collect(self, atomic_data: Batch, sigma_cur):
+#     atoms = atoms_from_batch(atomic_data, self.z_table)
+#     energies = np.zeros(len(atoms))
+#     for i, mol in enumerate(atoms):
+#         mol.info["time"] = sigma_cur.item()
+#         mol.calc = self.similarity_calculator
+#         energies[i] = mol.get_potential_energy()
+
+#     # embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
+#     # log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
+#     # energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
+#     beta = 1 / (sigma_cur * 3000 + 1)
+#     energies = torch.tensor(energies).to(self.device)
+#     probabilities = torch.softmax(-1 * beta * energies, dim=0)
+#     debug_str = f"""
+#     Collecting at time {sigma_cur.item()}
+#     Particle energies: {energies}
+#     Probabilities: {probabilities}
+#     """
+#     debug_str = pprint.pformat(debug_str)
+#     logging.debug(debug_str)
+#     collect_idx = np.random.choice(
+#         len(atoms), p=probabilities.detach().cpu().numpy()
+#     )
+#     logging.debug(f"Collecting particle {collect_idx}")
+#     lowest_energy_atoms = atoms[collect_idx]
+#     new_atomic_data = self.similarity_calculator.convert_to_atomic_data(
+#         lowest_energy_atoms
+#     )
+#     new_atomic_data = self.similarity_calculator._batch_atomic_data(new_atomic_data)
+#     return new_atomic_data
