@@ -75,7 +75,7 @@ class ParticleFilterGenerator:
         self.sigmas = torch.concatenate(
             [
                 torch.linspace(1, 0.05, 50),
-                torch.logspace(-1.31, -3, 20),
+                torch.logspace(-1.31, -3, 50),
             ]
         ).to(device)
         num_steps = len(self.sigmas)
@@ -200,20 +200,21 @@ class ParticleFilterGenerator:
 
     def collect(self, atomic_data: Batch, sigma_cur):
         atoms = atoms_from_batch(atomic_data, self.z_table)
-        # energies = np.zeros(len(atoms))
-        # for i, mol in enumerate(atoms):
-        #     mol.info["time"] = sigma_cur.item()
-        #     mol.calc = self.similarity_calculator
-        #     energies[i] = mol.get_potential_energy()
+        energies = np.zeros(len(atoms))
+        for i, mol in enumerate(atoms):
+            mol.info["time"] = sigma_cur.item()
+            mol.calc = self.similarity_calculator
+            energies[i] = mol.get_potential_energy()
 
-        embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
-        log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
-        energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
+        # embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
+        # log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
+        # energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
         beta = 1 / (sigma_cur * 3000 + 1)
-        probabilities = torch.softmax(-1 * beta * energies_v2, dim=0)
+        energies = torch.tensor(energies).to(self.device)
+        probabilities = torch.softmax(-1 * beta * energies, dim=0)
         debug_str = f"""
         Collecting at time {sigma_cur.item()}
-        Particle energies: {energies_v2}
+        Particle energies: {energies}
         Probabilities: {probabilities}
         """
         debug_str = pprint.pformat(debug_str)

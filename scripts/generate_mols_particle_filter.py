@@ -62,9 +62,9 @@ def main():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    model.radial_embedding = RadialDistanceTransformBlock(
-        r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
-    )
+    # model.radial_embedding = RadialDistanceTransformBlock(
+    #     r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+    # )
     model.to(DEVICE)
     for param in model.parameters():
         param.requires_grad = False
@@ -98,7 +98,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/interpolate_forces/"
+    destination = "./scripts/Generated_trajectories/no_annealing_kernel_width/"
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)
