@@ -1,58 +1,24 @@
 import logging
 import pprint
+from functools import partial
 from typing import List
 
 import ase
 import numpy as np
 import torch
 from mace.data import AtomicData
-from mace.data.atomic_data import AtomicData, get_data_loader
-from mace.data.utils import config_from_atoms
-from mace.modules.models import MACE
-from mace.tools import AtomicNumberTable, torch_geometric
-from mace.tools.scatter import scatter_sum
-from mace.tools.torch_geometric import Batch
-from scipy.special import softmax
+from mace.tools import AtomicNumberTable
 
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
+from moldiff.element_swapping import (
+    collect_particles,
+    create_element_swapped_particles,
+)
+from moldiff.generation_utils import batch_atoms, get_atoms_from_batch
+from moldiff.temperature_annealing import ExponentialThermostat
 
-
-def clone(atomic_data):
-    try:
-        return atomic_data.clone()
-    except:
-        x = atomic_data.to_dict()
-        x["dipole"] = None
-        return AtomicData(**x)
-
-
-def indices_to_atomic_numbers(
-    indices: np.ndarray, z_table: AtomicNumberTable
-) -> np.ndarray:
-    to_atomic_numbers_fn = np.vectorize(z_table.index_to_z)
-    return to_atomic_numbers_fn(indices)
-
-
-def atoms_from_batch(batch, z_table) -> List[ase.Atoms]:
-    """Convert batch to ase.Atoms"""
-    atoms_list = []
-    for i in range(len(batch.ptr) - 1):
-        indices = np.argmax(
-            batch.node_attrs[batch.ptr[i] : batch.ptr[i + 1], :].detach().cpu().numpy(),
-            axis=-1,
-        )
-        numbers = indices_to_atomic_numbers(indices=indices, z_table=z_table)
-        atoms = ase.Atoms(
-            numbers=numbers,
-            positions=batch.positions[batch.ptr[i] : batch.ptr[i + 1], :]
-            .detach()
-            .cpu()
-            .numpy(),
-            cell=None,
-        )
-        atoms_list.append(atoms)
-    return atoms_list
+logger = logging.getLogger(__name__)
 
 
 class ParticleFilterGenerator:
@@ -70,6 +36,7 @@ class ParticleFilterGenerator:
             [int(z) for z in similarity_calculator.model.atomic_numbers]
         )
         self.device = device
+        self.cutoff = similarity_calculator.model.cutoff.item()  # type: ignore
         self.noise_parameters = noise_params
         self.sigmas = self._get_sigma_schedule(num_steps=num_steps)
         self.sigmas = torch.concatenate(
@@ -85,156 +52,77 @@ class ParticleFilterGenerator:
             sampler_noise_parameters=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
+        self.thermostat = ExponentialThermostat(
+            initial_T_log_10=5, sigma_max=self.sigmas[0]
+        )
         self.num_steps = num_steps
+        self.batch_atoms = partial(
+            batch_atoms, z_table=self.z_table, device=self.device, cutoff=self.cutoff
+        )
 
-    def generate(self, molecule: ase.Atoms, num_particles: int):
+    def generate(
+        self,
+        molecule: ase.Atoms,
+        num_particles: int = 10,
+        particle_swap_frequency: int = 1,
+        do_final_cleanup: bool = True,
+    ):
         # initialise mol
         molecule.positions = (
             np.random.randn(*molecule.positions.shape) * self.sigmas[0].item()
         )
-
-        batched = self.similarity_calculator.convert_to_atomic_data(molecule)
-        batched = self.similarity_calculator._batch_atomic_data(batched)
-
-        swapped = False
         trajectories = [molecule]
+
+        atoms = [molecule.copy()]
+        batched = self.batch_atoms(atoms)
+        self.swapped = False
 
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
-            if step % 4 == 0 and num_particles > 1:
-                if swapped:
-                    batched = self.collect(batched, sigma_next)
-                    swapped = False
-                batched = self.swap_elements(batched, step, num_particles)
-                swapped = True
+            if step % 4 == particle_swap_frequency and num_particles > 1:
+                atoms = self._collect_and_swap(
+                    atoms, sigma_next, self.thermostat(sigma_next), num_particles
+                )
+                batched = self.batch_atoms(atoms)
 
             batched = self.integrator(batched, step, sigma_cur, sigma_next)
-
-            atoms = atoms_from_batch(batched, self.z_table)
+            atoms = get_atoms_from_batch(batched, self.z_table)
             trajectories.extend(atoms)
 
-        if swapped:
-            batched = self.collect(
-                batched, torch.tensor(self.noise_parameters.sigma_min)
-            )
-            trajectories.append(self.atomic_data_to_ase(batched, self.z_table))
+        if self.swapped:
+            atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
+            trajectories.append(atoms)
 
-        try:
-            cleaned = self._clean_final_atoms(atomic_data=batched)
-            trajectories.append(self.atomic_data_to_ase(cleaned, self.z_table))
-        except Exception as e:
-            logging.warning(f"Could not clean final atoms: {e}")
-
-        if num_particles == 1:
-            trajectories.append(self.atomic_data_to_ase(batched, self.z_table))
+        if do_final_cleanup:
+            cleaned = self._clean_final_atoms(batched)
+            trajectories.append(cleaned)
         return trajectories
 
-    @staticmethod
-    def atomic_data_to_ase(atomic_data, z_table):
-        elements = atomic_data["node_attrs"].detach().cpu().numpy()
-        elements = np.argmax(elements, axis=1)
-        elements = [z_table.zs[z] for z in elements]
-        positions = atomic_data["positions"].detach().cpu().numpy()
-        atoms = ase.Atoms(elements, positions)
-        return atoms
-
-    def swap_elements(self, atomic_data: AtomicData, step: int, num_particles: int):
-        atoms = atoms_from_batch(atomic_data, self.z_table)
-        assert len(atoms) == 1
-        atoms = atoms[0]
-
-        atoms.info["time"] = self.sigmas[step].item()
-        atoms.calc = self.similarity_calculator
-        # beta should be 1e3 until sigma < 0.1, then loglinearly decrease to 1
-        sigma_cut = 0.2
-        sigma = self.sigmas[step].item()
-        log_beta = -4 + np.max([0, 4 * (sigma_cut - sigma) / sigma_cut])
-        beta = 10**log_beta
-
-        energies = atoms.get_potential_energies()
-        logging.debug(f"beta = {beta}, energies = {energies}")
-        energies = energies * beta
-        probabilities = softmax(energies)
-        num_change = np.ceil(0.1 * len(probabilities)).astype(int)
-
-        logging.debug(f"Element swap probabilities: {probabilities}")
-        ensemble = [atoms.copy()]
-        for _ in range(num_particles - 1):
-            x = atoms.copy()
-            try:
-                to_change = np.random.choice(
-                    len(probabilities),
-                    size=int(num_change),
-                    replace=False,
-                    p=probabilities,
-                )
-            except ValueError:
-                # fewer than num_change elements have non-zero probability
-                to_change = np.where(probabilities > 0.5)[0]
-            mask = np.zeros(len(probabilities)).astype(bool)
-            mask[to_change] = True
-
-            logging.debug(f"Element swap mask: {mask}")
-            numbers = x.get_atomic_numbers()
-            zs = np.array([1, 6, 7, 8, 9])
-            numbers[mask] = np.random.choice(zs, size=len(x))[mask]
-            x.set_atomic_numbers(numbers)
-            ensemble.append(x)
-
-        confs = [config_from_atoms(x) for x in ensemble]
-        atomic_datas = [
-            AtomicData.from_config(
-                conf,
-                z_table=self.z_table,
-                cutoff=self.similarity_calculator.model.r_max.item(),
-            ).to(self.device)
-            for conf in confs
-        ]
-        data_loader = torch_geometric.dataloader.DataLoader(
-            dataset=atomic_datas,
-            batch_size=num_particles,
-            shuffle=False,
-            drop_last=False,
+    def _collect_and_swap(
+        self, atoms_list: List[ase.Atoms], sigma_next, beta, num_particles
+    ):
+        if self.swapped:
+            atoms_list = collect_particles(atoms_list, beta)
+            self.swapped = False
+        assert len(atoms_list) == 1
+        # rewrite into a separate "prepare" function
+        atoms = atoms_list[0]
+        atoms.info["time"] = sigma_next
+        atom_ensemble = create_element_swapped_particles(
+            atoms=atoms,
+            beta=beta,
+            num_particles=num_particles,
+            z_table=self.z_table,
         )
-        return next(iter(data_loader))
-
-    def collect(self, atomic_data: Batch, sigma_cur):
-        atoms = atoms_from_batch(atomic_data, self.z_table)
-        energies = np.zeros(len(atoms))
-        for i, mol in enumerate(atoms):
-            mol.info["time"] = sigma_cur.item()
-            mol.calc = self.similarity_calculator
-            energies[i] = mol.get_potential_energy()
-
-        # embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
-        # log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
-        # energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
-        beta = 1 / (sigma_cur * 3000 + 1)
-        energies = torch.tensor(energies).to(self.device)
-        probabilities = torch.softmax(-1 * beta * energies, dim=0)
-        debug_str = f"""
-        Collecting at time {sigma_cur.item()}
-        Particle energies: {energies}
-        Probabilities: {probabilities}
-        """
-        debug_str = pprint.pformat(debug_str)
-        logging.debug(debug_str)
-        collect_idx = np.random.choice(
-            len(atoms), p=probabilities.detach().cpu().numpy()
-        )
-        logging.debug(f"Collecting particle {collect_idx}")
-        lowest_energy_atoms = atoms[collect_idx]
-        new_atomic_data = self.similarity_calculator.convert_to_atomic_data(
-            lowest_energy_atoms
-        )
-        new_atomic_data = self.similarity_calculator._batch_atomic_data(new_atomic_data)
-        return new_atomic_data
+        self.swapped = True
+        return atom_ensemble
 
     def _clean_final_atoms(self, atomic_data):
         """
         Remove unconnected atoms from the final atoms object.
         Then run a final element swap using the pretrained model energies.
         """
+        # TODO: test this function and add a try except for failure
         atoms = atoms_from_batch(atomic_data, self.z_table)
         assert len(atoms) == 1
         atoms = atoms[0]

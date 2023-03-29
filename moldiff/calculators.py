@@ -297,26 +297,6 @@ class MaceSimilarityCalculator(Calculator):
         )
         return node_feats
 
-    @staticmethod
-    def _batch_atomic_data(atomic_data: List[AtomicData]) -> AtomicData:
-        return next(
-            iter(
-                get_data_loader(atomic_data, batch_size=len(atomic_data), shuffle=False)
-            )
-        )
-
-    def convert_to_atomic_data(self, atoms) -> List[AtomicData]:
-        if isinstance(atoms, ase.Atoms):
-            atoms = [atoms]
-        confs = [config_from_atoms(x) for x in atoms]
-        atomic_datas = [
-            AtomicData.from_config(
-                x, z_table=self.z_table, cutoff=self.model.r_max.item()
-            ).to(self.device)
-            for x in confs
-        ]
-        return atomic_datas
-
     def _calculate_reference_embeddings(
         self, training_data: List[ase.Atoms]
     ) -> torch.Tensor:

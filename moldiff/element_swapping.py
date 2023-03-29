@@ -1,11 +1,9 @@
+from typing import List
+
 import numpy as np
 from ase import Atoms
 from mace.tools import AtomicNumberTable
 from scipy.special import softmax
-
-
-def prepare_atomic_data_for_element_swapping():
-    pass
 
 
 def replace_array_elements_at_indices_with_other_elements_in_z_table(
@@ -55,9 +53,11 @@ def get_how_many_to_change(num_particles: int, beta: float) -> int:
 
 def create_element_swapped_particles(
     atoms: Atoms, beta: float, num_particles: int, z_table: AtomicNumberTable
-) -> list[Atoms]:
+) -> List[Atoms]:
     assert atoms.calc is not None
-    energies = atoms.get_potential_energies() * beta
+    energies = (
+        atoms.get_potential_energies() * beta
+    )  # no minus sign since we want to swap the highest energy atom
     probabilities = softmax(energies)
     probabilities[probabilities < 1e-3] = 0
 
@@ -78,38 +78,14 @@ def create_element_swapped_particles(
             ensemble.append(
                 swap_single_particle(atoms, probabilities, num_change, z_table)
             )
-
     return ensemble
 
 
-# def collect(self, atomic_data: Batch, sigma_cur):
-#     atoms = atoms_from_batch(atomic_data, self.z_table)
-#     energies = np.zeros(len(atoms))
-#     for i, mol in enumerate(atoms):
-#         mol.info["time"] = sigma_cur.item()
-#         mol.calc = self.similarity_calculator
-#         energies[i] = mol.get_potential_energy()
-
-#     # embeds = self.similarity_calculator._get_node_embeddings(atomic_data)
-#     # log_k = self.similarity_calculator._calculate_log_k(embeds, sigma_cur)
-#     # energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
-#     beta = 1 / (sigma_cur * 3000 + 1)
-#     energies = torch.tensor(energies).to(self.device)
-#     probabilities = torch.softmax(-1 * beta * energies, dim=0)
-#     debug_str = f"""
-#     Collecting at time {sigma_cur.item()}
-#     Particle energies: {energies}
-#     Probabilities: {probabilities}
-#     """
-#     debug_str = pprint.pformat(debug_str)
-#     logging.debug(debug_str)
-#     collect_idx = np.random.choice(
-#         len(atoms), p=probabilities.detach().cpu().numpy()
-#     )
-#     logging.debug(f"Collecting particle {collect_idx}")
-#     lowest_energy_atoms = atoms[collect_idx]
-#     new_atomic_data = self.similarity_calculator.convert_to_atomic_data(
-#         lowest_energy_atoms
-#     )
-#     new_atomic_data = self.similarity_calculator._batch_atomic_data(new_atomic_data)
-#     return new_atomic_data
+def collect_particles(
+    ensemble: List[Atoms],
+    beta: float,
+) -> Atoms:
+    energies = np.array([mol.get_potential_energy() for mol in ensemble]) * beta * -1
+    probabilities = softmax(energies)
+    collect_idx = np.random.choice(len(ensemble), p=probabilities)
+    return ensemble[collect_idx]
