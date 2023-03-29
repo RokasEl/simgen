@@ -9,6 +9,7 @@ import torch
 from mace.data import AtomicData
 from mace.tools import AtomicNumberTable
 
+from moldiff.atoms_cleanup import cleanup_atoms
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import (
@@ -36,7 +37,6 @@ class ParticleFilterGenerator:
             [int(z) for z in similarity_calculator.model.atomic_numbers]
         )
         self.device = device
-        self.cutoff = similarity_calculator.model.cutoff.item()  # type: ignore
         self.noise_parameters = noise_params
         self.sigmas = self._get_sigma_schedule(num_steps=num_steps)
         self.sigmas = torch.concatenate(
@@ -57,15 +57,20 @@ class ParticleFilterGenerator:
         )
         self.num_steps = num_steps
         self.batch_atoms = partial(
-            batch_atoms, z_table=self.z_table, device=self.device, cutoff=self.cutoff
+            batch_atoms,
+            z_table=self.z_table,
+            device=self.device,
+            cutoff=self.similarity_calculator.cutoff,
         )
 
     def generate(
         self,
         molecule: ase.Atoms,
+        swapping_z_table: AtomicNumberTable,
         num_particles: int = 10,
         particle_swap_frequency: int = 1,
         do_final_cleanup: bool = True,
+        disconnected_atom_distance_threshold: float = 1.5,
     ):
         # initialise mol
         molecule.positions = (
@@ -80,8 +85,12 @@ class ParticleFilterGenerator:
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
             if step % 4 == particle_swap_frequency and num_particles > 1:
+                atoms = self._prepare_atoms_for_swap(atoms, sigma_next)
                 atoms = self._collect_and_swap(
-                    atoms, sigma_next, self.thermostat(sigma_next), num_particles
+                    atoms_list=atoms,
+                    beta=self.thermostat(sigma_next),
+                    num_particles=num_particles,
+                    z_table=swapping_z_table,
                 )
                 batched = self.batch_atoms(atoms)
 
@@ -94,86 +103,41 @@ class ParticleFilterGenerator:
             trajectories.append(atoms)
 
         if do_final_cleanup:
-            cleaned = self._clean_final_atoms(batched)
+            atoms = trajectories[-1].copy()
+            atoms.calc = self.similarity_calculator
+            cleaned = cleanup_atoms(
+                atoms, disconnected_atom_distance_threshold, swapping_z_table
+            )
             trajectories.append(cleaned)
         return trajectories
 
     def _collect_and_swap(
-        self, atoms_list: List[ase.Atoms], sigma_next, beta, num_particles
+        self, atoms_list: List[ase.Atoms], beta, num_particles, z_table
     ):
         if self.swapped:
-            atoms_list = collect_particles(atoms_list, beta)
+            atoms_list = collect_particles(atoms_list, beta)  # type: ignore
             self.swapped = False
         assert len(atoms_list) == 1
-        # rewrite into a separate "prepare" function
         atoms = atoms_list[0]
-        atoms.info["time"] = sigma_next
         atom_ensemble = create_element_swapped_particles(
             atoms=atoms,
             beta=beta,
             num_particles=num_particles,
-            z_table=self.z_table,
+            z_table=z_table,
         )
         self.swapped = True
         return atom_ensemble
 
-    def _clean_final_atoms(self, atomic_data):
-        """
-        Remove unconnected atoms from the final atoms object.
-        Then run a final element swap using the pretrained model energies.
-        """
-        # TODO: test this function and add a try except for failure
-        atoms = atoms_from_batch(atomic_data, self.z_table)
-        assert len(atoms) == 1
-        atoms = atoms[0]
-        # remove unconnected atoms
-        distances = atoms.get_all_distances()
-        distances = distances + np.eye(len(atoms)) * 100
-        min_distances_per_atom = np.min(distances, axis=1)
-        logging.debug(f"Min distances per atom: {min_distances_per_atom}")
-        to_keep = np.where(min_distances_per_atom <= 1.7)[0]
-        logging.debug(f"to_keep: {to_keep}")
-        atoms.arrays["numbers"] = atoms.arrays["numbers"][to_keep]
-        atoms.arrays["positions"] = atoms.arrays["positions"][to_keep]
-        # run a loop of element swaps
-        atomic_data = self.similarity_calculator.convert_to_atomic_data(atoms)
-        new_atomic_data = self.similarity_calculator._batch_atomic_data(atomic_data)
-        already_switched = []
-        for _ in range(len(atoms)):
-            atoms = atoms_from_batch(new_atomic_data, self.z_table)
-            atoms = atoms[0]
+    def _prepare_atoms_for_swap(self, atoms_list: List[ase.Atoms], sigma_next):
+        if sigma_next is isinstance(sigma_next, torch.Tensor):
+            time = sigma_next.item()
+        else:
+            time = sigma_next
 
-            out = self.similarity_calculator.model(new_atomic_data.to_dict())
-            node_energies = out["node_energy"].detach().cpu().numpy()
-            shifted_energies = self.similarity_calculator.subtract_reference_energies(
-                atoms, node_energies
-            )
-            logging.debug(f"Shifted energies: {shifted_energies}")
-            sorted_energies = np.argsort(shifted_energies)
-            sorted_energies = sorted_energies[
-                ~np.isin(sorted_energies, already_switched)
-            ]
-            to_switch = sorted_energies[-1]
-            already_switched.append(to_switch)
-            logging.debug(
-                f"To switch: {to_switch}, already switched: {already_switched}"
-            )
-            numbers = atoms.get_atomic_numbers()
-            ensemble = []
-            for z in [1, 6, 7, 8, 9]:
-                mol = atoms.copy()
-                numbers[to_switch] = z
-                mol.set_atomic_numbers(numbers)
-                ensemble.append(mol)
-
-            atomic_data = self.similarity_calculator.convert_to_atomic_data(ensemble)
-            new_atomic_data = self.similarity_calculator._batch_atomic_data(atomic_data)
-            # get lowest energy
-            new_atomic_data = self.collect(
-                new_atomic_data, sigma_cur=torch.tensor(1e-3)
-            )
-
-        return new_atomic_data
+        for mol in atoms_list:
+            mol.info["time"] = time
+            mol.calc = self.similarity_calculator
+        return atoms_list
 
     def _get_sigma_schedule(self, num_steps: int):
         step_indices = torch.arange(num_steps).to(self.device)

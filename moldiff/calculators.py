@@ -1,6 +1,7 @@
 """ASE calculator comparing SOAP similarity"""
 import logging
 import warnings
+from functools import partial
 from typing import List
 
 import ase
@@ -13,135 +14,12 @@ from mace.data.utils import config_from_atoms
 from mace.modules.models import MACE
 from mace.tools import AtomicNumberTable, torch_geometric
 from mace.tools.scatter import scatter_mean, scatter_sum
-from quippy.descriptors import Descriptor
 from tqdm import tqdm
 
-
-# Writen by Tamas Stenczel
-class SoapSimilarityCalculator(Calculator):
-    """
-
-    Notes
-    -----
-    Constraints:
-    - single element
-
-    """
-
-    implemented_properties = ["energy", "forces", "energies"]
-
-    def __init__(
-        self,
-        descriptor: Descriptor,
-        ref_soap_vectors: np.ndarray,
-        weights=None,
-        zeta=1,
-        scale=1.0,
-        *,
-        restart=None,
-        label=None,
-        atoms=None,
-        directory=".",
-        **kwargs,
-    ):
-        """
-
-        Parameters
-        ----------
-        descriptor
-            descriptor calculator object
-        ref_soap_vectors
-            reference SOAP vectors [n_ref, len_soap]
-        weights
-            of reference SOAP vectors, equal weight used if not given
-        zeta
-            exponent of kernel
-        scale
-            scaling for energy & forces, energy of calculator is
-            `-1 * scale * k_soap ^ zeta` where 0 < k_soap < 1
-        """
-        super().__init__(
-            restart=restart,
-            label=label,
-            atoms=atoms,
-            directory=directory,
-            **kwargs,
-        )
-
-        self.descriptor = descriptor
-        self.zeta = zeta
-        self.ref_soap_vectors = ref_soap_vectors
-        self.scale = scale
-
-        if weights is None:
-            self.weights = (
-                1 / len(ref_soap_vectors) * np.ones(ref_soap_vectors.shape[0])
-            )
-        else:
-            assert len(weights) == weights.shape[0]
-            self.weights = weights
-
-    def calculate(self, atoms=None, properties=None, system_changes=all_changes):
-        if properties is None:
-            properties = self.implemented_properties
-        super().calculate(atoms, properties, system_changes)
-
-        # Descriptor calculation w/ gradients
-        d_move = self.descriptor.calc(atoms, grad=True)
-        print(d_move["data"].shape)
-        # -1 * similarity -> 'Energy'
-        # k_ab = einops.einsum(
-        #     d_move["data"], self.ref_soap_vectors, "a desc, b desc -> a b"
-        # ) # very slow with NumPy
-        k_ab = d_move["data"] @ self.ref_soap_vectors.T  # [len(atoms), num_ref]
-        print(k_ab.shape)
-        local_similarity = self.scale * einops.einsum(
-            self.weights, k_ab**self.zeta, "b, a b -> a"
-        )  # this one is OK, speed about the same as np.dot()
-        self.results["energies"] = -1 * local_similarity
-        print(local_similarity)
-        similarity = np.sum(local_similarity)
-        self.results["energy"] = -1 * similarity
-
-        # grad(similarity) -> forces
-        # n.b. no -1 since energy is -1 * similarity
-        a_cross = d_move["grad_index_0based"]  # [n_cross, 2]
-        a_grad_data = d_move["grad_data"]  # [n_cross, 3, len_desc]
-
-        forces = np.zeros(shape=(len(atoms), 3))  # type: ignore
-        if self.zeta == 1:
-            for i_grad, (_, ii) in enumerate(a_cross):
-                # forces[ii] += einops.einsum(
-                #     self.weights,
-                #     a_grad_data[i_grad],
-                #     self.ref_soap_vectors,
-                #     "bi, cart desc, bi desc -> cart",
-                # )
-                forces[ii] += np.sum(
-                    a_grad_data[i_grad] @ self.ref_soap_vectors.T * self.weights,
-                    axis=1,
-                )
-
-        else:
-            # chain rule - uses k_ab from outside, with z-1 power
-            k_ab_zeta = k_ab ** (self.zeta - 1)
-            for i_grad, (ci, ii) in enumerate(a_cross):
-                # forces[ii] += einops.einsum(
-                #     self.weights,
-                #     k_ab[ci] ** (self.zeta - 1),
-                #     a_grad_data[i_grad],
-                #     self.ref_soap_vectors,
-                #     "bi, bi, cart desc, bi desc -> cart",
-                # ) # this is VERY slow, but easy to understand
-                forces[ii] += np.sum(
-                    a_grad_data[i_grad]
-                    @ self.ref_soap_vectors.T
-                    * (self.weights * k_ab_zeta[ci]),
-                    axis=1,
-                )
-            forces *= self.zeta
-
-        self.results["forces"] = self.scale * forces
+from moldiff.generation_utils import (
+    batch_atoms,
+    convert_atoms_to_atomic_data,
+)
 
 
 class MaceSimilarityCalculator(Calculator):
@@ -181,6 +59,17 @@ class MaceSimilarityCalculator(Calculator):
         self.model = model
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
+        self.cutoff = model.r_max.item()  # type: ignore
+        self.batch_atoms = partial(
+            batch_atoms, z_table=self.z_table, cutoff=self.cutoff, device=self.device
+        )
+        self.convert_to_atomic_data = partial(
+            convert_atoms_to_atomic_data,
+            z_table=self.z_table,
+            cutoff=self.cutoff,
+            device=self.device,
+        )
+
         self.reference_embeddings = self._calculate_reference_embeddings(reference_data)
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
@@ -216,8 +105,7 @@ class MaceSimilarityCalculator(Calculator):
         if atoms is None:
             raise ValueError("Atoms object must be provided")
 
-        atomic_data = self.convert_to_atomic_data(atoms)
-        batched = self._batch_atomic_data(atomic_data)
+        batched = self.batch_atoms(atoms)
         embedding = self._get_node_embeddings(batched)
         try:
             time = atoms.info["time"]
@@ -239,20 +127,20 @@ class MaceSimilarityCalculator(Calculator):
             out = self.model(batched.to_dict())
             node_energies = out["node_energy"].detach().cpu().numpy()
             shifted_energies = self.subtract_reference_energies(atoms, node_energies)
-            shifted_energies = shifted_energies
             logging.debug(f"Node pretrained MACE energies: {shifted_energies}")
             logging.debug(f"MACE multiplier: {1-time}, similarity multiplier: {time}")
-            shifted_energies = shifted_energies - shifted_energies[0]
-            self.results["energies"] = (
-                self.results["energies"] - self.results["energies"][0]
-            )
             self.results["energies"] = (
                 1 - time
             ) * shifted_energies + time * self.results["energies"]
-            self.results["energy"] = scatter_sum(
-                torch.tensor(self.results["energies"]).to(self.device),
-                batched.batch,
-                dim=0,
+            self.results["energy"] = (
+                scatter_sum(
+                    torch.tensor(self.results["energies"]).to(self.device),
+                    batched.batch,
+                    dim=0,
+                )
+                .detach()
+                .cpu()
+                .numpy()
             )
 
     def subtract_reference_energies(self, atoms, energies: np.ndarray):
@@ -303,9 +191,7 @@ class MaceSimilarityCalculator(Calculator):
         as_atomic_data = self.convert_to_atomic_data(training_data)
         dloader = get_data_loader(as_atomic_data, batch_size=128, shuffle=False)
         with torch.no_grad():
-            node_embeddings = [
-                self._get_node_embeddings(data) for data in tqdm(dloader)
-            ]
+            node_embeddings = [self._get_node_embeddings(data) for data in dloader]
         return torch.concatenate(node_embeddings, dim=0)
 
     def _calculate_distance_matrix(self, embedding):

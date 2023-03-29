@@ -33,15 +33,16 @@ def swap_single_particle(
 
 
 def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list[Atoms]:
-    original_atomic_numbers = mol.get_atomic_numbers()
+    mol_copy = mol.copy()
+    original_atomic_numbers = mol_copy.get_atomic_numbers()
     original_z = original_atomic_numbers[idx]
     other_elements = np.setdiff1d(z_table.zs, original_z)
     swapped_mols = []
     for z in other_elements:
         new_atomic_numbers = original_atomic_numbers.copy()
         new_atomic_numbers[idx] = z
-        mol.set_atomic_numbers(new_atomic_numbers)
-        swapped_mols.append(mol.copy())
+        mol_copy.set_atomic_numbers(new_atomic_numbers)
+        swapped_mols.append(mol_copy.copy())
     return swapped_mols
 
 
@@ -86,6 +87,7 @@ def collect_particles(
     beta: float,
 ) -> Atoms:
     energies = np.array([mol.get_potential_energy() for mol in ensemble]) * beta * -1
+    energies = energies.flatten()
     probabilities = softmax(energies)
     collect_idx = np.random.choice(len(ensemble), p=probabilities)
     return ensemble[collect_idx]
