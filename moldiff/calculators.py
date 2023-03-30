@@ -117,31 +117,33 @@ class MaceSimilarityCalculator(Calculator):
         molecule_energies = scatter_sum(node_energies, batched.batch, dim=0)
         self.results["energies"] = node_energies.detach().cpu().numpy()
         self.results["energy"] = molecule_energies.detach().cpu().numpy()
-        logging.debug(f"Node similarity energies: {self.results['energies']}")
         force = self._get_gradient(batched.positions, log_k)
         force = self._handle_grad_nans(force)
         self.results["forces"] = force
 
-        if time < 0.01:
-            time = time * 1 / 0.01
+        if time < 0.1:
+            if isinstance(time, torch.Tensor):
+                time = time.item()
+            time = time * 1 / 0.1
             out = self.model(batched.to_dict())
             node_energies = out["node_energy"].detach().cpu().numpy()
             shifted_energies = self.subtract_reference_energies(atoms, node_energies)
             logging.debug(f"Node pretrained MACE energies: {shifted_energies}")
             logging.debug(f"MACE multiplier: {1-time}, similarity multiplier: {time}")
-            self.results["energies"] = (
+            logging.debug(
+                f"shifted energies: {shifted_energies}, self.results['energies']: {self.results['energies']}"
+            )
+            combined_node_energies = (
                 1 - time
             ) * shifted_energies + time * self.results["energies"]
-            self.results["energy"] = (
-                scatter_sum(
-                    torch.tensor(self.results["energies"]).to(self.device),
-                    batched.batch,
-                    dim=0,
-                )
-                .detach()
-                .cpu()
-                .numpy()
+            self.results["energies"] = combined_node_energies
+            mol_energies = scatter_sum(
+                torch.tensor(combined_node_energies).to(self.device),
+                batched.batch,
+                dim=0,
             )
+            mol_energies = mol_energies.detach().cpu().numpy()
+            self.results["energy"] = mol_energies
 
     def subtract_reference_energies(self, atoms, energies: np.ndarray):
         zs = atoms.get_atomic_numbers()
@@ -207,9 +209,7 @@ class MaceSimilarityCalculator(Calculator):
     def _calculate_log_k(self, embedding, time):
         squared_distance_matrix = self._calculate_distance_matrix(embedding)
         # squared_distance_matrix = squared_distance_matrix / 1.5 ** (time)
-        additional_multiplier = (
-            119  # * (1 - (time / 10) ** 0.25) + 1 if time <= 10 else 1
-        )
+        additional_multiplier = 119 * (1 - (time / 10) ** 0.25) + 1 if time <= 10 else 1
         squared_distance_matrix = squared_distance_matrix * additional_multiplier
         log_k = torch.logsumexp(-squared_distance_matrix / 2, dim=1)
         return log_k

@@ -60,5 +60,6 @@ def cleanup_atoms(
     Wrapper function to allow easy extension with other cleanup functions if needed.
     """
     pruned_atoms = remove_isolated_atoms(atoms, cutoff)
+    pruned_atoms.calc = atoms.calc
     element_relaxed_atoms = relax_elements(pruned_atoms, z_table)
     return element_relaxed_atoms

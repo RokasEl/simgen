@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 import numpy as np
@@ -47,8 +48,9 @@ def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list
 
 
 def get_how_many_to_change(num_particles: int, beta: float) -> int:
-    p_change = np.exp(-beta)
-    num_change = np.random.binomial(num_particles, p_change)
+    energies = np.arange(num_particles) * -beta
+    ps = softmax(energies)
+    num_change = np.random.choice(num_particles, p=ps) + 1
     return num_change
 
 
@@ -61,7 +63,8 @@ def create_element_swapped_particles(
     )  # no minus sign since we want to swap the highest energy atom
     probabilities = softmax(energies)
     probabilities[probabilities < 1e-3] = 0
-
+    probabilities = probabilities / np.sum(probabilities)
+    logging.debug(f"Probabilities: {probabilities}, beta: {beta}")
     ensemble = [atoms.copy()]
     to_generate = num_particles - 1
     if np.count_nonzero(probabilities) == 1:
@@ -70,12 +73,15 @@ def create_element_swapped_particles(
         ensemble.extend(sweep_over_max_energy_atom)
         already_generated_num = len(ensemble)
         to_generate = num_particles - already_generated_num
+        logging.debug(f"Sweeping particle {idx} with {to_generate} particles")
+        logging.debug(f"Generating additional {to_generate} particles")
         probabilities = np.ones(len(atoms)) / len(atoms)
 
     if to_generate > 0:
         non_zero_ps = np.count_nonzero(probabilities)
         for _ in range(to_generate):
             num_change = min(get_how_many_to_change(len(atoms), beta), non_zero_ps)
+            logging.debug(f"Num change: {num_change}")
             ensemble.append(
                 swap_single_particle(atoms, probabilities, num_change, z_table)
             )

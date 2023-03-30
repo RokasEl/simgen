@@ -53,7 +53,7 @@ class ParticleFilterGenerator:
             restorative_force_strength=restorative_force_strength,
         )
         self.thermostat = ExponentialThermostat(
-            initial_T_log_10=5, sigma_max=self.sigmas[0]
+            initial_T_log_10=6, sigma_max=self.sigmas[0]
         )
         self.num_steps = num_steps
         self.batch_atoms = partial(
@@ -84,7 +84,7 @@ class ParticleFilterGenerator:
 
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
-            if step % 4 == particle_swap_frequency and num_particles > 1:
+            if step % particle_swap_frequency == 0 and num_particles > 1:
                 atoms = self._prepare_atoms_for_swap(atoms, sigma_next)
                 atoms = self._collect_and_swap(
                     atoms_list=atoms,
@@ -99,6 +99,7 @@ class ParticleFilterGenerator:
             trajectories.extend(atoms)
 
         if self.swapped:
+            atoms = self._prepare_atoms_for_swap(atoms, self.sigmas[-1])
             atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
             trajectories.append(atoms)
 
@@ -116,6 +117,7 @@ class ParticleFilterGenerator:
     ):
         if self.swapped:
             atoms_list = collect_particles(atoms_list, beta)  # type: ignore
+            atoms_list = [atoms_list]
             self.swapped = False
         assert len(atoms_list) == 1
         atoms = atoms_list[0]
@@ -181,7 +183,7 @@ class HeunIntegrator:
         This does NOT update the neighbout list. DANGER!
         """
         S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
-        mol_cur = clone(x)
+        mol_cur = x.clone()
         # mol_cur.positions.requires_grad = True
 
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
@@ -210,7 +212,7 @@ class HeunIntegrator:
             * torch.tanh(20 * sigma_cur**2)
         )
 
-        mol_next = clone(mol_cur)
+        mol_next = mol_cur.clone()
         logging.debug(f"Step size = {abs(sigma_next - sigma_increased):.2e}")
         with torch.no_grad():
             mol_next.positions += -1 * (sigma_next - sigma_increased) * forces
@@ -222,7 +224,7 @@ class HeunIntegrator:
             forces_next = self.similarity_calculator(mol_next, sigma_next)
             forces_next = torch.tensor(forces_next, device=device)
 
-            mol_next = clone(mol_increased)
+            mol_next = mol_increased.clone()
             with torch.no_grad():
                 mol_next.positions += -1 * (
                     (sigma_next - sigma_increased) * (forces + forces_next) / 2
