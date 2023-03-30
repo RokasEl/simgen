@@ -98,6 +98,7 @@ class MaceSimilarityCalculator(Calculator):
         properties=None,
         system_changes=all_changes,
     ):
+        self.reset()
         if properties is None:
             properties = self.implemented_properties
         super().calculate(atoms, properties, system_changes)
