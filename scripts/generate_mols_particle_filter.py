@@ -85,7 +85,6 @@ def main():
     rand_mols = [x for x in rng.choice(all_data, size=too_add)]
     training_data.extend(rand_mols)
 
-    z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
     score_model = MaceSimilarityCalculator(
         model, reference_data=training_data, device=DEVICE
     )
@@ -99,6 +98,7 @@ def main():
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
     destination = "./scripts/Generated_trajectories/no_annealing_kernel_width/"
+    swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)
@@ -113,7 +113,7 @@ def main():
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
-        trajectories = particle_filter.generate(mol, num_particles=10)
+        trajectories = particle_filter.generate(mol, swapping_z_table, num_particles=10)
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",
             trajectories,
