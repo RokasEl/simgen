@@ -88,7 +88,7 @@ class MaceSimilarityCalculator(Calculator):
             t = t.item() * 1 / 0.1
             out = self.model(atomic_data)
             forces = out["forces"].detach().cpu().numpy()
-            forces = self._clip_grad_norm(forces, max_norm=np.sqrt(3))
+            forces = self._clip_grad_norm(forces, max_norm=10)
             grad = t * grad + (1 - t) * forces
         return grad
 

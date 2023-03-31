@@ -32,7 +32,7 @@ from moldiff.sampling import MaceSimilarityScore
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
     sqrt_prefactor = 1.5664519
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
-    force_strength = 1 / (0.09 * bounding_sphere_diameter) ** 2
+    force_strength = 1 / (0.1 * bounding_sphere_diameter) ** 2
     return force_strength
 
 
@@ -62,9 +62,9 @@ def main():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    # model.radial_embedding = RadialDistanceTransformBlock(
-    #     r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
-    # )
+    model.radial_embedding = RadialDistanceTransformBlock(
+        r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+    )
     model.to(DEVICE)
     for param in model.parameters():
         param.requires_grad = False
