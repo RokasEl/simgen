@@ -53,7 +53,7 @@ class ParticleFilterGenerator:
             restorative_force_strength=restorative_force_strength,
         )
         self.thermostat = ExponentialThermostat(
-            initial_T_log_10=6, sigma_max=self.sigmas[0]
+            initial_T_log_10=6, final_T_log_10=-1, sigma_max=self.sigmas[0]
         )
         self.num_steps = num_steps
         self.batch_atoms = partial(

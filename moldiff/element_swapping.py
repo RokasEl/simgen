@@ -48,9 +48,7 @@ def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list
 
 
 def get_how_many_to_change(num_particles: int, beta: float) -> int:
-    energies = np.arange(num_particles) * -beta
-    ps = softmax(energies)
-    num_change = np.random.choice(num_particles, p=ps) + 1
+    num_change = np.ceil(0.1 * num_particles).astype(int)
     return num_change
 
 
@@ -62,8 +60,6 @@ def create_element_swapped_particles(
         atoms.get_potential_energies() * beta
     )  # no minus sign since we want to swap the highest energy atom
     probabilities = softmax(energies)
-    probabilities[probabilities < 1e-3] = 0
-    probabilities = probabilities / np.sum(probabilities)
     logging.debug(f"Probabilities: {probabilities}, beta: {beta}")
     ensemble = [atoms.copy()]
     to_generate = num_particles - 1

@@ -88,7 +88,7 @@ class MaceSimilarityCalculator(Calculator):
             t = t.item() * 1 / 0.1
             out = self.model(atomic_data)
             forces = out["forces"].detach().cpu().numpy()
-            forces = self._clip_grad_norm(forces, max_norm=10)
+            forces = self._clip_grad_norm(forces, max_norm=np.sqrt(3))
             grad = t * grad + (1 - t) * forces
         return grad
 
@@ -122,18 +122,15 @@ class MaceSimilarityCalculator(Calculator):
         force = self._handle_grad_nans(force)
         self.results["forces"] = force
 
-        if time < 0.1:
+        if time == 0:
             if isinstance(time, torch.Tensor):
                 time = time.item()
-            time = time * 1 / 0.1
+            time = time * 1 / 0.01
             out = self.model(batched.to_dict())
             node_energies = out["node_energy"].detach().cpu().numpy()
             shifted_energies = self.subtract_reference_energies(atoms, node_energies)
             logging.debug(f"Node pretrained MACE energies: {shifted_energies}")
             logging.debug(f"MACE multiplier: {1-time}, similarity multiplier: {time}")
-            logging.debug(
-                f"shifted energies: {shifted_energies}, self.results['energies']: {self.results['energies']}"
-            )
             combined_node_energies = (
                 1 - time
             ) * shifted_energies + time * self.results["energies"]

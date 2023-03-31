@@ -36,7 +36,7 @@ def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> List[ase.Atoms]:
 
 
 def convert_atoms_to_atomic_data(
-    atoms: ase.Atoms | list[ase.Atoms],
+    atoms: ase.Atoms | List[ase.Atoms],
     z_table: AtomicNumberTable,
     cutoff: float,
     device: str,

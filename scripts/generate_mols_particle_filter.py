@@ -32,7 +32,7 @@ from moldiff.sampling import MaceSimilarityScore
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
     sqrt_prefactor = 1.5664519
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
-    force_strength = 1 / (0.075 * bounding_sphere_diameter) ** 2
+    force_strength = 1 / (0.09 * bounding_sphere_diameter) ** 2
     return force_strength
 
 
