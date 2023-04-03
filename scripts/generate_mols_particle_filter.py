@@ -97,7 +97,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/no_annealing_kernel_width/"
+    destination = "./scripts/Generated_trajectories/fixed_atom_swapping/"
     swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
