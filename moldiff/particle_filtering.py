@@ -138,6 +138,7 @@ class ParticleFilterGenerator:
 
         for mol in atoms_list:
             mol.info["time"] = time
+            mol.info["calculation_type"] = "similarity"
             mol.calc = self.similarity_calculator
         return atoms_list
 

@@ -30,8 +30,9 @@ def get_higest_energy_unswapped_idx(swapped_indices, energies) -> int:
     return np.argmax(energies).astype(int)
 
 
-def attach_calculator(atoms_list, calculator):
+def attach_calculator(atoms_list, calculator, calculation_type="similarity"):
     for atoms in atoms_list:
+        atoms.info["calculation_type"] = calculation_type
         atoms.calc = calculator
     return atoms_list
 
@@ -39,6 +40,7 @@ def attach_calculator(atoms_list, calculator):
 def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
+    atoms.info["calculation_type"] = "mace"
     already_switched = []
     mol = atoms.copy()
     for _ in range(len(mol)):
@@ -48,7 +50,7 @@ def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
         already_switched.append(idx)
         ensemble = sweep_all_elements(mol, idx, z_table)
         ensemble = [mol, *ensemble]
-        ensemble = attach_calculator(ensemble, mol.calc)
+        ensemble = attach_calculator(ensemble, mol.calc, calculation_type="mace")
         mol = collect_particles(ensemble, beta=100.0)
     return mol
 

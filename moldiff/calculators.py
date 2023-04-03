@@ -74,8 +74,6 @@ class MaceSimilarityCalculator(Calculator):
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
         )
-        E0s = model.atomic_energies_fn.atomic_energies.detach().cpu().numpy()
-        self.E0s_dict: dict[int, float] = {z: E0 for z, E0 in zip(self.z_table.zs, E0s)}
 
     def __call__(self, atomic_data, t):
         batch_index = atomic_data.batch
@@ -84,12 +82,6 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
-        # if t < 0.1:
-        #     t = t.item() * 1 / 0.1
-        #     out = self.model(atomic_data)
-        #     forces = out["forces"].detach().cpu().numpy()
-        #     forces = self._clip_grad_norm(forces, max_norm=10)
-        #     grad = t * grad + (1 - t) * forces
         return grad
 
     def calculate(
@@ -106,47 +98,61 @@ class MaceSimilarityCalculator(Calculator):
         if atoms is None:
             raise ValueError("Atoms object must be provided")
 
-        batched = self.batch_atoms(atoms)
-        embedding = self._get_node_embeddings(batched)
+        calculation_type = atoms.info.get("calculation_type", None)
+        if calculation_type is None:
+            raise ValueError(
+                "`atoms.info['calculation_type']` must be either 'similarity' or 'mace'"
+            )
+
+        if calculation_type == "similarity":
+            (
+                node_energies,
+                forces,
+                molecule_energies,
+            ) = self._calculate_similarity_energies_and_forces(atoms)
+        elif calculation_type == "mace":
+            (
+                node_energies,
+                forces,
+                molecule_energies,
+            ) = self._calculate_mace_interaction_energies_and_forces(atoms)
+        else:
+            raise ValueError(
+                f"calculation_type must be either 'similarity' or 'mace', not {calculation_type}"
+            )
+
+        self.results["energies"] = node_energies
+        self.results["energy"] = molecule_energies
+        self.results["forces"] = forces
+
+    def _calculate_similarity_energies_and_forces(self, atoms: ase.Atoms):
         try:
             time = atoms.info["time"]
         except KeyError:
             raise KeyError("Atoms object must have a time attribute")
 
+        batched = self.batch_atoms(atoms)
+        embedding = self._get_node_embeddings(batched)
         log_k = self._calculate_log_k(embedding, time)
         node_energies = -1 * log_k
         molecule_energies = scatter_sum(node_energies, batched.batch, dim=0)
-        self.results["energies"] = node_energies.detach().cpu().numpy()
-        self.results["energy"] = molecule_energies.detach().cpu().numpy()
+        node_energies = node_energies.detach().cpu().numpy()
+        molecule_energies = molecule_energies.detach().cpu().numpy()
         force = self._get_gradient(batched.positions, log_k)
         force = self._handle_grad_nans(force)
-        self.results["forces"] = force
+        return node_energies, force, molecule_energies
 
-        if time == 0:
-            if isinstance(time, torch.Tensor):
-                time = time.item()
-            time = time * 1 / 0.01
-            out = self.model(batched.to_dict())
-            node_energies = out["node_energy"].detach().cpu().numpy()
-            shifted_energies = self.subtract_reference_energies(atoms, node_energies)
-            logging.debug(f"Node pretrained MACE energies: {shifted_energies}")
-            logging.debug(f"MACE multiplier: {1-time}, similarity multiplier: {time}")
-            combined_node_energies = (
-                1 - time
-            ) * shifted_energies + time * self.results["energies"]
-            self.results["energies"] = combined_node_energies
-            mol_energies = scatter_sum(
-                torch.tensor(combined_node_energies).to(self.device),
-                batched.batch,
-                dim=0,
-            )
-            mol_energies = mol_energies.detach().cpu().numpy()
-            self.results["energy"] = mol_energies
-
-    def subtract_reference_energies(self, atoms, energies: np.ndarray):
-        zs = atoms.get_atomic_numbers()
-        reference_energies = np.array([self.E0s_dict[z] for z in zs])
-        return energies - reference_energies
+    def _calculate_mace_interaction_energies_and_forces(self, atoms: ase.Atoms):
+        batched = self.batch_atoms(atoms)
+        out = self.model(batched.to_dict())
+        forces = out["forces"].detach().cpu().numpy()
+        node_energies = out["node_energy"]
+        node_e0s = self.model.atomic_energies_fn(batched.node_attrs)
+        node_interaction_energies = node_energies - node_e0s
+        molecule_energies = scatter_sum(node_interaction_energies, batched.batch, dim=0)
+        molecule_energies = molecule_energies.detach().cpu().numpy()
+        node_interaction_energies = node_interaction_energies.detach().cpu().numpy()
+        return node_interaction_energies, forces, molecule_energies
 
     @staticmethod
     def _get_gradient(inp_tensor: torch.Tensor, log_dens: torch.Tensor):

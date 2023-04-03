@@ -92,12 +92,8 @@ def collect_particles(
     ensemble: List[Atoms],
     beta: float,
 ) -> Atoms:
-    calc = ensemble[0].calc
-    time = ensemble[0].info["time"]
-    atomic_data = calc.batch_atoms(ensemble)
-    embeds = calc._get_node_embeddings(atomic_data)
-    log_k = calc._calculate_log_k(embeds, time)
-    energies_v2 = scatter_sum(-1 * log_k, atomic_data["batch"], dim=0)
-    probabilities = torch.softmax(-1 * beta * energies_v2, dim=0).detach().cpu().numpy()
+    energies = np.array([mol.get_potential_energy() for mol in ensemble]) * beta * -1
+    energies = energies.flatten()
+    probabilities = softmax(energies)
     collect_idx = np.random.choice(len(ensemble), p=probabilities)
     return ensemble[collect_idx]

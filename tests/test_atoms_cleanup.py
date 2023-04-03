@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import torch
 from mace.tools import AtomicNumberTable
 
 from moldiff.atoms_cleanup import (
@@ -7,11 +8,13 @@ from moldiff.atoms_cleanup import (
     relax_elements,
     remove_isolated_atoms,
 )
+from moldiff.generation_utils import batch_atoms
 from moldiff.utils import initialize_mol
 
 from .fixtures import (
     loaded_mace_similarity_calculator,
     loaded_model,
+    test_molecules,
     training_molecules,
 )
 
@@ -98,3 +101,53 @@ def test_relax_elements(loaded_mace_similarity_calculator, element_swapping_test
         mol.calc = loaded_mace_similarity_calculator
         relaxed_mol = relax_elements(mol, z_table=z_table)
         assert relaxed_mol == expected_mol
+
+
+def test_calculate_mace_interaction_energies_and_forces_gives_same_node_energies_and_forces(
+    loaded_mace_similarity_calculator, test_molecules
+):
+    pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
+    pretrained_model = torch.load(pretrained_mace)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pretrained_model.to(device)
+    z_table = z_table = AtomicNumberTable(
+        [int(z) for z in pretrained_model.atomic_numbers]
+    )
+    r_max = pretrained_model.r_max.item()
+
+    batched_mols = batch_atoms(test_molecules, z_table, r_max, device)
+    out = pretrained_model(batched_mols.to_dict())
+    node_energies = out["node_energy"].detach().cpu().numpy()
+    node_e0s = (
+        pretrained_model.atomic_energies_fn(batched_mols.node_attrs)
+        .detach()
+        .cpu()
+        .numpy()
+    )
+    mace_interaction_energies = node_energies - node_e0s
+    mace_forces = out["forces"].detach().cpu().numpy()
+    mace_mol_energies = out["interaction_energy"].detach().cpu().numpy()
+    calculator_interaction_energies = []
+    calculator_forces = []
+    mol_energies = []
+    for mol in test_molecules:
+        (
+            energies,
+            forces,
+            mol_energy,
+        ) = loaded_mace_similarity_calculator._calculate_mace_interaction_energies_and_forces(
+            mol
+        )
+        calculator_interaction_energies.append(energies)
+        calculator_forces.append(forces)
+        mol_energies.append(mol_energy)
+    calculator_interaction_energies = np.concatenate(
+        calculator_interaction_energies
+    ).flatten()
+    calculator_forces = np.concatenate(calculator_forces, axis=0)
+    calculator_mol_energies = np.concatenate(mol_energies).flatten()
+    np.testing.assert_allclose(
+        mace_interaction_energies, calculator_interaction_energies, atol=1e-5
+    )
+    np.testing.assert_allclose(mace_forces, calculator_forces, atol=1e-5)
+    np.testing.assert_allclose(mace_mol_energies, calculator_mol_energies, atol=1e-5)
