@@ -6,6 +6,7 @@ from moldiff.element_swapping import (
     collect_particles,
     sweep_all_elements,
 )
+from moldiff.generation_utils import duplicate_atoms
 
 
 def remove_isolated_atoms(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
@@ -16,7 +17,7 @@ def remove_isolated_atoms(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
     np.fill_diagonal(distances, np.inf)
     per_atom_min_distances = np.min(distances, axis=1)
     connected_atom_indices = np.where(per_atom_min_distances <= cutoff)[0]
-    stripped_atoms = atoms.copy()
+    stripped_atoms = duplicate_atoms(atoms)
     stripped_atoms = stripped_atoms[connected_atom_indices]
     return stripped_atoms
 
@@ -42,7 +43,7 @@ def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
     already_switched = []
-    mol = atoms.copy()
+    mol = duplicate_atoms(atoms)
     for _ in range(len(mol)):
         mol.calc = atoms.calc
         energies = mol.get_potential_energies()

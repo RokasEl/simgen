@@ -6,6 +6,8 @@ from ase import Atoms
 from mace.tools import AtomicNumberTable
 from scipy.special import softmax
 
+from moldiff.generation_utils import duplicate_atoms
+
 
 def replace_array_elements_at_indices_with_other_elements_in_z_table(
     atomic_numbers: np.ndarray,
@@ -22,7 +24,7 @@ def replace_array_elements_at_indices_with_other_elements_in_z_table(
 def swap_single_particle(
     mol: Atoms, probabilities: np.ndarray, num_change: int, z_table: AtomicNumberTable
 ) -> Atoms:
-    swapped_mol = mol.copy()
+    swapped_mol = duplicate_atoms(mol)
     to_change = np.random.choice(
         len(mol), size=num_change, replace=False, p=probabilities
     )
@@ -34,7 +36,7 @@ def swap_single_particle(
 
 
 def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list[Atoms]:
-    mol_copy = mol.copy()
+    mol_copy = duplicate_atoms(mol)
     original_atomic_numbers = mol_copy.get_atomic_numbers()
     original_z = original_atomic_numbers[idx]
     other_elements = np.setdiff1d(z_table.zs, original_z)
@@ -43,7 +45,7 @@ def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list
         new_atomic_numbers = original_atomic_numbers.copy()
         new_atomic_numbers[idx] = z
         mol_copy.set_atomic_numbers(new_atomic_numbers)
-        swapped_mols.append(mol_copy.copy())
+        swapped_mols.append(duplicate_atoms(mol_copy))
     return swapped_mols
 
 
@@ -61,7 +63,7 @@ def create_element_swapped_particles(
     )  # no minus sign since we want to swap the highest energy atom
     probabilities = softmax(energies)
     logging.debug(f"Probabilities: {probabilities}, beta: {beta}")
-    ensemble = [atoms.copy()]
+    ensemble = [duplicate_atoms(atoms)]
     to_generate = num_particles - 1
     if np.count_nonzero(probabilities) == 1:
         idx = np.argmax(probabilities).astype(int)

@@ -8,6 +8,7 @@ from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
+    duplicate_atoms,
 )
 from moldiff.utils import initialize_mol
 
@@ -80,3 +81,14 @@ def test_exponential_repulsive_block_correct_for_batches_of_molecules():
         batched.positions, -1 * block_energies
     )
     np.testing.assert_allclose(forces, block_forces)
+
+
+def test_duplicate_atoms_does_not_copy_calculated_values():
+    mol_1 = initialize_mol("H2O")
+    mol_1.arrays["energy"] = np.random.randn(3)
+
+    mol_1_copy = mol_1.copy()
+    assert (mol_1.arrays["energy"] == mol_1_copy.arrays["energy"]).all()
+
+    mol_1_duplicate = duplicate_atoms(mol_1)
+    assert "energy" not in mol_1_duplicate.arrays

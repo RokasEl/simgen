@@ -9,6 +9,19 @@ from mace.tools import AtomicNumberTable
 from torch import nn
 
 
+def duplicate_atoms(atoms: ase.Atoms) -> ase.Atoms:
+    """
+    Create a deep copy of the atoms object
+    """
+    atoms_copy = ase.Atoms(
+        numbers=atoms.get_atomic_numbers(),
+        positions=atoms.get_positions(),
+        cell=atoms.cell,
+        pbc=atoms.pbc,
+    )
+    return atoms_copy
+
+
 def change_indices_to_atomic_numbers(
     indices: np.ndarray, z_table: AtomicNumberTable
 ) -> np.ndarray:

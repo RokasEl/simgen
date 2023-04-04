@@ -16,7 +16,11 @@ from moldiff.element_swapping import (
     collect_particles,
     create_element_swapped_particles,
 )
-from moldiff.generation_utils import batch_atoms, get_atoms_from_batch
+from moldiff.generation_utils import (
+    batch_atoms,
+    duplicate_atoms,
+    get_atoms_from_batch,
+)
 from moldiff.temperature_annealing import ExponentialThermostat
 
 logger = logging.getLogger(__name__)
@@ -78,7 +82,7 @@ class ParticleFilterGenerator:
         )
         trajectories = [molecule]
 
-        atoms = [molecule.copy()]
+        atoms = [duplicate_atoms(molecule)]
         batched = self.batch_atoms(atoms)
         self.swapped = False
 
@@ -107,7 +111,7 @@ class ParticleFilterGenerator:
             trajectories.append(atoms)
 
         if do_final_cleanup:
-            atoms = trajectories[-1].copy()
+            atoms = duplicate_atoms(trajectories[-1])
             atoms.calc = self.similarity_calculator
             cleaned = cleanup_atoms(
                 atoms, disconnected_atom_distance_threshold, swapping_z_table
