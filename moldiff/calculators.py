@@ -60,7 +60,7 @@ class MaceSimilarityCalculator(Calculator):
             **kwargs,
         )
         self.model = model
-        self.repulsion_block = ExponentialRepulsionBlock(alpha=5.0).to(device)
+        self.repulsion_block = ExponentialRepulsionBlock(alpha=8.0).to(device)
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
         self.cutoff = model.r_max.item()  # type: ignore
@@ -85,7 +85,7 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = self._calculate_log_k(emb, t)
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
-        repulsive_energy = self.repulsion_block(atomic_data)
+        repulsive_energy = self.repulsion_block(atomic_data) / 4.0
         repulsive_force = self._get_gradient(
             atomic_data.positions, repulsive_energy * -1
         )
