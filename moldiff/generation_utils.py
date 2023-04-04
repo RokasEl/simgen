@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Dict, List
 
 import ase
@@ -9,7 +10,7 @@ from mace.tools import AtomicNumberTable
 from torch import nn
 
 
-def duplicate_atoms(atoms: ase.Atoms) -> ase.Atoms:
+def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
     """
     Create a deep copy of the atoms object
     """
@@ -18,6 +19,7 @@ def duplicate_atoms(atoms: ase.Atoms) -> ase.Atoms:
         positions=atoms.get_positions(),
         cell=atoms.cell,
         pbc=atoms.pbc,
+        info=deepcopy(atoms.info) if copy_info else None,
     )
     return atoms_copy
 

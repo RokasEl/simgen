@@ -86,10 +86,6 @@ def create_element_swapped_particles(
     return ensemble
 
 
-import torch
-from mace.tools.scatter import scatter_sum
-
-
 def collect_particles(
     ensemble: List[Atoms],
     beta: float,
@@ -98,4 +94,4 @@ def collect_particles(
     energies = energies.flatten()
     probabilities = softmax(energies)
     collect_idx = np.random.choice(len(ensemble), p=probabilities)
-    return ensemble[collect_idx]
+    return duplicate_atoms(ensemble[collect_idx])

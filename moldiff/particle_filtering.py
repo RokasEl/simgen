@@ -108,6 +108,8 @@ class ParticleFilterGenerator:
             atoms.calc = self.similarity_calculator
             atoms.info["calculation_type"] = "mace"
             self.similarity_calculator.calculate(atoms)
+            logging.debug(f"Energies at final step: {atoms.get_potential_energies()}")
+            logging.debug(f"Total energy: {atoms.get_potential_energy()}")
             trajectories.append(atoms)
 
         if do_final_cleanup:
@@ -119,6 +121,10 @@ class ParticleFilterGenerator:
             cleaned.calc = self.similarity_calculator
             cleaned.info["calculation_type"] = "mace"
             self.similarity_calculator.calculate(cleaned)
+            logging.debug(
+                f"Energies after cleaning: {cleaned.get_potential_energies()}"
+            )
+            logging.debug(f"Total energy: {cleaned.get_potential_energy()}")
             trajectories.append(cleaned)
         return trajectories
 
@@ -126,8 +132,9 @@ class ParticleFilterGenerator:
         self, atoms_list: List[ase.Atoms], beta, num_particles, z_table
     ):
         if self.swapped:
-            atoms_list = collect_particles(atoms_list, beta)  # type: ignore
-            atoms_list = [atoms_list]
+            collected_mol = collect_particles(atoms_list, beta)  # type: ignore
+            collected_mol.calc = self.similarity_calculator
+            atoms_list = [collected_mol]
             self.swapped = False
         assert len(atoms_list) == 1
         atoms = atoms_list[0]
