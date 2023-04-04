@@ -8,7 +8,11 @@ import ase
 import einops
 import numpy as np
 import torch
-from ase.calculators.calculator import Calculator, all_changes
+from ase.calculators.calculator import (
+    Calculator,
+    PropertyNotImplementedError,
+    all_changes,
+)
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.modules.models import MACE
 from mace.tools import AtomicNumberTable
@@ -230,3 +234,8 @@ class MaceSimilarityCalculator(Calculator):
             warnings.warn("nan or inf in grad")
             grad = np.nan_to_num(grad, nan=0, posinf=0, neginf=0)
         return grad
+
+    def get_property(self, *args, **kwargs):
+        # Prevent caching of properties
+        self.reset()
+        super().get_property(*args, **kwargs)
