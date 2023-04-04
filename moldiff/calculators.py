@@ -10,13 +10,12 @@ import numpy as np
 import torch
 from ase.calculators.calculator import Calculator, all_changes
 from mace.data.atomic_data import AtomicData, get_data_loader
-from mace.data.utils import config_from_atoms
 from mace.modules.models import MACE
-from mace.tools import AtomicNumberTable, torch_geometric
-from mace.tools.scatter import scatter_mean, scatter_sum
-from tqdm import tqdm
+from mace.tools import AtomicNumberTable
+from mace.tools.scatter import scatter_sum
 
 from moldiff.generation_utils import (
+    ExponentialRepulsionBlock,
     batch_atoms,
     convert_atoms_to_atomic_data,
 )
@@ -57,6 +56,7 @@ class MaceSimilarityCalculator(Calculator):
             **kwargs,
         )
         self.model = model
+        self.repulsion_block = ExponentialRepulsionBlock(alpha=5.0).to(device)
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
         self.cutoff = model.r_max.item()  # type: ignore
@@ -81,8 +81,12 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = self._calculate_log_k(emb, t)
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
+        repulsive_energy = self.repulsion_block(atomic_data)
+        repulsive_force = self._get_gradient(
+            atomic_data.positions, repulsive_energy * -1
+        )
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
-        return grad
+        return grad + repulsive_force
 
     def calculate(
         self,

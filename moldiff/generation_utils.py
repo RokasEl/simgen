@@ -1,10 +1,12 @@
-from typing import List
+from typing import Dict, List
 
 import ase
 import numpy as np
+import torch
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
 from mace.tools import AtomicNumberTable
+from torch import nn
 
 
 def change_indices_to_atomic_numbers(
@@ -60,3 +62,24 @@ def batch_atoms(
     return next(
         iter(get_data_loader(atomic_datas, batch_size=len(atomic_datas), shuffle=False))
     )
+
+
+from mace.modules.utils import get_edge_vectors_and_lengths
+from mace.tools.scatter import scatter_sum
+
+
+class ExponentialRepulsionBlock(nn.Module):
+    def __init__(self, alpha: float):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+        data["positions"].requires_grad = True
+        _, lengths = get_edge_vectors_and_lengths(
+            positions=data["positions"],
+            edge_index=data["edge_index"],
+            shifts=data["shifts"],
+        )
+        energies = torch.exp(-self.alpha * lengths)
+        energies = 0.5 * scatter_sum(energies, data["edge_index"][0], dim=0).squeeze(-1)
+        return energies
