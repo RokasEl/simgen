@@ -1,5 +1,6 @@
 import ase
 import numpy as np
+from ase.optimize import BFGS
 from mace.tools import AtomicNumberTable
 
 from moldiff.element_swapping import (
@@ -7,6 +8,13 @@ from moldiff.element_swapping import (
     sweep_all_elements,
 )
 from moldiff.generation_utils import duplicate_atoms
+
+
+def run_dynamics(atoms_list):
+    for atom in atoms_list:
+        dyn = BFGS(atom)
+        dyn.run(fmax=0.01, steps=5)
+    return atoms_list
 
 
 def remove_isolated_atoms(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
@@ -52,6 +60,7 @@ def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
         ensemble = sweep_all_elements(mol, idx, z_table)
         ensemble = [mol, *ensemble]
         ensemble = attach_calculator(ensemble, mol.calc, calculation_type="mace")
+        ensemble = run_dynamics(ensemble)
         mol = collect_particles(ensemble, beta=100.0)
     return mol
 
