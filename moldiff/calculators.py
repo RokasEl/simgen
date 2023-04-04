@@ -85,7 +85,7 @@ class MaceSimilarityCalculator(Calculator):
         log_dens = self._calculate_log_k(emb, t)
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
-        repulsive_energy = self.repulsion_block(atomic_data) / 4.0
+        repulsive_energy = self.repulsion_block(atomic_data) / 3.0
         repulsive_force = self._get_gradient(
             atomic_data.positions, repulsive_energy * -1
         )
@@ -238,4 +238,4 @@ class MaceSimilarityCalculator(Calculator):
     def get_property(self, *args, **kwargs):
         # Prevent caching of properties
         self.reset()
-        super().get_property(*args, **kwargs)
+        return super().get_property(*args, **kwargs)
