@@ -74,7 +74,7 @@ class ExponentialRepulsionBlock(nn.Module):
         self.alpha = alpha
 
     def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
-        data["positions"].requires_grad = True
+        data["positions"].requires_grad_(True)
         _, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
             edge_index=data["edge_index"],
