@@ -91,6 +91,7 @@ def main():
     energies = np.empty(len(training_data))
     for i, mol in enumerate(training_data):
         mol.calc = score_model
+        mol.info["calculation_type"] = "similarity"
         mol.info["time"] = 1e-2
         energies[i] = mol.get_potential_energy()
     logging.debug(f"Energies of training data: {energies}")
