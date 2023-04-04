@@ -101,6 +101,9 @@ class ParticleFilterGenerator:
         if self.swapped:
             atoms = self._prepare_atoms_for_swap(atoms, self.sigmas[-1])
             atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
+            atoms.calc = self.similarity_calculator
+            atoms.info["calculation_type"] = "mace"
+            self.similarity_calculator.calculate(atoms)
             trajectories.append(atoms)
 
         if do_final_cleanup:
@@ -109,6 +112,9 @@ class ParticleFilterGenerator:
             cleaned = cleanup_atoms(
                 atoms, disconnected_atom_distance_threshold, swapping_z_table
             )
+            cleaned.calc = self.similarity_calculator
+            cleaned.info["calculation_type"] = "mace"
+            self.similarity_calculator.calculate(cleaned)
             trajectories.append(cleaned)
         return trajectories
 
