@@ -9,6 +9,7 @@ from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     duplicate_atoms,
+    remove_hydrogens,
 )
 from moldiff.utils import initialize_mol
 
@@ -92,3 +93,15 @@ def test_duplicate_atoms_does_not_copy_calculated_values():
 
     mol_1_duplicate = duplicate_atoms(mol_1)
     assert "energy" not in mol_1_duplicate.arrays
+
+
+def test_remove_hydrogens_removes_hydrogens_and_leaves_other_atoms_unchanged():
+    mol = initialize_mol("H2O")
+    no_hs_mol = remove_hydrogens(mol)
+    expected = mol.copy()[0:1]
+    assert no_hs_mol == expected
+
+    mol = initialize_mol("C2H6")
+    expected = mol.copy()[:2]
+    no_hs_mol = remove_hydrogens(mol)
+    assert no_hs_mol == expected

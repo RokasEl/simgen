@@ -77,6 +77,16 @@ def batch_atoms(
     )
 
 
+def remove_hydrogens(atoms: ase.Atoms) -> ase.Atoms:
+    """
+    Remove all hydrogens from the atoms object
+    """
+    atoms_copy = atoms.copy()
+    hydrogens = atoms_copy.get_atomic_numbers() == 1
+    del atoms_copy[hydrogens]
+    return atoms_copy
+
+
 from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools.scatter import scatter_sum
 

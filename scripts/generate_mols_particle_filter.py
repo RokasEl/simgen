@@ -26,6 +26,7 @@ from mace.tools import AtomicNumberTable
 
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
+from moldiff.generation_utils import remove_hydrogens
 from moldiff.sampling import MaceSimilarityScore
 
 
@@ -38,22 +39,23 @@ def calculate_restorative_force_strength(num_atoms: int | float) -> float:
 
 def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
-    pretrained_mace = "./models/SPICE_1l_neut_E0_swa.model"
+    pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
     pretrained_model = torch.load(pretrained_mace)
+    print(pretrained_model)
     model = ScaleShiftMACE(
         r_max=4.5,
         num_bessel=8,
         num_polynomial_cutoff=5,
         radial_MLP=[64, 64, 64],
         max_ell=3,
-        num_interactions=1,
+        num_interactions=2,
         num_elements=10,
         atomic_energies=np.zeros(10),
         avg_num_neighbors=15.653135299682617,
         correlation=3,
         interaction_cls_first=RealAgnosticInteractionBlock,
         interaction_cls=RealAgnosticResidualInteractionBlock,
-        hidden_irreps=o3.Irreps("64x0e"),
+        hidden_irreps=o3.Irreps("96x0e"),
         MLP_irreps=o3.Irreps("16x0e"),
         atomic_numbers=[1, 6, 7, 8, 9, 15, 16, 17, 35, 53],
         gate=torch.nn.functional.silu,
@@ -83,7 +85,7 @@ def main():
     too_add = 256 - len(training_data)
     rand_mols = [x for x in rng.choice(all_data, size=too_add)]
     training_data.extend(rand_mols)
-
+    training_data = [remove_hydrogens(mol) for mol in training_data]
     score_model = MaceSimilarityCalculator(
         model, reference_data=training_data, device=DEVICE
     )
@@ -98,7 +100,7 @@ def main():
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
     destination = "./scripts/Generated_trajectories/added_repulsive_force/"
-    swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
+    swapping_z_table = AtomicNumberTable([6, 7, 8, 9])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)
