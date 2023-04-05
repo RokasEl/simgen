@@ -1,5 +1,6 @@
 import ase
 import numpy as np
+from ase.neighborlist import natural_cutoffs, neighbor_list
 from ase.optimize import BFGS
 from mace.tools import AtomicNumberTable
 
@@ -17,7 +18,7 @@ def run_dynamics(atoms_list):
     return atoms_list
 
 
-def remove_isolated_atoms(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
+def remove_isolated_atoms_fixed_cutoff(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
     """
     Remove unconnected atoms from the final atoms object.
     """
@@ -27,7 +28,21 @@ def remove_isolated_atoms(atoms: ase.Atoms, cutoff: float) -> ase.Atoms:
     connected_atom_indices = np.where(per_atom_min_distances <= cutoff)[0]
     stripped_atoms = duplicate_atoms(atoms)
     stripped_atoms = stripped_atoms[connected_atom_indices]
-    return stripped_atoms
+    return stripped_atoms  # type: ignore
+
+
+def remove_isolated_atoms_using_covalent_radii(
+    atoms: ase.Atoms, multiplier: float = 1.2
+) -> ase.Atoms:
+    """
+    Remove unconnected atoms from the final atoms object.
+    """
+    cutoffs = natural_cutoffs(atoms, mult=multiplier)  # type: ignore
+    indices_of_connected_atoms = neighbor_list("i", atoms, cutoffs)
+    unique_indices = np.unique(indices_of_connected_atoms)
+    stripped_atoms = atoms.copy()
+    stripped_atoms = stripped_atoms[unique_indices]
+    return stripped_atoms  # type: ignore
 
 
 def get_higest_energy_unswapped_idx(swapped_indices, energies) -> int:
@@ -71,7 +86,7 @@ def cleanup_atoms(
     """
     Wrapper function to allow easy extension with other cleanup functions if needed.
     """
-    pruned_atoms = remove_isolated_atoms(atoms, cutoff)
+    pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
     pruned_atoms.calc = atoms.calc
     element_relaxed_atoms = relax_elements(pruned_atoms, z_table)
     return element_relaxed_atoms

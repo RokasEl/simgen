@@ -1,3 +1,4 @@
+import ase
 import numpy as np
 import pytest
 import torch
@@ -6,7 +7,8 @@ from mace.tools import AtomicNumberTable
 from moldiff.atoms_cleanup import (
     get_higest_energy_unswapped_idx,
     relax_elements,
-    remove_isolated_atoms,
+    remove_isolated_atoms_fixed_cutoff,
+    remove_isolated_atoms_using_covalent_radii,
 )
 from moldiff.generation_utils import batch_atoms
 from moldiff.utils import initialize_mol
@@ -38,7 +40,7 @@ def linear_molecule_with_increasingly_isolated_atoms():
     ],
 )
 def test_remove_isolated_atoms(atoms, cutoff, expected):
-    pruned_atoms = remove_isolated_atoms(atoms, cutoff)
+    pruned_atoms = remove_isolated_atoms_fixed_cutoff(atoms, cutoff)
     assert pruned_atoms == expected
 
 
@@ -49,11 +51,31 @@ def test_remove_isolated_atoms_with_molecule_with_increasingly_isolated_atoms(
     cutoffs = [2**i for i in range(10)]
     expected_remaining_atoms = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10]
     for cutoff, expected_remaining_atom in zip(cutoffs, expected_remaining_atoms):
-        pruned_atoms = remove_isolated_atoms(mol, cutoff)
+        pruned_atoms = remove_isolated_atoms_fixed_cutoff(mol, cutoff)
         assert len(pruned_atoms) == expected_remaining_atom
 
-    pruned_atoms = remove_isolated_atoms(mol, 0.1)
+    pruned_atoms = remove_isolated_atoms_fixed_cutoff(mol, 0.1)
     assert len(pruned_atoms) == 0
+
+
+stretched_CH = ase.Atoms("CH", positions=[[0, 0, 0], [0, 0, 1.1]])
+stretched_CC = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1.1]])
+
+
+@pytest.mark.parametrize(
+    "atoms, expected",
+    [
+        (initialize_mol("H2O"), initialize_mol("H2O")),
+        (initialize_mol("H2"), initialize_mol("H2")),
+        (stretched_CH, initialize_mol("")),  # too far apart
+        (stretched_CC, stretched_CC),  # not too far apart for a CC bond
+    ],
+)
+def test_remove_isolated_atoms_covalent_cutoff(atoms, expected):
+    atoms_copy = atoms.copy()
+    pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
+    assert atoms_copy == atoms  # check that the original atoms are not modified
+    assert pruned_atoms == expected
 
 
 def test_get_highest_energy_unswapped_idx():
