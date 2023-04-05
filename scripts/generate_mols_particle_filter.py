@@ -38,23 +38,22 @@ def calculate_restorative_force_strength(num_atoms: int | float) -> float:
 
 def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
-    pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
+    pretrained_mace = "./models/SPICE_1l_neut_E0_swa.model"
     pretrained_model = torch.load(pretrained_mace)
-    print(pretrained_model)
     model = ScaleShiftMACE(
         r_max=4.5,
         num_bessel=8,
         num_polynomial_cutoff=5,
         radial_MLP=[64, 64, 64],
         max_ell=3,
-        num_interactions=2,
+        num_interactions=1,
         num_elements=10,
         atomic_energies=np.zeros(10),
         avg_num_neighbors=15.653135299682617,
         correlation=3,
         interaction_cls_first=RealAgnosticInteractionBlock,
         interaction_cls=RealAgnosticResidualInteractionBlock,
-        hidden_irreps=o3.Irreps("96x0e"),
+        hidden_irreps=o3.Irreps("64x0e"),
         MLP_irreps=o3.Irreps("16x0e"),
         atomic_numbers=[1, 6, 7, 8, 9, 15, 16, 17, 35, 53],
         gate=torch.nn.functional.silu,
