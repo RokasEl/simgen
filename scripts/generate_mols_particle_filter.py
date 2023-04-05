@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 from e3nn import o3
@@ -99,7 +101,9 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/added_repulsive_force/"
+    destination = "./scripts/Generated_trajectories/no_hydrogen_reference/"
+    # create destination folder if it does not exist
+    os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8, 9])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
