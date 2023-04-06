@@ -79,13 +79,14 @@ def batch_atoms(
     )
 
 
-def remove_hydrogens(atoms: ase.Atoms) -> ase.Atoms:
+def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: List[int]) -> ase.Atoms:
     """
     Remove all hydrogens from the atoms object
     """
     atoms_copy = atoms.copy()
-    hydrogens = atoms_copy.get_atomic_numbers() == 1
-    del atoms_copy[hydrogens]
+    for atomic_number in atomic_numbers_to_remove:
+        to_remove = atoms_copy.get_atomic_numbers() == atomic_number
+        del atoms_copy[to_remove]
     return atoms_copy
 
 

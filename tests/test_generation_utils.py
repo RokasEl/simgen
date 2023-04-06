@@ -2,6 +2,7 @@ import einops
 import numpy as np
 import pytest
 import torch
+from ase import Atoms
 from mace.tools import AtomicNumberTable
 
 from moldiff.calculators import MaceSimilarityCalculator
@@ -9,7 +10,7 @@ from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     duplicate_atoms,
-    remove_hydrogens,
+    remove_elements,
 )
 from moldiff.utils import initialize_mol
 
@@ -95,13 +96,18 @@ def test_duplicate_atoms_does_not_copy_calculated_values():
     assert "energy" not in mol_1_duplicate.arrays
 
 
-def test_remove_hydrogens_removes_hydrogens_and_leaves_other_atoms_unchanged():
+def test_remove_elements_removes_required_elements_and_leaves_other_atoms_unchanged():
     mol = initialize_mol("H2O")
-    no_hs_mol = remove_hydrogens(mol)
+    no_hs_mol = remove_elements(mol, [1])
     expected = mol.copy()[0:1]
     assert no_hs_mol == expected
 
     mol = initialize_mol("C2H6")
     expected = mol.copy()[:2]
-    no_hs_mol = remove_hydrogens(mol)
+    no_hs_mol = remove_elements(mol, [1])
     assert no_hs_mol == expected
+
+    mol = ase.Atoms("CCHF", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]])
+    expected = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1]])
+    no_hs_and_f_mol = remove_elements(mol, [1, 9])
+    assert no_hs_and_f_mol == expected

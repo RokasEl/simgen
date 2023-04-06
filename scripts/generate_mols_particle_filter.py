@@ -28,7 +28,7 @@ from mace.tools import AtomicNumberTable
 
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
-from moldiff.generation_utils import remove_hydrogens
+from moldiff.generation_utils import remove_elements
 from moldiff.sampling import MaceSimilarityScore
 
 
@@ -87,7 +87,7 @@ def main():
     too_add = 256 - len(training_data)
     rand_mols = [x for x in rng.choice(all_data, size=too_add)]
     training_data.extend(rand_mols)
-    training_data = [remove_hydrogens(mol) for mol in training_data]
+    training_data = [remove_elements(mol, [1, 9]) for mol in training_data]
     score_model = MaceSimilarityCalculator(
         model, reference_data=training_data, device=DEVICE
     )
@@ -104,7 +104,7 @@ def main():
     destination = "./scripts/Generated_trajectories/no_hydrogen_reference/"
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
-    swapping_z_table = AtomicNumberTable([6, 7, 8, 9])
+    swapping_z_table = AtomicNumberTable([6, 7, 8])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)

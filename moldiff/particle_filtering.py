@@ -6,6 +6,7 @@ from typing import List
 import ase
 import numpy as np
 import torch
+from ase.optimize import BFGS
 from mace.data import AtomicData
 from mace.tools import AtomicNumberTable
 
@@ -115,6 +116,9 @@ class ParticleFilterGenerator:
         if do_final_cleanup:
             atoms = duplicate_atoms(trajectories[-1])
             atoms.calc = self.similarity_calculator
+            dyn = BFGS(atoms, maxstep=0.2 / 5)
+            dyn.run(fmax=0.01, steps=5)
+            trajectories.append(atoms)
             cleaned = cleanup_atoms(
                 atoms, disconnected_atom_distance_threshold, swapping_z_table
             )

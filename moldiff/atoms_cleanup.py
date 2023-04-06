@@ -13,7 +13,7 @@ from moldiff.generation_utils import duplicate_atoms
 
 def run_dynamics(atoms_list):
     for atom in atoms_list:
-        dyn = BFGS(atom, maxstep=0.2 / 5)
+        dyn = BFGS(atom, maxstep=0.1 / 5)
         dyn.run(fmax=0.01, steps=5)
     return atoms_list
 
