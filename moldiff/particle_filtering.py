@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from mace.data import AtomicData
 from mace.tools import AtomicNumberTable
+from scipy.stats import betabinom
 
 from moldiff.atoms_cleanup import cleanup_atoms
 from moldiff.calculators import MaceSimilarityCalculator
@@ -21,6 +22,7 @@ from moldiff.generation_utils import (
     duplicate_atoms,
     get_atoms_from_batch,
 )
+from moldiff.hydrogenation import hydrogenate
 from moldiff.temperature_annealing import ExponentialThermostat
 
 logger = logging.getLogger(__name__)
@@ -85,7 +87,7 @@ class ParticleFilterGenerator:
         atoms = [duplicate_atoms(molecule)]
         batched = self.batch_atoms(atoms)
         self.swapped = False
-
+        hs_added = False
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
             if step % particle_swap_frequency == 0 and num_particles > 1:
@@ -96,6 +98,9 @@ class ParticleFilterGenerator:
                     num_particles=num_particles,
                     z_table=swapping_z_table,
                 )
+                if step >= 45 and not hs_added:
+                    hs_added = True
+                    atoms = [hydrogenate(x, betabinom.rvs, 3, 1, 2) for x in atoms]
                 batched = self.batch_atoms(atoms)
 
             batched = self.integrator(batched, step, sigma_cur, sigma_next)
