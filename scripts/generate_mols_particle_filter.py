@@ -87,7 +87,6 @@ def main():
     too_add = 256 - len(training_data)
     rand_mols = [x for x in rng.choice(all_data, size=too_add)]
     training_data.extend(rand_mols)
-    training_data = [remove_elements(mol, [1, 9]) for mol in training_data]
     score_model = MaceSimilarityCalculator(
         model, reference_data=training_data, device=DEVICE
     )
@@ -101,7 +100,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/no_hydrogen_reference/"
+    destination = "./scripts/Generated_trajectories/two_step_generation/"
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8])
@@ -122,6 +121,7 @@ def main():
         trajectories = particle_filter.generate(
             mol, swapping_z_table, num_particles=10, particle_swap_frequency=4
         )
+        score_model.switch_to_reference_without_hydrogen()
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",
             trajectories,

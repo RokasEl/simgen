@@ -22,6 +22,7 @@ from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     convert_atoms_to_atomic_data,
+    remove_elements,
 )
 
 
@@ -73,8 +74,9 @@ class MaceSimilarityCalculator(Calculator):
             cutoff=self.cutoff,
             device=self.device,
         )
-
-        self.reference_embeddings = self._calculate_reference_embeddings(reference_data)
+        self.reference_data = reference_data
+        no_h_reference = [remove_elements(mol, [1, 9]) for mol in reference_data]
+        self.reference_embeddings = self._calculate_reference_embeddings(no_h_reference)
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
         )
@@ -91,6 +93,21 @@ class MaceSimilarityCalculator(Calculator):
         )
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
         return grad + repulsive_force
+
+    def switch_to_reference_with_hydrogen(self):
+        self.reference_embeddings = self._calculate_reference_embeddings(
+            self.reference_data
+        )
+        self.typical_length_scale = self._calculate_mean_dot_product(
+            self.reference_embeddings
+        )
+
+    def switch_to_reference_without_hydrogen(self):
+        no_h_reference = [remove_elements(mol, [1, 9]) for mol in self.reference_data]
+        self.reference_embeddings = self._calculate_reference_embeddings(no_h_reference)
+        self.typical_length_scale = self._calculate_mean_dot_product(
+            self.reference_embeddings
+        )
 
     def calculate(
         self,

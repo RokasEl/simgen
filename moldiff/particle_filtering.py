@@ -98,9 +98,11 @@ class ParticleFilterGenerator:
                     num_particles=num_particles,
                     z_table=swapping_z_table,
                 )
-                if step >= 45 and not hs_added:
+                if step >= 60 and not hs_added:
                     hs_added = True
-                    atoms = [hydrogenate(x, betabinom.rvs, 3, 1, 2) for x in atoms]
+                    self.similarity_calculator.switch_to_reference_with_hydrogen()
+                    atoms = [hydrogenate(x, betabinom.rvs, 3, 1, 4) for x in atoms]
+                    swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
                 batched = self.batch_atoms(atoms)
 
             batched = self.integrator(batched, step, sigma_cur, sigma_next)
