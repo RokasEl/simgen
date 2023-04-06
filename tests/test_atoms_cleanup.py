@@ -121,7 +121,7 @@ def element_swapping_test_suite():
 def test_relax_elements(loaded_mace_similarity_calculator, element_swapping_test_suite):
     for mol, expected_mol in element_swapping_test_suite:
         mol.calc = loaded_mace_similarity_calculator
-        relaxed_mol = relax_elements(mol, z_table=z_table)
+        relaxed_mol = relax_elements(mol, z_table=z_table, should_run_dynamics=False)
         assert relaxed_mol == expected_mol
 
 

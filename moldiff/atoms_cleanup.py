@@ -61,7 +61,9 @@ def attach_calculator(atoms_list, calculator, calculation_type="similarity"):
     return atoms_list
 
 
-def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
+def relax_elements(
+    atoms: ase.Atoms, z_table: AtomicNumberTable, should_run_dynamics: bool = True
+) -> ase.Atoms:
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
@@ -75,7 +77,8 @@ def relax_elements(atoms: ase.Atoms, z_table: AtomicNumberTable) -> ase.Atoms:
         ensemble = sweep_all_elements(mol, idx, z_table)
         ensemble = [mol, *ensemble]
         ensemble = attach_calculator(ensemble, mol.calc, calculation_type="mace")
-        ensemble = run_dynamics(ensemble)
+        if should_run_dynamics:
+            ensemble = run_dynamics(ensemble)
         mol = collect_particles(ensemble, beta=100.0)
     return mol
 

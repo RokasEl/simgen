@@ -107,7 +107,7 @@ def test_remove_elements_removes_required_elements_and_leaves_other_atoms_unchan
     no_hs_mol = remove_elements(mol, [1])
     assert no_hs_mol == expected
 
-    mol = ase.Atoms("CCHF", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]])
-    expected = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1]])
+    mol = Atoms("CCHF", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]])
+    expected = Atoms("CC", positions=[[0, 0, 0], [0, 0, 1]])
     no_hs_and_f_mol = remove_elements(mol, [1, 9])
     assert no_hs_and_f_mol == expected
