@@ -64,6 +64,7 @@ def attach_calculator(atoms_list, calculator, calculation_type="similarity"):
 def relax_elements(
     atoms: ase.Atoms, z_table: AtomicNumberTable, should_run_dynamics: bool = True
 ) -> ase.Atoms:
+    """should_run_dynamics: should only be False for testing"""
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
@@ -91,5 +92,6 @@ def cleanup_atoms(
     """
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
     pruned_atoms.calc = atoms.calc
-    element_relaxed_atoms = relax_elements(pruned_atoms, z_table)
+    relaxed_pruned_atoms = run_dynamics([pruned_atoms])[0]
+    element_relaxed_atoms = relax_elements(relaxed_pruned_atoms, z_table)
     return element_relaxed_atoms
