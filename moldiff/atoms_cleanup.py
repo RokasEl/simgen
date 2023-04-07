@@ -3,12 +3,14 @@ import numpy as np
 from ase.neighborlist import natural_cutoffs, neighbor_list
 from ase.optimize import BFGS
 from mace.tools import AtomicNumberTable
+from scipy.stats import betabinom
 
 from moldiff.element_swapping import (
     collect_particles,
     sweep_all_elements,
 )
 from moldiff.generation_utils import duplicate_atoms
+from moldiff.hydrogenation import hydrogenate
 
 
 def run_dynamics(atoms_list):
@@ -68,7 +70,7 @@ def relax_elements(
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
-    already_switched = []
+    already_switched = [idx for idx in range(len(atoms)) if atoms.numbers[idx] == 1]
     mol = duplicate_atoms(atoms)
     for _ in range(len(mol)):
         mol.calc = atoms.calc
@@ -91,7 +93,8 @@ def cleanup_atoms(
     Wrapper function to allow easy extension with other cleanup functions if needed.
     """
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
-    pruned_atoms.calc = atoms.calc
-    relaxed_pruned_atoms = run_dynamics([pruned_atoms])[0]
-    element_relaxed_atoms = relax_elements(relaxed_pruned_atoms, z_table)
+    hydrogenated_atoms = hydrogenate(pruned_atoms, betabinom.rvs, *(3, 1, 3))
+    hydrogenated_atoms.calc = atoms.calc
+    relaxed_hydrogenated_atoms = run_dynamics([hydrogenated_atoms])[0]
+    element_relaxed_atoms = relax_elements(relaxed_hydrogenated_atoms, z_table)
     return element_relaxed_atoms

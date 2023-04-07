@@ -87,6 +87,7 @@ def main():
     too_add = 256 - len(training_data)
     rand_mols = [x for x in rng.choice(all_data, size=too_add)]
     training_data.extend(rand_mols)
+    training_data = [remove_elements(mol, [1, 9]) for mol in training_data]
     score_model = MaceSimilarityCalculator(
         model, reference_data=training_data, device=DEVICE
     )
@@ -121,7 +122,6 @@ def main():
         trajectories = particle_filter.generate(
             mol, swapping_z_table, num_particles=10, particle_swap_frequency=4
         )
-        score_model.switch_to_reference_without_hydrogen()
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",
             trajectories,

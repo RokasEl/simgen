@@ -8,9 +8,8 @@ import numpy as np
 import torch
 from mace.data import AtomicData
 from mace.tools import AtomicNumberTable
-from scipy.stats import betabinom
 
-from moldiff.atoms_cleanup import cleanup_atoms, run_dynamics
+from moldiff.atoms_cleanup import cleanup_atoms
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import (
@@ -22,7 +21,6 @@ from moldiff.generation_utils import (
     duplicate_atoms,
     get_atoms_from_batch,
 )
-from moldiff.hydrogenation import hydrogenate
 from moldiff.temperature_annealing import ExponentialThermostat
 
 logger = logging.getLogger(__name__)
@@ -87,7 +85,6 @@ class ParticleFilterGenerator:
         atoms = [duplicate_atoms(molecule)]
         batched = self.batch_atoms(atoms)
         self.swapped = False
-        hs_added = False
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
             if step % particle_swap_frequency == 0 and num_particles > 1:
@@ -98,15 +95,6 @@ class ParticleFilterGenerator:
                     num_particles=num_particles,
                     z_table=swapping_z_table,
                 )
-                if step >= 60 and not hs_added:
-                    hs_added = True
-                    self.similarity_calculator.switch_to_reference_with_hydrogen()
-                    atoms = [hydrogenate(x, betabinom.rvs, 3, 1, 4) for x in atoms]
-                    for mol in atoms:
-                        mol.info["calculation_type"] = "mace"
-                        mol.calc = self.similarity_calculator
-                    atoms = run_dynamics(atoms)
-                    swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
                 batched = self.batch_atoms(atoms)
 
             batched = self.integrator(batched, step, sigma_cur, sigma_next)

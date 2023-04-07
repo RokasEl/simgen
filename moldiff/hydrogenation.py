@@ -1,5 +1,8 @@
+from itertools import product
+
 import ase
 import numpy as np
+from ase.data import covalent_radii
 
 
 def hydrogenate(atoms, sampling_function, *sampling_function_args):
@@ -10,39 +13,108 @@ def hydrogenate(atoms, sampling_function, *sampling_function_args):
 def add_hydrogens_to_atoms(
     atoms: ase.Atoms,
     number_of_hs_to_add: np.ndarray,
-    h_min_distance: float = 0.8,
-    h_max_distance: float = 0.9,
 ) -> ase.Atoms:
     """
     Add hydrogens to the atoms object
     """
     atoms_copy = atoms.copy()
-    distance_from_central_atoms = np.random.uniform(
-        h_min_distance, h_max_distance, size=sum(number_of_hs_to_add)
-    )
-    directions = get_random_unit_vectors(num=sum(number_of_hs_to_add))
-    h_offset_vectors = distance_from_central_atoms[:, np.newaxis] * directions
-    h_positions = add_h_offsets_to_original_positions(
-        atoms_copy.positions, h_offset_vectors, number_of_hs_to_add
-    )
-    atoms_copy += ase.Atoms("H" * sum(number_of_hs_to_add), positions=h_positions)
+    atomic_numbers = atoms_copy.get_atomic_numbers()
+    exclusion_radii_dict = get_exclusion_radii_dict(atomic_numbers)
+    h_radius = covalent_radii[1]
+    bond_lengths = np.asarray([h_radius + covalent_radii[z] for z in atomic_numbers])
+
+    for idx in range(len(atoms)):
+        for _ in range(number_of_hs_to_add[idx]):
+            valid, h_pos = find_valid_h_position(
+                bond_lengths[idx], idx, atoms_copy, exclusion_radii_dict
+            )
+            if valid:
+                atoms_copy += ase.Atoms("H", positions=[h_pos])
+            else:
+                break
     return atoms_copy
 
 
-def add_h_offsets_to_original_positions(
-    original_positions, offset_vectors, number_of_hs_to_add
+def find_valid_h_position(
+    radius, central_atom_idx, atoms, exclusion_radii_dict, max_tries=10
 ):
-    h_positions = np.zeros((sum(number_of_hs_to_add), 3))
-    start_index = 0
-    for i, num_hs in enumerate(number_of_hs_to_add):
-        h_positions[start_index : start_index + num_hs] = (
-            original_positions[i] + offset_vectors[start_index : start_index + num_hs]
+    """Find a valid position for a hydrogen using rejection sampling"""
+    directions = get_random_unit_vectors(num=max_tries)
+    possible_h_positions = atoms.positions[central_atom_idx] + radius * directions
+    exclusion_radii = get_exclusion_radii(atoms, central_atom_idx, exclusion_radii_dict)
+    for pos in possible_h_positions:
+        if check_hydrogen_position_is_valid(
+            pos, exclusion_radii, atoms.get_positions()
+        ):
+            return True, pos
+    return False, None
+
+
+def get_exclusion_radii_dict(atomic_numbers: np.ndarray) -> dict:
+    exclusion_radii_dict = {}
+    possible_elements = np.unique(atomic_numbers).tolist()
+    possible_elements.append(1)
+    for i, j in product(possible_elements, possible_elements):
+        if i not in exclusion_radii_dict:
+            exclusion_radii_dict[i] = {}
+        exclusion_radii_dict[i][j] = compute_exclusion_radius(
+            covalent_radii[i], covalent_radii[j], covalent_radii[1]
         )
-        start_index += num_hs
-    return h_positions
+    return exclusion_radii_dict
 
 
 def get_random_unit_vectors(num: int) -> np.ndarray:
     vectors = np.random.normal(size=(num, 3))
     vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
     return vectors
+
+
+def compute_exclusion_radius(
+    r_to_which_h_added: float, r_other_atom: float, h_radius: float
+) -> float:
+    cylinder_radius = max(r_to_which_h_added, r_other_atom)
+    length_to_intersection_with_cylinder = r_to_which_h_added + h_radius
+    cylinder_length = r_to_which_h_added + r_other_atom
+    if length_to_intersection_with_cylinder < cylinder_radius:
+        exclusion_radius_squared = (
+            cylinder_length**2 + length_to_intersection_with_cylinder**2
+        )
+        exclusion_radius = np.sqrt(exclusion_radius_squared)
+    else:
+        angle = np.arcsin(cylinder_radius / (r_to_which_h_added + h_radius))
+        cosine = np.cos(angle)
+        exclusion_radius_squared = (
+            cylinder_length**2
+            + length_to_intersection_with_cylinder**2
+            - 2 * cosine * cylinder_length * length_to_intersection_with_cylinder
+        )
+        exclusion_radius = np.sqrt(exclusion_radius_squared)
+    return exclusion_radius
+
+
+def get_exclusion_radii(
+    atoms: ase.Atoms, idx: int, exclusion_radius_dict: dict
+) -> np.ndarray:
+    exclusion_radii = np.zeros(len(atoms))
+    atomic_numbers = atoms.get_atomic_numbers()
+    this_element = atomic_numbers[idx]
+    for i in range(len(atoms)):
+        if i == idx:
+            continue
+        other_element = atomic_numbers[i]
+        exclusion_radii[i] = exclusion_radius_dict[this_element][other_element]
+    return exclusion_radii
+
+
+def check_hydrogen_position_is_valid(
+    h_position: np.ndarray,  # 1x3
+    exclusion_radii: np.ndarray,  # 1xN
+    other_atom_positions: np.ndarray,  # Nx3
+) -> bool:
+    """
+    Check if the position of the hydrogen is valid
+    """
+    distances = np.linalg.norm(other_atom_positions - h_position, axis=1)  # type: ignore
+    if np.any(distances < exclusion_radii):
+        return False
+    return True
