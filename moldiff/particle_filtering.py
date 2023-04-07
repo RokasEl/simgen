@@ -10,7 +10,7 @@ from mace.data import AtomicData
 from mace.tools import AtomicNumberTable
 from scipy.stats import betabinom
 
-from moldiff.atoms_cleanup import cleanup_atoms
+from moldiff.atoms_cleanup import cleanup_atoms, run_dynamics
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import (
@@ -102,6 +102,10 @@ class ParticleFilterGenerator:
                     hs_added = True
                     self.similarity_calculator.switch_to_reference_with_hydrogen()
                     atoms = [hydrogenate(x, betabinom.rvs, 3, 1, 4) for x in atoms]
+                    for mol in atoms:
+                        mol.info["calculation_type"] = "mace"
+                        mol.calc = self.similarity_calculator
+                    atoms = run_dynamics(atoms)
                     swapping_z_table = AtomicNumberTable([1, 6, 7, 8, 9])
                 batched = self.batch_atoms(atoms)
 

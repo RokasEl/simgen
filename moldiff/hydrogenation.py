@@ -10,8 +10,8 @@ def hydrogenate(atoms, sampling_function, *sampling_function_args):
 def add_hydrogens_to_atoms(
     atoms: ase.Atoms,
     number_of_hs_to_add: np.ndarray,
-    h_min_distance: float = 0.65,
-    h_max_distance: float = 0.7,
+    h_min_distance: float = 0.8,
+    h_max_distance: float = 0.9,
 ) -> ase.Atoms:
     """
     Add hydrogens to the atoms object
