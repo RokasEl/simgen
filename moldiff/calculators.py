@@ -111,7 +111,7 @@ class MaceSimilarityCalculator(Calculator):
             raise ValueError(
                 "`atoms.info['calculation_type']` must be either 'similarity' or 'mace'"
             )
-
+        mask = atoms.info.get("mask", np.zeros(len(atoms), dtype=bool))
         if calculation_type == "similarity":
             (
                 node_energies,
@@ -128,7 +128,7 @@ class MaceSimilarityCalculator(Calculator):
             raise ValueError(
                 f"calculation_type must be either 'similarity' or 'mace', not {calculation_type}"
             )
-
+        forces[mask] = 0
         self.results["energies"] = node_energies
         self.results["energy"] = molecule_energies
         self.results["forces"] = forces

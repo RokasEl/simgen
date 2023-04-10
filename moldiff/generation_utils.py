@@ -4,6 +4,7 @@ from typing import Dict, List
 import ase
 import numpy as np
 import torch
+from ase.neighborlist import natural_cutoffs, neighbor_list
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
 from mace.tools import AtomicNumberTable
@@ -88,6 +89,17 @@ def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: List[int]) -> as
         to_remove = atoms_copy.get_atomic_numbers() == atomic_number
         del atoms_copy[to_remove]
     return atoms_copy
+
+
+def get_edge_array_and_neighbour_numbers(atoms: ase.Atoms, mult: float = 1.2):
+    """
+    Get the edge array and the number of neighbours for each atom
+    """
+    cutoffs = natural_cutoffs(atoms, mult=mult)  # type: ignore
+    edge_array = neighbor_list("ij", atoms, cutoffs)
+    edge_array = np.stack(edge_array, axis=1)
+    neighbour_numbers = np.bincount(edge_array[:, 0])
+    return edge_array, neighbour_numbers
 
 
 from mace.modules.utils import get_edge_vectors_and_lengths

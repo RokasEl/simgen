@@ -10,6 +10,7 @@ from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     duplicate_atoms,
+    get_edge_array_and_neighbour_numbers,
     remove_elements,
 )
 from moldiff.utils import initialize_mol
@@ -111,3 +112,17 @@ def test_remove_elements_removes_required_elements_and_leaves_other_atoms_unchan
     expected = Atoms("CC", positions=[[0, 0, 0], [0, 0, 1]])
     no_hs_and_f_mol = remove_elements(mol, [1, 9])
     assert no_hs_and_f_mol == expected
+
+
+def test_get_edge_array_and_neighbour_numbers_gets_correct_number_of_neighbours():
+    mol = initialize_mol("H2O")
+    _, neighbour_numbers = get_edge_array_and_neighbour_numbers(mol)
+    np.testing.assert_array_equal(neighbour_numbers, np.array([2, 1, 1]))
+
+    mol = initialize_mol("C2H4")
+    _, neighbour_numbers = get_edge_array_and_neighbour_numbers(mol)
+    np.testing.assert_array_equal(neighbour_numbers, np.array([3, 3, 1, 1, 1, 1]))
+
+    mol = initialize_mol("C20")
+    _, neighbour_numbers = get_edge_array_and_neighbour_numbers(mol)
+    np.testing.assert_array_equal(neighbour_numbers, np.array([19] * 20))

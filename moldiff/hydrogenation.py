@@ -3,11 +3,31 @@ from itertools import product
 import ase
 import numpy as np
 from ase.data import covalent_radii
+from frozendict import frozendict
+from scipy.stats import binom
+
+from moldiff.generation_utils import (
+    get_edge_array_and_neighbour_numbers,
+)
+
+NATURAL_VALENCES = frozendict(
+    {6: 4, 7: 3, 8: 2, 9: 1, 15: 3, 16: 2, 17: 1, 35: 1, 53: 1}
+)
 
 
-def hydrogenate(atoms, sampling_function, *sampling_function_args):
-    num_hs_to_add_per_atom = sampling_function(*sampling_function_args, size=len(atoms))
-    return add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+def hydrogenate_stochastically(atoms):
+    _, num_neighbours = get_edge_array_and_neighbour_numbers(atoms)
+    num_hs_to_add_per_atom = np.zeros(len(atoms)).astype(int)
+    atomic_numbers = atoms.get_atomic_numbers()
+    for idx in range(len(atoms)):
+        current_valence = num_neighbours[idx]
+        max_valence = NATURAL_VALENCES[atomic_numbers[idx]]
+        num_hs_to_add_per_atom[idx] = sample_number_of_hs_to_add(
+            current_valence, max_valence
+        )
+
+    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+    return atoms_with_hs
 
 
 def add_hydrogens_to_atoms(
@@ -35,13 +55,26 @@ def add_hydrogens_to_atoms(
     return atoms_copy
 
 
+def sample_number_of_hs_to_add(current_valence, max_valence):
+    if current_valence >= max_valence:
+        return 0
+    else:
+        num_missing_bonds = max_valence - current_valence
+        # bias sampling towards fully saturating the atom
+        p = num_missing_bonds / (num_missing_bonds + 1)
+        to_add = binom.rvs(num_missing_bonds, p)
+        return to_add
+
+
 def find_valid_h_position(
-    radius, central_atom_idx, atoms, exclusion_radii_dict, max_tries=10
+    radius, central_atom_idx, atoms, exclusion_radii_dict, max_tries=20
 ):
     """Find a valid position for a hydrogen using rejection sampling"""
     directions = get_random_unit_vectors(num=max_tries)
     possible_h_positions = atoms.positions[central_atom_idx] + radius * directions
-    exclusion_radii = get_exclusion_radii(atoms, central_atom_idx, exclusion_radii_dict)
+    exclusion_radii = (
+        get_exclusion_radii(atoms, central_atom_idx, exclusion_radii_dict) * 1.4
+    )
     for pos in possible_h_positions:
         if check_hydrogen_position_is_valid(
             pos, exclusion_radii, atoms.get_positions()

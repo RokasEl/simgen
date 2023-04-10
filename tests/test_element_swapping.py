@@ -4,6 +4,7 @@ from mace.tools import AtomicNumberTable
 from pytest_mock import mocker
 
 from moldiff.element_swapping import (
+    catch_diverged_energies,
     replace_array_elements_at_indices_with_other_elements_in_z_table,
     swap_single_particle,
     sweep_all_elements,
@@ -106,3 +107,16 @@ def test_swap_single_particle_swaps_correct_index_when_probability_is_peaked():
     for mol in mols:
         assert mol.get_atomic_numbers()[0] != 8
         assert mol.get_atomic_numbers()[1] == 1 or mol.get_atomic_numbers()[2] == 1
+
+
+@pytest.mark.parametrize(
+    "energies, num_atoms, expected",
+    [
+        (np.array([0, -1, -1.1]), 1, np.array([0, -1, 1e3])),
+        (np.array([0, -1, -1.1]), 2, np.array([0, -1, -1.1])),
+    ],
+)
+def test_catch_diverged_energies(energies, num_atoms, expected):
+    thresh = -1
+    out = catch_diverged_energies(energies, num_atoms, thresh)
+    np.testing.assert_allclose(out, expected)

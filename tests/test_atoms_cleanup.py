@@ -7,6 +7,7 @@ from mace.tools import AtomicNumberTable
 from moldiff.atoms_cleanup import (
     get_higest_energy_unswapped_idx,
     relax_elements,
+    relax_hydrogens,
     remove_isolated_atoms_fixed_cutoff,
     remove_isolated_atoms_using_covalent_radii,
 )
@@ -73,7 +74,7 @@ stretched_CC = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1.1]])
 )
 def test_remove_isolated_atoms_covalent_cutoff(atoms, expected):
     atoms_copy = atoms.copy()
-    pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
+    pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms, multiplier=1.0)
     assert atoms_copy == atoms  # check that the original atoms are not modified
     assert pruned_atoms == expected
 
@@ -92,6 +93,26 @@ def test_get_highest_energy_unswapped_idx():
         swapped_indices.append(idx)
         assert swapped_indices == expected_swapped_idx
 
+    # raise a value error if all indices are swapped
+    swapped_indices = [1, 4, 3, 0, 2]
+    with pytest.raises(ValueError):
+        get_higest_energy_unswapped_idx(swapped_indices, energies)
+
+
+def test_relax_hydrogens_keeps_positions_of_heavy_elements_unchanged(
+    loaded_mace_similarity_calculator,
+):
+    mols = [initialize_mol("H2O"), initialize_mol("CH4"), initialize_mol("C2H6")]
+    for mol in mols:
+        mol.info["calculation_type"] = "mace"
+    relaxed_mols = relax_hydrogens(mols, loaded_mace_similarity_calculator)
+    for mol, relaxed_mol in zip(mols, relaxed_mols):
+        non_h_indices = np.where(mol.get_atomic_numbers() != 1)[0]
+        np.testing.assert_allclose(
+            mol.get_positions()[non_h_indices],
+            relaxed_mol.get_positions()[non_h_indices],
+        )
+
 
 @pytest.fixture()
 def element_swapping_test_suite():
@@ -102,11 +123,9 @@ def element_swapping_test_suite():
         test_suite.append((mol.copy(), mol.copy()))
 
     # add a few mols that are incorrect and that have one obvious element to swap
-    mol = initialize_mol("H2O")
-    mol.set_atomic_numbers([1, 1, 1])
-    test_suite.append((mol.copy(), initialize_mol("H2O")))
-    mol.set_atomic_numbers([6, 1, 1])
-    test_suite.append((mol.copy(), initialize_mol("H2O")))
+    mol = initialize_mol("C2H6")
+    mol.set_atomic_numbers([6, 8, 1, 1, 1, 1, 1, 1])
+    test_suite.append((mol.copy(), initialize_mol("C2H6")))
 
     mol = initialize_mol("CH4")
     mol.set_atomic_numbers([7, 1, 1, 1, 1])

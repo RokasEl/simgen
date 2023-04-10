@@ -90,8 +90,24 @@ def collect_particles(
     ensemble: List[Atoms],
     beta: float,
 ) -> Atoms:
-    energies = np.array([mol.get_potential_energy() for mol in ensemble]) * beta * -1
+    energies = np.array([mol.get_potential_energy() for mol in ensemble])
     energies = energies.flatten()
+    num_atoms = np.mean([len(mol) for mol in ensemble])
+    energies = catch_diverged_energies(energies, num_atoms) * beta * -1
     probabilities = softmax(energies)
     collect_idx = np.random.choice(len(ensemble), p=probabilities)
     return duplicate_atoms(ensemble[collect_idx])
+
+
+def catch_diverged_energies(
+    energies: np.ndarray, num_atoms: float, energy_divergence_threshold: float = -5.0
+) -> np.ndarray:
+    """
+    ML potentials can have energy 'holes' where energy becomes super low, even though the structure contains wierd geometries.
+    This function catches these cases and sets the energy to a high value, so that the particle is not selected.
+    """
+    energy_holes_indices = np.where(energies < energy_divergence_threshold * num_atoms)[
+        0
+    ]
+    energies[energy_holes_indices] = 1e3
+    return energies

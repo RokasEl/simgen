@@ -7,6 +7,7 @@ from moldiff.hydrogenation import (
     check_hydrogen_position_is_valid,
     compute_exclusion_radius,
     get_exclusion_radii,
+    sample_number_of_hs_to_add,
 )
 from moldiff.utils import initialize_mol
 
@@ -90,3 +91,21 @@ def test_check_hydrogen_position_is_valid(proposed_position, atoms, expected):
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    "current_valance, max_valance, expected_mean, expected_var",
+    [
+        (1, 4, 0.75 * 3, 3 * 0.75 * 0.25),
+        (2, 4, 4 / 3, 4 / 9),
+        (3, 4, 0.5, 0.25),
+    ],
+)
+def test_sample_number_of_hs_to_add_has_correct_mean_and_var(
+    current_valance, max_valance, expected_mean, expected_var
+):
+    samples = [
+        sample_number_of_hs_to_add(current_valance, max_valance) for _ in range(10000)
+    ]
+    assert np.mean(samples) == pytest.approx(expected_mean, 0.01)
+    assert np.var(samples) == pytest.approx(expected_var, 0.01)
