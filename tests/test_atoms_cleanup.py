@@ -103,10 +103,15 @@ def test_relax_hydrogens_keeps_positions_of_heavy_elements_unchanged(
     loaded_mace_similarity_calculator,
 ):
     mols = [initialize_mol("H2O"), initialize_mol("CH4"), initialize_mol("C2H6")]
+    mol_with_bad_geometry = ase.Atoms(
+        "HCN", positions=np.asarray([[0, 0, 0], [0, 0, 1], [0, 0, 2]])
+    )
+    mols.append(mol_with_bad_geometry)
     for mol in mols:
         mol.info["calculation_type"] = "mace"
+    original_mols = [mol.copy() for mol in mols]
     relaxed_mols = relax_hydrogens(mols, loaded_mace_similarity_calculator)
-    for mol, relaxed_mol in zip(mols, relaxed_mols):
+    for mol, relaxed_mol in zip(original_mols, relaxed_mols):
         non_h_indices = np.where(mol.get_atomic_numbers() != 1)[0]
         np.testing.assert_allclose(
             mol.get_positions()[non_h_indices],

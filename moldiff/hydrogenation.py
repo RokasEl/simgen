@@ -9,6 +9,7 @@ from scipy.stats import binom
 from moldiff.generation_utils import (
     get_edge_array_and_neighbour_numbers,
 )
+from moldiff.hydrogenation_deterministic import build_xae_molecule
 
 NATURAL_VALENCES = frozendict(
     {6: 4, 7: 3, 8: 2, 9: 1, 15: 3, 16: 2, 17: 1, 35: 1, 53: 1}
@@ -26,6 +27,21 @@ def hydrogenate_stochastically(atoms):
             current_valence, max_valence
         )
 
+    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+    return atoms_with_hs
+
+
+def hydrogenate_deterministically(atoms):
+    positions, atomic_symbols = atoms.get_positions(), atoms.get_chemical_symbols()
+    atomic_numbers = atoms.get_atomic_numbers()
+    _, _, edge_array = build_xae_molecule(
+        positions, atomic_symbols, single_bond_stretch_factor=1.3
+    )
+    num_hs_to_add_per_atom = np.zeros(len(atoms)).astype(int)
+    for idx in range(len(atoms)):
+        current_neighbours = edge_array[idx, :].sum()
+        max_valence = NATURAL_VALENCES[atomic_numbers[idx]]
+        num_hs_to_add_per_atom[idx] = max_valence - current_neighbours
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
     return atoms_with_hs
 
