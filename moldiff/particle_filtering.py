@@ -74,7 +74,6 @@ class ParticleFilterGenerator:
         num_particles: int = 10,
         particle_swap_frequency: int = 1,
         do_final_cleanup: bool = True,
-        disconnected_atom_distance_threshold: float = 1.5,
     ):
         # initialise mol
         molecule.positions = (
@@ -110,7 +109,9 @@ class ParticleFilterGenerator:
             atoms = duplicate_atoms(trajectories[-1])
             atoms.calc = self.similarity_calculator
             cleaned = cleanup_atoms(
-                atoms, disconnected_atom_distance_threshold, swapping_z_table
+                atoms,
+                swapping_z_table,
+                num_element_sweeps=10,
             )
             trajectories.extend(cleaned)
         return trajectories
