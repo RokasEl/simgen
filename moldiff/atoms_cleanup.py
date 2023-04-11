@@ -157,4 +157,4 @@ def cleanup_atoms(
         element_relaxed_atoms, calc, calculation_type="mace"
     )
     lowest_energy_atoms = collect_particles(element_relaxed_atoms, beta=100.0)
-    return lowest_energy_atoms
+    return [pruned_atoms, *hydrogenated_atoms_ensemble, *element_relaxed_atoms, lowest_energy_atoms]

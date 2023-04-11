@@ -104,11 +104,6 @@ class ParticleFilterGenerator:
         if self.swapped:
             atoms = self._prepare_atoms_for_swap(atoms, self.sigmas[-1])
             atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
-            atoms.calc = self.similarity_calculator
-            atoms.info["calculation_type"] = "mace"
-            self.similarity_calculator.calculate(atoms)
-            logging.debug(f"Energies at final step: {atoms.get_potential_energies()}")
-            logging.debug(f"Total energy: {atoms.get_potential_energy()}")
             trajectories.append(atoms)
 
         if do_final_cleanup:
@@ -117,14 +112,7 @@ class ParticleFilterGenerator:
             cleaned = cleanup_atoms(
                 atoms, disconnected_atom_distance_threshold, swapping_z_table
             )
-            cleaned.calc = self.similarity_calculator
-            cleaned.info["calculation_type"] = "mace"
-            self.similarity_calculator.calculate(cleaned)
-            logging.debug(
-                f"Energies after cleaning: {cleaned.get_potential_energies()}"
-            )
-            logging.debug(f"Total energy: {cleaned.get_potential_energy()}")
-            trajectories.append(cleaned)
+            trajectories.extend(cleaned)
         return trajectories
 
     def _collect_and_swap(
