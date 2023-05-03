@@ -211,9 +211,11 @@ class HeunIntegrator:
         mol_increased.positions.grad = None
         forces = self.similarity_calculator(mol_increased, sigma_increased)
         forces = torch.tensor(forces, device=device)
+        anisotropicity_matrix = torch.tensor(np.diag((1.0, 1.0, 0.25)), device=device)
         forces += (
             -1
             * self.restorative_force_strength
+            * anisotropicity_matrix
             * mol_increased.positions
             * torch.tanh(20 * sigma_cur**2)
         )
