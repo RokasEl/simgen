@@ -4,7 +4,7 @@ import ase
 import numpy as np
 from ase.calculators.calculator import Calculator
 from ase.neighborlist import natural_cutoffs, neighbor_list
-from ase.optimize import BFGS
+from ase.optimize import LBFGS
 from mace.tools import AtomicNumberTable
 from scipy.stats import betabinom
 
@@ -16,12 +16,15 @@ from moldiff.generation_utils import (
     duplicate_atoms,
     get_edge_array_and_neighbour_numbers,
 )
-from moldiff.hydrogenation import hydrogenate_stochastically
+from moldiff.hydrogenation import (
+    hydrogenate_deterministically,
+    hydrogenate_stochastically,
+)
 
 
 def run_dynamics(atoms_list: List[ase.Atoms], num_steps=5, max_step=0.2):
     for atom in atoms_list:
-        dyn = BFGS(atom, maxstep=max_step)
+        dyn = LBFGS(atom, maxstep=max_step)
         dyn.run(fmax=0.01, steps=num_steps)
     return atoms_list
 
@@ -124,7 +127,7 @@ def relax_elements(
             ensemble, mol.calc, calculation_type="mace", mask=mask
         )
         if should_run_dynamics:
-            ensemble = run_dynamics(ensemble)
+            ensemble = run_dynamics(ensemble, num_steps=5)
         mol = collect_particles(ensemble, beta=100.0)
     return mol
 
@@ -141,27 +144,31 @@ def cleanup_atoms(
     assert atoms.calc is not None
     calc: Calculator = atoms.calc
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
-    hydrogenated_atoms_ensemble = [
-        hydrogenate_stochastically(pruned_atoms) for _ in range(num_hydrogenations)
-    ]
-    hydrogenated_atoms_ensemble = relax_hydrogens(
-        hydrogenated_atoms_ensemble, calc, num_steps=20, max_step=0.1
+    pruned_relaxed_atoms = pruned_atoms.copy()
+    pruned_relaxed_atoms = attach_calculator(
+        [pruned_relaxed_atoms], calc, calculation_type="mace"
     )
-    element_relaxed_atoms = [
-        relax_elements(
-            hydrogenated_atoms,
-            z_table,
-            num_element_sweeps=num_element_sweeps,
-        )
-        for hydrogenated_atoms in hydrogenated_atoms_ensemble
-    ]
-    element_relaxed_atoms = attach_calculator(
-        element_relaxed_atoms, calc, calculation_type="mace"
+    pruned_relaxed_atoms = run_dynamics(
+        pruned_relaxed_atoms, num_steps=5, max_step=0.2 / 5
+    )[0]
+    hydrogenated_atoms = hydrogenate_deterministically(pruned_relaxed_atoms)
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=20, max_step=0.1
+    )[0]
+    element_relaxed_atoms = relax_elements(
+        relaxed_hydrogenated_atoms, z_table, num_element_sweeps=num_element_sweeps
     )
-    lowest_energy_atoms = collect_particles(element_relaxed_atoms, beta=100.0)
+    final_relaxed_atoms = attach_calculator(
+        [element_relaxed_atoms.copy()], calc, calculation_type="mace"
+    )
+    final_relaxed_atoms = run_dynamics(
+        final_relaxed_atoms, num_steps=100, max_step=0.2
+    )[0]
     return [
         pruned_atoms,
-        *hydrogenated_atoms_ensemble,
-        *element_relaxed_atoms,
-        lowest_energy_atoms,
+        pruned_relaxed_atoms,
+        hydrogenated_atoms,
+        relaxed_hydrogenated_atoms,
+        element_relaxed_atoms,
+        final_relaxed_atoms,
     ]

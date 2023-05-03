@@ -41,7 +41,7 @@ def calculate_restorative_force_strength(num_atoms: int | float) -> float:
 
 def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
-    pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
+    pretrained_mace = "./models/SPICE_sm_inv_neut_E0_swa.model"
     pretrained_model = torch.load(pretrained_mace)
     print(pretrained_model)
     model = ScaleShiftMACE(
@@ -101,7 +101,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/two_step_generation/"
+    destination = "./scripts/Generated_trajectories/two_step_generation_deterministic/"
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8])
