@@ -101,7 +101,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/two_step_generation_deterministic/"
+    destination = "./scripts/Generated_trajectories/non_isotropic_generation/"
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8])
