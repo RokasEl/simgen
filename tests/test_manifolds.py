@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import torch
 
 from moldiff.manifolds import (
     MultivariateGaussianPrior,
@@ -20,6 +21,11 @@ def test_standard_gaussian_prior_calculates_correct_restorative_forces():
             np.array([[1.0, 0.0], [0.0, 1.0]]),
             np.array([[1.0, -1.0], [-1.0, 1.0]]),
             np.array([[-1.0, 1.0], [1.0, -1.0]]),
+        ),
+        (
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            torch.tensor(np.array([[1.0, -1.0], [-1.0, 1.0]])),
+            torch.tensor([[-1.0, 1.0], [1.0, -1.0]]),
         ),
         (
             np.array([[0.5, 0.0], [0.0, 2.0]]),

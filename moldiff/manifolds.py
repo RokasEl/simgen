@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import ase
 import numpy as np
 import numpy.typing as npt
+import torch
 
 
 class PriorManifold(ABC):
@@ -11,7 +12,9 @@ class PriorManifold(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def calculate_resorative_forces(self, positions: npt.NDArray) -> npt.ArrayLike:
+    def calculate_resorative_forces(
+        self, positions: npt.NDArray | torch.Tensor
+    ) -> npt.NDArray | torch.Tensor:
         raise NotImplementedError
 
 
@@ -23,7 +26,7 @@ class StandardGaussianPrior(PriorManifold):
 
     @staticmethod
     def calculate_resorative_forces(
-        positions: np.ndarray,
+        positions: np.ndarray | torch.Tensor,
     ) -> npt.ArrayLike:
         return -1 * positions
 
@@ -48,8 +51,11 @@ class MultivariateGaussianPrior(PriorManifold):
 
     def calculate_resorative_forces(
         self,
-        positions: np.ndarray,
+        positions: np.ndarray | torch.Tensor,
     ) -> npt.ArrayLike:
+        precision_matrix = self.precision_matrix
+        if isinstance(positions, torch.Tensor):
+            precision_matrix = torch.from_numpy(precision_matrix).to(positions.device)
         return -1 * positions @ self.precision_matrix
 
     @staticmethod
