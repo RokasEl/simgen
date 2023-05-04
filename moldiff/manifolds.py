@@ -56,7 +56,7 @@ class MultivariateGaussianPrior(PriorManifold):
         precision_matrix = self.precision_matrix
         if isinstance(positions, torch.Tensor):
             precision_matrix = torch.from_numpy(precision_matrix).to(positions.device)
-        return -1 * positions @ self.precision_matrix
+        return -1 * positions @ precision_matrix
 
     @staticmethod
     def _ensure_covariance_determinant_is_one(

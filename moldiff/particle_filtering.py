@@ -29,7 +29,7 @@ class ParticleFilterGenerator:
         self,
         similarity_calculator: MaceSimilarityCalculator,
         guiding_manifold=MultivariateGaussianPrior(
-            covariance_matrix=np.diagonal([1, 1, 2])
+            covariance_matrix=np.diag([1.0, 1.0, 4.0])
         ),
         num_steps=100,
         device="cuda" if torch.cuda.is_available() else "cpu",
@@ -37,7 +37,7 @@ class ParticleFilterGenerator:
         noise_params=SamplerNoiseParameters(),
     ):
         self.similarity_calculator = similarity_calculator
-
+        self.guiding_manifold = guiding_manifold
         self.z_table = AtomicNumberTable(
             [int(z) for z in similarity_calculator.model.atomic_numbers]
         )
@@ -77,9 +77,8 @@ class ParticleFilterGenerator:
         do_final_cleanup: bool = True,
     ):
         # initialise mol
-        molecule.positions = (
-            np.random.randn(*molecule.positions.shape) * self.sigmas[0].item()
-        )
+        molecule = self.guiding_manifold.initialise_positions(molecule)
+        molecule.positions *= self.sigmas[0].item()
         trajectories = [molecule]
 
         atoms = [duplicate_atoms(molecule)]
