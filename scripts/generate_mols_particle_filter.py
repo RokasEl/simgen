@@ -29,6 +29,7 @@ from mace.tools import AtomicNumberTable
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
 from moldiff.generation_utils import remove_elements
+from moldiff.manifolds import HeartPointCloudPrior
 from moldiff.sampling import MaceSimilarityScore
 
 
@@ -101,7 +102,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/non_isotropic_generation/"
+    destination = "./scripts/Generated_trajectories/point_cloud_generation/"
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8])
@@ -117,6 +118,7 @@ def main():
             score_model,
             num_steps=150,
             noise_params=noise_params,
+            guiding_manifold=HeartPointCloudPrior(beta=5.0),
             restorative_force_strength=restorative_force_strength,
         )
         trajectories = particle_filter.generate(

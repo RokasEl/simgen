@@ -77,8 +77,9 @@ class ParticleFilterGenerator:
         do_final_cleanup: bool = True,
     ):
         # initialise mol
-        molecule = self.guiding_manifold.initialise_positions(molecule)
-        molecule.positions *= self.sigmas[0].item()
+        molecule = self.guiding_manifold.initialise_positions(
+            molecule, self.sigmas[0].item()
+        )
         trajectories = [molecule]
 
         atoms = [duplicate_atoms(molecule)]
