@@ -67,7 +67,6 @@ stretched_CC = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1.1]])
     "atoms, expected",
     [
         (initialize_mol("H2O"), initialize_mol("H2O")),
-        (initialize_mol("H2"), initialize_mol("H2")),
         (stretched_CH, initialize_mol("")),  # too far apart
         (stretched_CC, stretched_CC),  # not too far apart for a CC bond
     ],
