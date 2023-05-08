@@ -24,12 +24,14 @@ class HeunIntegrator:
         self.restorative_force_strength = restorative_force_strength
         self.device = device
 
-    def __call__(self, x: AtomicData, step: int, sigma_cur, sigma_next):
+    def __call__(self, x: AtomicData, step: int, sigma_cur, sigma_next, mask=None):
         """
         This does NOT update the neighbout list. DANGER!
         """
         S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
         mol_cur = x.clone()
+        if mask is None:
+            mask = torch.ones(len(x)).to(self.device)
         # mol_cur.positions.requires_grad = True
 
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
@@ -42,7 +44,9 @@ class HeunIntegrator:
         logging.debug(f"Current step: {step}")
         logging.debug(f"Noise added to positions: {noise_level:.2e}")
         with torch.no_grad():
-            mol_cur.positions += torch.randn_like(mol_cur.positions) * noise_level
+            mol_cur.positions += (
+                torch.randn_like(mol_cur.positions) * noise_level * mask
+            )
 
         mol_increased = mol_cur
         device = mol_increased.positions.device
@@ -60,7 +64,7 @@ class HeunIntegrator:
             * restorative_forces
             * torch.tanh(20 * sigma_cur**2)
         )
-
+        forces *= mask
         mol_next = mol_cur.clone()
         logging.debug(f"Step size = {abs(sigma_next - sigma_increased):.2e}")
         with torch.no_grad():
@@ -71,7 +75,7 @@ class HeunIntegrator:
             mol_next.positions.grad = None
 
             forces_next = self.similarity_calculator(mol_next, sigma_next)
-            forces_next = torch.tensor(forces_next, device=device)
+            forces_next = torch.tensor(forces_next, device=device) * mask
 
             mol_next = mol_increased.clone()
             with torch.no_grad():

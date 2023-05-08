@@ -1,10 +1,12 @@
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 from mace.tools import AtomicNumberTable
-from pytest_mock import mocker
 
 from moldiff.element_swapping import (
     catch_diverged_energies,
+    create_element_swapped_particles,
     replace_array_elements_at_indices_with_other_elements_in_z_table,
     swap_single_particle,
     sweep_all_elements,
@@ -120,3 +122,45 @@ def test_catch_diverged_energies(energies, num_atoms, expected):
     thresh = -1
     out = catch_diverged_energies(energies, num_atoms, thresh)
     np.testing.assert_allclose(out, expected)
+
+
+def test_create_element_swapped_particles_doesnt_swap_masked_particles():
+    atoms = initialize_mol("C6H6")
+    calc = MagicMock()
+    calc.get_potential_energies = MagicMock(
+        return_value=np.ones_like(atoms, dtype=float)
+    )
+    atoms.calc = calc
+    # no mask, all atoms should be swapped at least once
+    ensemble = create_element_swapped_particles(atoms, 1, 100, z_table=z_table)
+    swaps = [x.numbers == atoms.numbers for x in ensemble]
+    swaps = np.stack(swaps, axis=0)
+    all_positions_changed = (~swaps).any(axis=0).all()
+    assert all_positions_changed
+
+    mask = np.concatenate([np.ones(6), np.zeros(6)])
+    ensemble = create_element_swapped_particles(
+        atoms, 1, 100, z_table=z_table, mask=mask
+    )
+    swaps = [x.numbers == atoms.numbers for x in ensemble]
+    swaps = np.stack(swaps, axis=0)
+    first_six_pos_all_changed = (~swaps[:, :6]).any(axis=0).all()
+    assert first_six_pos_all_changed
+    masked_positions_all_unchanged = (swaps[:, 6:]).all(axis=0).all()
+    assert masked_positions_all_unchanged
+
+    # TODO: write a test for the case when energies peaked around one atom
+    atoms = initialize_mol("C6H6")
+    calc = MagicMock()
+    energies = np.zeros(12)
+    energies[-1] = 99999  # high energy of masked atoms should not matter
+    calc.get_potential_energies = MagicMock(return_value=energies)
+    atoms.calc = calc
+    mask = np.concatenate([np.ones(6), np.zeros(6)])
+    ensemble = create_element_swapped_particles(
+        atoms, 1, 100, z_table=z_table, mask=mask
+    )
+    swaps = [x.numbers == atoms.numbers for x in ensemble]
+    swaps = ~np.stack(swaps, axis=0)
+    assert swaps[:, 6:].sum() == 0
+    assert np.allclose(swaps[:, :6].sum(axis=0), 99 / 6, rtol=0.5)

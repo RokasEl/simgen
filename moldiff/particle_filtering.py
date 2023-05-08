@@ -75,11 +75,17 @@ class ParticleFilterGenerator:
         num_particles: int = 10,
         particle_swap_frequency: int = 1,
         do_final_cleanup: bool = True,
+        scaffold: ase.Atoms | None = None,
     ):
         # initialise mol
         molecule = self.guiding_manifold.initialise_positions(
             molecule, self.sigmas[0].item()
         )
+        if not scaffold is None:
+            molecule, mask = self._merge_scaffold_and_create_mask(molecule, scaffold)
+        else:
+            mask = np.ones(len(molecule))
+        torch_mask = torch.tensor(mask).to(self.device)
         trajectories = [molecule]
 
         atoms = [duplicate_atoms(molecule)]
@@ -94,10 +100,11 @@ class ParticleFilterGenerator:
                     beta=self.thermostat(sigma_next),
                     num_particles=num_particles,
                     z_table=swapping_z_table,
+                    mask=mask,
                 )
                 batched = self.batch_atoms(atoms)
 
-            batched = self.integrator(batched, step, sigma_cur, sigma_next)
+            batched = self.integrator(batched, step, sigma_cur, sigma_next, mask)
             atoms = get_atoms_from_batch(batched, self.z_table)
             trajectories.extend(atoms)
 
@@ -118,7 +125,7 @@ class ParticleFilterGenerator:
         return trajectories
 
     def _collect_and_swap(
-        self, atoms_list: List[ase.Atoms], beta, num_particles, z_table
+        self, atoms_list: List[ase.Atoms], beta, num_particles, z_table, mask
     ):
         if self.swapped:
             collected_mol = collect_particles(atoms_list, beta)  # type: ignore
@@ -132,6 +139,7 @@ class ParticleFilterGenerator:
             beta=beta,
             num_particles=num_particles,
             z_table=z_table,
+            mask=mask,
         )
         self.swapped = True
         return atom_ensemble
@@ -147,6 +155,12 @@ class ParticleFilterGenerator:
             mol.info["calculation_type"] = "similarity"
             mol.calc = self.similarity_calculator
         return atoms_list
+
+    @staticmethod
+    def _merge_scaffold_and_create_mask(molecule: ase.Atoms, scaffold: ase.Atoms):
+        merged = molecule.copy() + scaffold.copy()
+        mask = np.concatenate([np.ones(len(molecule)), np.zeros(len(scaffold))], axis=0)
+        return merged, mask
 
     def _get_sigma_schedule(self, num_steps: int):
         step_indices = torch.arange(num_steps).to(self.device)

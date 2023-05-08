@@ -55,13 +55,16 @@ def get_how_many_to_change(num_particles: int, beta: float) -> int:
 
 
 def create_element_swapped_particles(
-    atoms: Atoms, beta: float, num_particles: int, z_table: AtomicNumberTable
+    atoms: Atoms, beta: float, num_particles: int, z_table: AtomicNumberTable, mask=None
 ) -> List[Atoms]:
     assert atoms.calc is not None
+    if mask is None:
+        mask = np.ones(len(atoms))
     energies = (
         atoms.get_potential_energies() * beta
     )  # no minus sign since we want to swap the highest energy atom
-    probabilities = softmax(energies)
+    energies[mask == 0] = -np.inf
+    probabilities = apply_mask_to_probabilities(softmax(energies), mask)
     logging.debug(f"Probabilities: {probabilities}, beta: {beta}")
     ensemble = [duplicate_atoms(atoms)]
     to_generate = num_particles - 1
@@ -73,17 +76,23 @@ def create_element_swapped_particles(
         to_generate = num_particles - already_generated_num
         logging.debug(f"Sweeping particle {idx} with {to_generate} particles")
         logging.debug(f"Generating additional {to_generate} particles")
-        probabilities = np.ones(len(atoms)) / len(atoms)
+        probabilities = apply_mask_to_probabilities(np.ones(len(atoms)), mask)
 
     if to_generate > 0:
         non_zero_ps = np.count_nonzero(probabilities)
         for _ in range(to_generate):
-            num_change = min(get_how_many_to_change(len(atoms), beta), non_zero_ps)
+            num_change = min(get_how_many_to_change(sum(mask), beta), non_zero_ps)
             logging.debug(f"Num change: {num_change}")
             ensemble.append(
                 swap_single_particle(atoms, probabilities, num_change, z_table)
             )
     return ensemble
+
+
+def apply_mask_to_probabilities(probibilities, mask):
+    masked_probs = probibilities * mask
+    masked_probs /= masked_probs.sum()
+    return masked_probs
 
 
 def collect_particles(
