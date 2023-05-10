@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Sequence
 
 import numpy as np
 from ase import Atoms
@@ -9,16 +9,47 @@ from scipy.special import softmax
 from moldiff.generation_utils import duplicate_atoms
 
 
+class SwappingAtomicNumberTable(AtomicNumberTable):
+    def __init__(
+        self, zs: Sequence[int], swap_frequencies: None | Sequence[int | float] = None
+    ):
+        self.zs = zs
+        if swap_frequencies is None:
+            swap_frequencies = [1 for _ in zs]
+        if len(zs) != len(swap_frequencies):
+            raise ValueError(
+                "Swap frequencies must have the same number of elements as `zs`"
+            )
+        self.swap_frequencies = np.array(swap_frequencies)
+
+
 def replace_array_elements_at_indices_with_other_elements_in_z_table(
     atomic_numbers: np.ndarray,
     indices_to_replace: np.ndarray,
     z_table: AtomicNumberTable,
 ) -> np.ndarray:
     x = atomic_numbers.copy()
+    swapping_dictionary = get_element_and_swap_frequency_dictionary(z_table)
     for idx in indices_to_replace:
-        new_zs = np.setdiff1d(z_table.zs, x[idx])
-        x[idx] = np.random.choice(new_zs)
+        new_z = get_new_element_from_swapping_dictionary(x[idx], swapping_dictionary)
+        x[idx] = new_z
     return x
+
+
+def get_element_and_swap_frequency_dictionary(z_table):
+    if not isinstance(z_table, SwappingAtomicNumberTable):
+        swap_table = SwappingAtomicNumberTable(z_table.zs)
+    else:
+        swap_table = z_table
+    return dict(zip(swap_table.zs, swap_table.swap_frequencies))
+
+
+def get_new_element_from_swapping_dictionary(current_element, swap_dictionary):
+    temp_dict = swap_dictionary.copy()
+    temp_dict[current_element] = 0
+    keys, values = list(temp_dict.keys()), list(temp_dict.values())
+    ps = np.array(values) / np.sum(values)
+    return np.random.choice(keys, p=ps)
 
 
 def swap_single_particle(

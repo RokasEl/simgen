@@ -28,6 +28,7 @@ from mace.tools import AtomicNumberTable
 
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
+from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import remove_elements
 from moldiff.manifolds import (
     HeartPointCloudPrior,
@@ -109,7 +110,7 @@ def main():
 
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
-    swapping_z_table = AtomicNumberTable([6, 7, 8])
+    swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 3, 1])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)

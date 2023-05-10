@@ -5,8 +5,11 @@ import pytest
 from mace.tools import AtomicNumberTable
 
 from moldiff.element_swapping import (
+    SwappingAtomicNumberTable,
     catch_diverged_energies,
     create_element_swapped_particles,
+    get_element_and_swap_frequency_dictionary,
+    get_new_element_from_swapping_dictionary,
     replace_array_elements_at_indices_with_other_elements_in_z_table,
     swap_single_particle,
     sweep_all_elements,
@@ -164,3 +167,58 @@ def test_create_element_swapped_particles_doesnt_swap_masked_particles():
     swaps = ~np.stack(swaps, axis=0)
     assert swaps[:, 6:].sum() == 0
     assert np.allclose(swaps[:, :6].sum(axis=0), 99 / 6, rtol=0.5)
+
+
+@pytest.mark.parametrize(
+    "z_table, expected_dict",
+    [
+        (z_table, {1: 1, 6: 1, 7: 1, 8: 1, 9: 1}),
+        (
+            SwappingAtomicNumberTable(
+                zs=[
+                    1,
+                    6,
+                ],
+                swap_frequencies=[1, 10],
+            ),
+            {1: 1, 6: 10},
+        ),
+    ],
+)
+def test_get_element_and_swap_frequency_dictionary(z_table, expected_dict):
+    assert get_element_and_swap_frequency_dictionary(z_table) == expected_dict
+
+
+from collections import Counter
+
+
+@pytest.mark.parametrize(
+    "current_element, swap_dictionary",
+    [
+        (1, {1: 1, 6: 1, 7: 1, 8: 1, 9: 1}),
+        (1, {1: 1, 6: 10}),
+        (1, {1: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 0}),
+    ],
+)
+def test_get_new_element_from_swapping_dictionary(current_element, swap_dictionary):
+    new_elements = [
+        get_new_element_from_swapping_dictionary(current_element, swap_dictionary)
+        for _ in range(1000)
+    ]
+    assert all([x in swap_dictionary.keys() for x in new_elements])
+    assert all([x != current_element for x in new_elements])
+    actual_element_frequency = Counter(new_elements)
+    actual_element_frequency = {
+        k: v / len(new_elements) for k, v in actual_element_frequency.items()
+    }
+    this_dict = swap_dictionary.copy()
+    this_dict.pop(current_element)
+    for k in this_dict.keys():
+        if k not in actual_element_frequency:
+            actual_element_frequency[k] = 0
+    expected_element_frequency = {
+        k: v / sum(this_dict.values()) for k, v in this_dict.items()
+    }
+    assert actual_element_frequency == pytest.approx(
+        expected_element_frequency, abs=0.1
+    )
