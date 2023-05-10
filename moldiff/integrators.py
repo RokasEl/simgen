@@ -45,7 +45,7 @@ class HeunIntegrator:
         logging.debug(f"Noise added to positions: {noise_level:.2e}")
         with torch.no_grad():
             mol_cur.positions += (
-                torch.randn_like(mol_cur.positions) * noise_level * mask
+                torch.randn_like(mol_cur.positions) * noise_level * mask[:, None]
             )
 
         mol_increased = mol_cur
@@ -64,7 +64,7 @@ class HeunIntegrator:
             * restorative_forces
             * torch.tanh(20 * sigma_cur**2)
         )
-        forces *= mask
+        forces *= mask[:, None]
         mol_next = mol_cur.clone()
         logging.debug(f"Step size = {abs(sigma_next - sigma_increased):.2e}")
         with torch.no_grad():
@@ -75,7 +75,7 @@ class HeunIntegrator:
             mol_next.positions.grad = None
 
             forces_next = self.similarity_calculator(mol_next, sigma_next)
-            forces_next = torch.tensor(forces_next, device=device) * mask
+            forces_next = torch.tensor(forces_next, device=device) * mask[:, None]
 
             mol_next = mol_increased.clone()
             with torch.no_grad():

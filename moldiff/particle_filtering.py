@@ -85,7 +85,7 @@ class ParticleFilterGenerator:
             molecule, mask = self._merge_scaffold_and_create_mask(molecule, scaffold)
         else:
             mask = np.ones(len(molecule))
-        torch_mask = torch.tensor(mask).to(self.device)
+        torch_mask = torch.tensor(mask).repeat(num_particles).to(self.device)
         trajectories = [molecule]
 
         atoms = [duplicate_atoms(molecule)]
@@ -104,7 +104,7 @@ class ParticleFilterGenerator:
                 )
                 batched = self.batch_atoms(atoms)
 
-            batched = self.integrator(batched, step, sigma_cur, sigma_next, mask)
+            batched = self.integrator(batched, step, sigma_cur, sigma_next, torch_mask)
             atoms = get_atoms_from_batch(batched, self.z_table)
             trajectories.extend(atoms)
 

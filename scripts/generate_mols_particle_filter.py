@@ -29,7 +29,10 @@ from mace.tools import AtomicNumberTable
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import EDMSampler, SamplerNoiseParameters
 from moldiff.generation_utils import remove_elements
-from moldiff.manifolds import HeartPointCloudPrior
+from moldiff.manifolds import (
+    HeartPointCloudPrior,
+    MultivariateGaussianPrior,
+)
 from moldiff.sampling import MaceSimilarityScore
 
 
@@ -102,7 +105,8 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/point_cloud_generation/"
+    destination = "./scripts/Generated_trajectories/conditional_generation/"
+
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = AtomicNumberTable([6, 7, 8])
@@ -117,12 +121,20 @@ def main():
         particle_filter = ParticleFilterGenerator(
             score_model,
             num_steps=150,
+            guiding_manifold=MultivariateGaussianPrior(
+                covariance_matrix=np.diag([4.0, 4.0, 0.5])
+            ),
             noise_params=noise_params,
-            guiding_manifold=HeartPointCloudPrior(beta=5.0),
             restorative_force_strength=restorative_force_strength,
         )
+        scaffold = initialize_mol("C6H6")
+        scaffold = scaffold[:6]
         trajectories = particle_filter.generate(
-            mol, swapping_z_table, num_particles=10, particle_swap_frequency=4
+            mol,
+            swapping_z_table,
+            num_particles=10,
+            particle_swap_frequency=4,
+            scaffold=scaffold,
         )
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",
