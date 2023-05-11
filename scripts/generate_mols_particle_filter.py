@@ -106,11 +106,11 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/conditional_generation/"
+    destination = "./scripts/Generated_trajectories/much_oxygen/"
 
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
-    swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 3, 1])
+    swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 100])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)
@@ -135,7 +135,7 @@ def main():
             swapping_z_table,
             num_particles=10,
             particle_swap_frequency=4,
-            scaffold=scaffold,
+            # scaffold=scaffold,
         )
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",
