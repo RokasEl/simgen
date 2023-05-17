@@ -200,6 +200,7 @@ def get_bond_order(
     distance: float,
     check_exists: bool = False,
     single_bond_stretch_factor: float = 1.0,
+    multi_bond_stretch_factor: float = 1.0,
 ):
     distance = 100 * distance
 
@@ -217,10 +218,10 @@ def get_bond_order(
 
         # Check if atoms in bonds2 dictionary.
         if atom1 in BONDS2 and atom2 in BONDS2[atom1]:
-            thr_bond2 = BONDS2[atom1][atom2]
+            thr_bond2 = BONDS2[atom1][atom2] * multi_bond_stretch_factor
             if distance < thr_bond2:
                 if atom1 in BONDS3 and atom2 in BONDS3[atom1]:
-                    thr_bond3 = BONDS3[atom1][atom2]
+                    thr_bond3 = BONDS3[atom1][atom2] * multi_bond_stretch_factor
                     if distance < thr_bond3:
                         return 3  # Triple
                 return 2  # Double
@@ -238,6 +239,7 @@ def build_xae_molecule(
     positions: npt.NDArray[np.float64],
     atom_types: List[str],
     single_bond_stretch_factor: float = 1.0,
+    multi_bond_stretch_factor: float = 1.0,
 ):
     """Returns a triplet (X, A, E): atom_types, adjacency matrix, edge_types
     args:
@@ -263,6 +265,7 @@ def build_xae_molecule(
                 pair[1],
                 dists[i, j],
                 single_bond_stretch_factor=single_bond_stretch_factor,
+                multi_bond_stretch_factor=multi_bond_stretch_factor,
             )
             if order > 0:
                 A[i, j] = 1

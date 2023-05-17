@@ -1,15 +1,27 @@
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.data import covalent_radii
 
 from moldiff.hydrogenation import (
     add_hydrogens_to_atoms,
     check_hydrogen_position_is_valid,
-    compute_exclusion_radius,
     get_exclusion_radii,
     sample_number_of_hs_to_add,
 )
 from moldiff.utils import initialize_mol
+
+
+@pytest.mark.parametrize(
+    "atoms, idx, expected",
+    [
+        (Atoms("CC"), 0, np.array([0.0, covalent_radii[6] * 2])),
+        (Atoms("OC"), 1, np.array([covalent_radii[6] + covalent_radii[8], 0.0])),
+    ],
+)
+def test_get_exclusion_radii(atoms, idx, expected):
+    exclusion_radii = get_exclusion_radii(atoms, idx)
+    np.testing.assert_array_almost_equal(exclusion_radii, expected)
 
 
 def test_add_hydrogen_to_atoms():
@@ -26,68 +38,39 @@ def test_add_hydrogen_to_atoms():
 
 
 @pytest.mark.parametrize(
-    "r1, r2, h_radius, expected",
-    [
-        (1, 1, 0, np.sqrt(5)),
-        (1, 1, 0.5, 1.3334),
-        (1, 2, 0.5, 1.5 * np.sqrt(5)),
-        (1, 1.2, 0.5, np.sqrt(313) / 10),
-        (1.2, 1.0, 0.5, 1.5594),
-    ],
-)
-def test_compute_exclusion_radius(r1, r2, h_radius, expected):
-    assert compute_exclusion_radius(r1, r2, h_radius) == pytest.approx(expected, 0.01)
-
-
-@pytest.mark.parametrize(
-    "atom_1_idx, atoms, expected",
-    [
-        (0, initialize_mol("CC"), np.array([0, 1.0])),
-        (1, initialize_mol("CC"), np.array([1.0, 0])),
-        (0, Atoms("CO"), np.array([0, 2.0])),
-        (1, Atoms("CO"), np.array([-1, 0])),
-    ],
-)
-def test_get_exlusion_radii(atom_1_idx, atoms, expected):
-    exclusion_radii_dict = {
-        6: {6: 1.0, 8: 2.0},
-        8: {6: -1.0, 8: -2.0},
-    }  # just simulate assymetric radii for testing purposes
-    out = get_exclusion_radii(atoms, atom_1_idx, exclusion_radii_dict)
-    np.testing.assert_allclose(out, expected)
-
-
-@pytest.mark.parametrize(
-    "proposed_position, atoms, expected",
+    "proposed_position, idx, atoms, expected",
     [
         (
             np.array([0.0, 0.0, 2]),
+            1,
             Atoms("CC", positions=np.array([[0, 0, 0], [0, 0, 1.4]])),
             True,
         ),
         (
             np.array([0.0, 0.0, 0.7]),
+            1,
             Atoms("CC", positions=np.array([[0, 0, 0], [0, 0, 1.4]])),
             False,
         ),
         (
             np.array([0.0, 0.0, 2]),
+            1,
             Atoms("CCC", positions=np.array([[0, 0, 0], [0, 0, 1.4], [0, 0, 2.8]])),
             False,
         ),
         (
-            np.array([0.0, 1.0, 1.4]),
+            np.array([0.0, 1.2, 1.4]),
+            1,
             Atoms("CCC", positions=np.array([[0, 0, 0], [0, 0, 1.4], [0, 0, 2.8]])),
             True,
         ),
     ],
 )
-def test_check_hydrogen_position_is_valid(proposed_position, atoms, expected):
-    exclusion_radii_dict = {6: {6: 0.819}}
-    exlcusion_radii = get_exclusion_radii(atoms, 1, exclusion_radii_dict)
+def test_check_hydrogen_position_is_valid(proposed_position, idx, atoms, expected):
+    exclusion_radii = get_exclusion_radii(atoms, idx)
     assert (
         check_hydrogen_position_is_valid(
-            proposed_position, exlcusion_radii, atoms.get_positions()
+            proposed_position, exclusion_radii, atoms.get_positions()
         )
         == expected
     )
