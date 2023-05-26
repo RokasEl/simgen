@@ -1,11 +1,24 @@
 import logging
 import os
 import sys
-from typing import Optional, Union
+from typing import List, Optional, Tuple, Union
 
+import ase.io as aio
 import numpy as np
+import torch
 from ase import Atoms
 from ase.build import molecule
+from e3nn import o3
+from mace.modules.blocks import (
+    RadialDistanceTransformBlock,
+    RealAgnosticInteractionBlock,
+    RealAgnosticResidualInteractionBlock,
+)
+from mace.modules.models import ScaleShiftMACE
+from torch import nn
+
+from moldiff.calculators import MaceSimilarityCalculator
+from moldiff.generation_utils import remove_elements
 
 QM9_PROPERTIES = (
     "rotational_constants",
@@ -125,3 +138,102 @@ def setup_logger(
         fh.setFormatter(formatter)
 
         logger.addHandler(fh)
+
+
+def get_mace_similarity_calculator(
+    model_path: str,
+    reference_data_path: str,
+    num_reference_mols: int = 256,
+    num_to_sample_uniformly_per_size: int = 2,
+    device: str = "cuda",
+    rng: np.random.Generator | None = None,
+) -> MaceSimilarityCalculator:
+    mace_model = get_loaded_mace_model(model_path, device)
+    if rng is None:
+        rng = np.random.default_rng(0)
+    reference_data = get_reference_data(
+        reference_data_path, rng, num_reference_mols, num_to_sample_uniformly_per_size
+    )
+    mace_similarity_calculator = MaceSimilarityCalculator(
+        mace_model, reference_data=reference_data, device=device
+    )
+    return mace_similarity_calculator
+
+
+def get_loaded_mace_model(model_path: str, device: str = "cuda") -> nn.Module:
+    pretrained_model = torch.load(model_path)
+    model = ScaleShiftMACE(
+        r_max=4.5,
+        num_bessel=8,
+        num_polynomial_cutoff=5,
+        radial_MLP=[64, 64, 64],
+        max_ell=3,
+        num_interactions=2,
+        num_elements=10,
+        atomic_energies=np.zeros(10),
+        avg_num_neighbors=15.653135299682617,
+        correlation=3,
+        interaction_cls_first=RealAgnosticInteractionBlock,
+        interaction_cls=RealAgnosticResidualInteractionBlock,
+        hidden_irreps=o3.Irreps("96x0e"),
+        MLP_irreps=o3.Irreps("16x0e"),
+        atomic_numbers=[1, 6, 7, 8, 9, 15, 16, 17, 35, 53],
+        gate=torch.nn.functional.silu,
+        atomic_inter_scale=1.088502,
+        atomic_inter_shift=0.0,
+    )
+    model.load_state_dict(pretrained_model.state_dict(), strict=False)
+    model.radial_embedding = RadialDistanceTransformBlock(
+        r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+    )
+    model.to(device)
+    for param in model.parameters():
+        param.requires_grad = False
+    model.eval()
+    return model
+
+
+def get_reference_data(
+    reference_data_path: str,
+    rng: np.random.Generator,
+    num_reference_mols: int = 256,
+    num_to_sample_uniformly_per_size: int = 2,
+) -> List[Atoms]:
+    """
+    Reference data is assumed to be a single xyz file containing all reference molecules.
+    """
+    all_data = aio.read(reference_data_path, index=":", format="extxyz")
+    all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
+
+    if num_to_sample_uniformly_per_size > 0:
+        training_data, already_sampled_indices = sample_uniformly_across_heavy_atom_number(all_data, num_to_sample_uniformly_per_size, rng)  # type: ignore
+        already_sampled = len(training_data)
+        all_data = [
+            mol
+            for idx, mol in enumerate(all_data)
+            if idx not in already_sampled_indices
+        ]
+    else:
+        training_data = []
+        already_sampled = 0
+
+    # now add further random molecules
+    too_add = num_reference_mols - already_sampled
+    all_data = np.asarray(all_data, dtype=object)
+    rand_mols = [x for x in rng.choice(all_data, size=too_add, replace=False)]
+    training_data.extend(rand_mols)
+
+    return training_data
+
+
+def sample_uniformly_across_heavy_atom_number(
+    data: List[Atoms], num_mols_per_size: int, rng: np.random.Generator
+) -> Tuple[List[Atoms], List[int]]:
+    mol_sizes = {len(mol) for mol in data}
+    selected_indices = []
+    for size in mol_sizes:
+        indices = np.where(np.asarray([len(mol) for mol in data]) == size)[0]
+        num_to_pick = min(num_mols_per_size, len(indices))
+        selected_indices.extend(rng.choice(indices, size=num_to_pick, replace=False))
+    sampled_mols = [data[idx].copy() for idx in selected_indices]
+    return sampled_mols, selected_indices

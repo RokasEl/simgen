@@ -20,7 +20,7 @@ from moldiff.generation_utils import (
     get_atoms_from_batch,
 )
 from moldiff.integrators import HeunIntegrator
-from moldiff.manifolds import MultivariateGaussianPrior
+from moldiff.manifolds import MultivariateGaussianPrior, PriorManifold
 from moldiff.temperature_annealing import ExponentialThermostat
 
 
@@ -28,7 +28,7 @@ class ParticleFilterGenerator:
     def __init__(
         self,
         similarity_calculator: MaceSimilarityCalculator,
-        guiding_manifold=MultivariateGaussianPrior(
+        guiding_manifold: PriorManifold = MultivariateGaussianPrior(
             covariance_matrix=np.diag([1.0, 1.0, 4.0])
         ),
         num_steps=100,
@@ -81,16 +81,46 @@ class ParticleFilterGenerator:
         molecule = self.guiding_manifold.initialise_positions(
             molecule, self.sigmas[0].item()
         )
-        if not scaffold is None:
-            molecule, mask = self._merge_scaffold_and_create_mask(molecule, scaffold)
-        else:
-            mask = np.ones(len(molecule))
-        torch_mask = torch.tensor(mask).repeat(num_particles).to(self.device)
+        molecule, mask, torch_mask = self._merge_scaffold_and_create_mask(
+            molecule, scaffold, num_particles, self.device
+        )
         trajectories = [molecule]
 
-        atoms = [duplicate_atoms(molecule)]
+        # main generation loop
+        intermediate_configs = self._maximise_log_similarity(
+            molecule.copy(),
+            particle_swap_frequency,
+            num_particles,
+            swapping_z_table,
+            mask,
+            torch_mask,
+        )
+        trajectories.extend(intermediate_configs)
+
+        if do_final_cleanup:
+            atoms = duplicate_atoms(trajectories[-1])
+            atoms.calc = self.similarity_calculator
+            cleaned = cleanup_atoms(
+                atoms,
+                swapping_z_table,
+                num_element_sweeps=10,
+            )
+            trajectories.extend(cleaned)
+        return trajectories
+
+    def _maximise_log_similarity(
+        self,
+        initial_atoms: ase.Atoms,
+        particle_swap_frequency: int,
+        num_particles: int,
+        swapping_z_table: AtomicNumberTable,
+        mask: np.ndarray,
+        torch_mask: torch.Tensor,
+    ):
+        atoms = [duplicate_atoms(initial_atoms)]
         batched = self.batch_atoms(atoms)
         self.swapped = False
+        intermediate_configs = []
         for step in range(self.num_steps - 1):
             sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
             if step % particle_swap_frequency == 0 and num_particles > 1:
@@ -106,23 +136,13 @@ class ParticleFilterGenerator:
 
             batched = self.integrator(batched, step, sigma_cur, sigma_next, torch_mask)
             atoms = get_atoms_from_batch(batched, self.z_table)
-            trajectories.extend(atoms)
+            intermediate_configs.extend(atoms)
 
         if self.swapped:
             atoms = self._prepare_atoms_for_swap(atoms, self.sigmas[-1])
             atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
-            trajectories.append(atoms)
-
-        if do_final_cleanup:
-            atoms = duplicate_atoms(trajectories[-1])
-            atoms.calc = self.similarity_calculator
-            cleaned = cleanup_atoms(
-                atoms,
-                swapping_z_table,
-                num_element_sweeps=10,
-            )
-            trajectories.extend(cleaned)
-        return trajectories
+            intermediate_configs.append(atoms)
+        return intermediate_configs
 
     def _collect_and_swap(
         self, atoms_list: List[ase.Atoms], beta, num_particles, z_table, mask
@@ -157,10 +177,22 @@ class ParticleFilterGenerator:
         return atoms_list
 
     @staticmethod
-    def _merge_scaffold_and_create_mask(molecule: ase.Atoms, scaffold: ase.Atoms):
+    def _merge_scaffold_and_create_mask(
+        molecule: ase.Atoms,
+        scaffold: ase.Atoms | None,
+        num_particles: int,
+        device: str = "cpu",
+    ):
+        if scaffold is None:
+            return (
+                molecule,
+                np.ones(len(molecule)),
+                torch.ones(len(molecule)).repeat(num_particles).to(device),
+            )
         merged = molecule.copy() + scaffold.copy()
         mask = np.concatenate([np.ones(len(molecule)), np.zeros(len(scaffold))], axis=0)
-        return merged, mask
+        torch_mask = torch.tensor(mask).repeat(num_particles).to(device)
+        return merged, mask, torch_mask
 
     def _get_sigma_schedule(self, num_steps: int):
         step_indices = torch.arange(num_steps).to(self.device)

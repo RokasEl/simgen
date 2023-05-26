@@ -25,6 +25,13 @@ def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
     return atoms_copy
 
 
+def calculate_restorative_force_strength(num_atoms: int | float) -> float:
+    sqrt_prefactor = 1.5664519
+    bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
+    force_strength = 1 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2
+    return force_strength
+
+
 def change_indices_to_atomic_numbers(
     indices: np.ndarray, z_table: AtomicNumberTable
 ) -> np.ndarray:
