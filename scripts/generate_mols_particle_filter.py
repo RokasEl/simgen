@@ -28,6 +28,7 @@ from moldiff.generation_utils import (
 from moldiff.manifolds import (
     HeartPointCloudPrior,
     MultivariateGaussianPrior,
+    PointCloudPrior,
 )
 
 
@@ -47,11 +48,11 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/much_oxygen/"
+    destination = "./scripts/Generated_trajectories/circles/"
 
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
-    swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 100])
+    swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
         size = rng.integers(3, 29)
@@ -69,8 +70,8 @@ def main():
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
-        scaffold = initialize_mol("C6H6")
-        scaffold = scaffold[:6]
+        # scaffold = initialize_mol("C6H6")
+        # scaffold = scaffold[:6]
         trajectories = particle_filter.generate(
             mol,
             swapping_z_table,
