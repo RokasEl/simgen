@@ -1,9 +1,12 @@
+import warnings
 from abc import ABC, abstractmethod
+from itertools import cycle
 
 import ase
 import numpy as np
 import numpy.typing as npt
 import torch
+from einops import einsum, reduce
 from scipy.special import softmax
 
 
@@ -19,7 +22,17 @@ class PriorManifold(ABC):
         raise NotImplementedError
 
 
-class StandardGaussianPrior(PriorManifold):
+class PointShape(ABC):
+    precision_matrix = np.eye(3)
+
+    @abstractmethod
+    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+        raise NotImplementedError
+
+
+class StandardGaussianPrior(PriorManifold, PointShape):
+    precision_matrix = np.eye(3)
+
     def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
         mol = molecule.copy()
         mol.set_positions(np.random.randn(*mol.positions.shape) * scale)
@@ -31,21 +44,27 @@ class StandardGaussianPrior(PriorManifold):
     ) -> npt.ArrayLike:
         return -1 * positions
 
+    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+        return np.random.randn(n, 3)
 
-class MultivariateGaussianPrior(PriorManifold):
+
+class MultivariateGaussianPrior(PriorManifold, PointShape):
     def __init__(self, covariance_matrix: npt.NDArray[np.float64]):
         assert (
             covariance_matrix.ndim == 2
             and covariance_matrix.shape[0] == covariance_matrix.shape[1]
         )
-        self.covariance = self._ensure_covariance_determinant_is_one(covariance_matrix)
-        self.precision_matrix = np.linalg.inv(self.covariance)
-        self.mean = np.zeros(self.covariance.shape[0])
+        self.covariance_matrix = self._ensure_covariance_determinant_is_one(
+            covariance_matrix
+        )
+        self.precision_matrix = np.linalg.inv(self.covariance_matrix)
+        self.mean = np.zeros(self.covariance_matrix.shape[0])
 
     def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
         mol = molecule.copy()
         random_positions = (
-            np.random.multivariate_normal(self.mean, self.covariance, len(mol)) * scale
+            np.random.multivariate_normal(self.mean, self.covariance_matrix, len(mol))
+            * scale
         )
         mol.set_positions(random_positions)
         return mol
@@ -71,25 +90,36 @@ class MultivariateGaussianPrior(PriorManifold):
         covariance_matrix /= determinant ** (1 / covariance_matrix.shape[0])
         return covariance_matrix
 
+    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+        return np.random.multivariate_normal(self.mean, self.covariance_matrix, (n, 3))
+
 
 class PointCloudPrior(PriorManifold):
-    def __init__(self, points: npt.NDArray[np.float64], beta: float = 1.0):
+    def __init__(
+        self,
+        points: npt.NDArray[np.float64],
+        beta: float = 1.0,
+        point_shape: PointShape = StandardGaussianPrior(),
+    ):
         """
         points: (N, 3) array of points
         beta: 1/sigma of each point in the manifold, for calculating restorative force
         """
         self.points = points
         self.beta = beta
+        self.point_shape = point_shape
 
     def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
         """
-        Treat the point cload as a mixture of gaussians, and sample from it
+        Initialise the atom positions ensuring equal distribution around each point in the point cloud
         """
+        if len(molecule) < len(self.points):
+            warnings.warn("More points than atoms, some points will be unused")
         mol = molecule.copy()
-        atom_centres = np.random.randint(0, len(self.points), len(mol))
-        positions = (
-            self.points[atom_centres] + np.random.randn(*mol.positions.shape) * scale
-        )
+        next_atom_gen = cycle(range(len(self.points)))
+        atom_centres = np.array([next(next_atom_gen) for _ in range(len(mol))])
+        offsets = self.point_shape.get_n_positions(len(mol))
+        positions = self.points[atom_centres] + offsets * scale
         mol.set_positions(positions)
         return mol
 
@@ -100,22 +130,33 @@ class PointCloudPrior(PriorManifold):
         """
         Calculate the forces to move to the point cloud weighted by the softmin of the distance
         """
+        points, precision_matrix = self.points, self.point_shape.precision_matrix
         if isinstance(positions, torch.Tensor):
-            pos = positions.detach().cpu().numpy()
-        else:
-            pos = positions
+            points = torch.from_numpy(points).to(positions.device)
+            precision_matrix = torch.from_numpy(precision_matrix).to(positions.device)
+
+        differences = (
+            positions[:, None, :] - points[None, :, :]
+        )  # (n_atoms, n_points, 3)
         distances = (
-            np.linalg.norm(pos[:, None, :] - self.points[None, :, :], axis=-1)
-            * self.beta
-        )
-        weights = softmax(-distances, axis=-1)
-        forces = np.sum(
-            weights[:, :, None] * (pos[:, None, :] - self.points[None, :, :]),
-            axis=1,
-        )
-        if isinstance(positions, torch.Tensor):
-            forces = torch.from_numpy(forces).to(positions.device)
+            reduce(differences**2, "i j k -> i j", "sum") * self.beta
+        )  # (n_atoms, n_points)
+
+        weights = self.get_weights(distances)  # (n_atoms, n_points)
+        forces = einsum(
+            differences, precision_matrix, "i j k, k l -> i j l"
+        )  # (n_atoms, n_points, 3)
+        forces = reduce(
+            weights[:, :, None] * forces, "i j k -> i k", "sum"
+        )  # (n_atoms, 3)
         return -forces
+
+    @staticmethod
+    def get_weights(distance_matrix):
+        if isinstance(distance_matrix, torch.Tensor):
+            return torch.softmax(-distance_matrix, dim=-1)
+        else:
+            return softmax(-distance_matrix, axis=-1)
 
 
 class HeartPointCloudPrior(PointCloudPrior):
