@@ -153,3 +153,6 @@ wandb/*
 # Movie files
 *.avi
 *.mp4
+
+# slurm launch files
+launch_*
