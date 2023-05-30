@@ -193,6 +193,8 @@ NATURAL_VALENCES = frozendict(
     }
 )
 
+MARGIN1, MARGIN2, MARGIN3 = 10, 5, 3
+
 
 def get_bond_order(
     atom1: str,
@@ -201,8 +203,15 @@ def get_bond_order(
     check_exists: bool = False,
     single_bond_stretch_factor: float = 1.0,
     multi_bond_stretch_factor: float = 1.0,
+    use_margins: bool = False,
 ):
     distance = 100 * distance
+
+    def adjust_threshold(use_margins, threshold, margin, multiplier):
+        if use_margins:
+            return threshold + margin
+        else:
+            return threshold * multiplier
 
     # Check exists for large molecules where some atom pairs do not have a
     # typical bond length.
@@ -214,15 +223,24 @@ def get_bond_order(
 
     # margin1, margin2 and margin3 have been tuned to maximize the stability of
     # the QM9 true samples.
-    if distance < BONDS1[atom1][atom2] * single_bond_stretch_factor:
-
+    bond1_thresh = BONDS1[atom1][atom2]
+    bond1_thresh = adjust_threshold(
+        use_margins, bond1_thresh, MARGIN1, single_bond_stretch_factor
+    )
+    if distance < bond1_thresh:
         # Check if atoms in bonds2 dictionary.
         if atom1 in BONDS2 and atom2 in BONDS2[atom1]:
-            thr_bond2 = BONDS2[atom1][atom2] * multi_bond_stretch_factor
-            if distance < thr_bond2:
+            bond2_thresh = BONDS2[atom1][atom2]
+            bond2_thresh = adjust_threshold(
+                use_margins, bond2_thresh, MARGIN2, multi_bond_stretch_factor
+            )
+            if distance < bond2_thresh:
                 if atom1 in BONDS3 and atom2 in BONDS3[atom1]:
-                    thr_bond3 = BONDS3[atom1][atom2] * multi_bond_stretch_factor
-                    if distance < thr_bond3:
+                    bond3_thresh = BONDS3[atom1][atom2]
+                    bond3_thresh = adjust_threshold(
+                        use_margins, bond3_thresh, MARGIN3, multi_bond_stretch_factor
+                    )
+                    if distance < bond3_thresh:
                         return 3  # Triple
                 return 2  # Double
         return 1  # Single
@@ -240,6 +258,7 @@ def build_xae_molecule(
     atom_types: List[str],
     single_bond_stretch_factor: float = 1.0,
     multi_bond_stretch_factor: float = 1.0,
+    use_margins: bool = False,
 ):
     """Returns a triplet (X, A, E): atom_types, adjacency matrix, edge_types
     args:
@@ -266,6 +285,7 @@ def build_xae_molecule(
                 dists[i, j],
                 single_bond_stretch_factor=single_bond_stretch_factor,
                 multi_bond_stretch_factor=multi_bond_stretch_factor,
+                use_margins=use_margins,
             )
             if order > 0:
                 A[i, j] = 1

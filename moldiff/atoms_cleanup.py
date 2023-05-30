@@ -164,6 +164,9 @@ def cleanup_atoms(
     final_relaxed_atoms = run_dynamics(
         final_relaxed_atoms, num_steps=100, max_step=0.2
     )[0]
+    final_relaxed_atoms = remove_isolated_atoms_using_covalent_radii(
+        final_relaxed_atoms
+    )
     return [
         pruned_atoms,
         pruned_relaxed_atoms,

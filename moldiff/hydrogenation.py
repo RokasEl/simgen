@@ -32,7 +32,7 @@ def hydrogenate_stochastically(atoms):
 
 
 def hydrogenate_deterministically(
-    atoms, single_bond_stretch_factor=1.2, multi_bond_stretch_factor=1.05
+    atoms, single_bond_stretch_factor=1.1, multi_bond_stretch_factor=1.05
 ):
     positions, atomic_symbols = atoms.get_positions(), atoms.get_chemical_symbols()
     atomic_numbers = atoms.get_atomic_numbers()
