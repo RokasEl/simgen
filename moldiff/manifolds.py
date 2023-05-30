@@ -1,6 +1,5 @@
 import warnings
 from abc import ABC, abstractmethod
-from itertools import cycle
 
 import ase
 import numpy as np
