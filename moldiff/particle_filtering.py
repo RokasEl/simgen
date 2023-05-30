@@ -78,9 +78,7 @@ class ParticleFilterGenerator:
         scaffold: ase.Atoms | None = None,
     ):
         # initialise mol
-        molecule = self.guiding_manifold.initialise_positions(
-            molecule, self.sigmas[0].item()
-        )
+        molecule = self.guiding_manifold.initialise_positions(molecule, scale=0.5)
         molecule, mask, torch_mask = self._merge_scaffold_and_create_mask(
             molecule, scaffold, num_particles, self.device
         )

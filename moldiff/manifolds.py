@@ -12,7 +12,7 @@ from scipy.special import softmax
 
 class PriorManifold(ABC):
     @abstractmethod
-    def initialise_positions(self, molecule: ase.Atoms) -> ase.Atoms:
+    def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
         raise NotImplementedError
 
     @abstractmethod
@@ -91,7 +91,7 @@ class MultivariateGaussianPrior(PriorManifold, PointShape):
         return covariance_matrix
 
     def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
-        return np.random.multivariate_normal(self.mean, self.covariance_matrix, (n, 3))
+        return np.random.multivariate_normal(self.mean, self.covariance_matrix, (n,))
 
 
 class PointCloudPrior(PriorManifold):
@@ -111,13 +111,12 @@ class PointCloudPrior(PriorManifold):
 
     def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
         """
-        Initialise the atom positions ensuring equal distribution around each point in the point cloud
+        Initialise the atom positions randomly around the point cloud
         """
         if len(molecule) < len(self.points):
             warnings.warn("More points than atoms, some points will be unused")
         mol = molecule.copy()
-        next_atom_gen = cycle(range(len(self.points)))
-        atom_centres = np.array([next(next_atom_gen) for _ in range(len(mol))])
+        atom_centres = np.random.choice(len(self.points), len(mol), replace=False)
         offsets = self.point_shape.get_n_positions(len(mol))
         positions = self.points[atom_centres] + offsets * scale
         mol.set_positions(positions)
