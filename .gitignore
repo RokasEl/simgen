@@ -149,6 +149,7 @@ wandb/*
 *.csv
 *.tar.gz
 *.pkl
+*.dat
 
 # Movie files
 *.avi
@@ -156,3 +157,4 @@ wandb/*
 
 # slurm launch files
 launch_*
+slurm*
