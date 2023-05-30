@@ -1,17 +1,25 @@
 import abc
 
 import ase
+import networkx as nx
 import numpy as np
 import torch
 from pydantic import BaseModel, Field
 
-from moldiff.atoms_cleanup import relax_hydrogens
+from moldiff.atoms_cleanup import (
+    attach_calculator,
+    relax_hydrogens,
+    run_dynamics,
+)
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     calculate_restorative_force_strength,
 )
-from moldiff.hydrogenation import hydrogenate_deterministically
+from moldiff.hydrogenation import (
+    NATURAL_VALENCES,
+    add_hydrogens_to_atoms,
+)
 from moldiff.manifolds import PointCloudPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
 from moldiff.utils import get_mace_similarity_calculator, initialize_mol
@@ -25,7 +33,7 @@ class UpdateScene(BaseModel, abc.ABC):
         pass
 
 
-def load_mace_calc():
+def load_mace_calc(num_reference_mols=64, num_to_sample_uniformly_per_size=2):
     pretrained_mace_path = "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
     rng = np.random.default_rng(0)
     data_path = "/home/rokas/Programming/data/qm9_full_data.xyz"
@@ -77,18 +85,59 @@ class ConstrainedGeneration(UpdateScene):
         return trajectories
 
 
+def hydrogenate(atoms, graph_representation):
+    edge_array = nx.adjacency_matrix(graph_representation).todense()  # type: ignore
+    current_neighbours = edge_array.sum(axis=0)
+    max_valence = np.array(
+        [
+            NATURAL_VALENCES[atomic_number]
+            for atomic_number in atoms.get_atomic_numbers()
+        ]
+    )
+    num_hs_to_add_per_atom = max_valence - current_neighbours
+    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+    return atoms_with_hs
+
+
 class Hydrogenate(UpdateScene):
     num_steps: int = Field(
         10, ge=1, le=100, description="Number of hydrogen relaxtion steps"
     )
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        calc = load_mace_calc()
-        print(atoms.info)
-        print(kwargs)
-        hydrogenated_atoms = hydrogenate_deterministically(atoms)
+        calc = load_mace_calc(num_reference_mols=2, num_to_sample_uniformly_per_size=0)
+        print("Loaded the calc")
+        try:
+            connectivity_graph = atoms.info["graph_representation"]
+        except KeyError:
+            print(
+                "No graph representation found, try resetting the scene of clicking `Save` in the `Bonds` tab"
+            )
+            return [atoms]
+        hydrogenated_atoms = hydrogenate(atoms, connectivity_graph)
         relaxed_hydrogenated_atoms = hydrogenated_atoms.copy()
         relaxed_hydrogenated_atoms = relax_hydrogens(
             [relaxed_hydrogenated_atoms], calc, num_steps=self.num_steps, max_step=0.1
         )[0]
         return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
+
+
+class Relax(UpdateScene):
+    num_steps: int = Field(10, ge=1, le=100, description="Number of calculation steps")
+
+    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        original_atoms = atoms.copy()
+        calc = load_mace_calc(num_reference_mols=2, num_to_sample_uniformly_per_size=0)
+        if len(atom_ids) != 0:
+            print("Will relax only the selected atoms")
+            mask = np.ones(len(atoms)).astype(bool)
+            mask[atom_ids] = False
+        else:
+            print("Will relax all atoms")
+            mask = None
+
+        relaxed_atoms = attach_calculator(
+            [atoms], calc, calculation_type="mace", mask=mask
+        )
+        relaxed_atoms = run_dynamics(relaxed_atoms, num_steps=self.num_steps)
+        return [original_atoms, *relaxed_atoms]
