@@ -204,6 +204,8 @@ def get_reference_data(
     """
     all_data = aio.read(reference_data_path, index=":", format="extxyz")
     all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
+    if num_reference_mols == -1:
+        return all_data
 
     if num_to_sample_uniformly_per_size > 0:
         training_data, already_sampled_indices = sample_uniformly_across_heavy_atom_number(all_data, num_to_sample_uniformly_per_size, rng)  # type: ignore

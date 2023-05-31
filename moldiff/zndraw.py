@@ -11,6 +11,7 @@ from moldiff.atoms_cleanup import (
     relax_hydrogens,
     run_dynamics,
 )
+from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
@@ -33,19 +34,28 @@ class UpdateScene(BaseModel, abc.ABC):
         pass
 
 
-def load_mace_calc(num_reference_mols=64, num_to_sample_uniformly_per_size=2):
+def load_mace_calc():
     pretrained_mace_path = "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
     rng = np.random.default_rng(0)
-    data_path = "/home/rokas/Programming/data/qm9_full_data.xyz"
+    data_path = "/home/rokas/Programming/data/qm9_reference_data.xyz"
     mace_calc = get_mace_similarity_calculator(
         pretrained_mace_path,
         data_path,
-        num_reference_mols=64,
-        num_to_sample_uniformly_per_size=2,
+        num_reference_mols=-1,
         device=DEVICE,
         rng=rng,
     )
     return mace_calc
+
+
+def try_to_get_calc(atoms):
+    if atoms.calc is not None and isinstance(atoms.calc, MaceSimilarityCalculator):
+        calc = atoms.calc
+        print("Using preloaded MACE calculator")
+    else:
+        calc = load_mace_calc()
+        print("Loaded MACE calculator")
+    return calc
 
 
 noise_params = SamplerNoiseParameters(
@@ -58,7 +68,7 @@ class ConstrainedGeneration(UpdateScene):
     num_atoms: int = Field(5, ge=1, le=30, description="Number of atoms to generate")
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        mace_calc = load_mace_calc()
+        mace_calc = try_to_get_calc(atoms)
         prior = PointCloudPrior(kwargs["points"], beta=5.0)
         restorative_force_strength = calculate_restorative_force_strength(
             self.num_atoms
@@ -82,6 +92,7 @@ class ConstrainedGeneration(UpdateScene):
             mask=mask,
             torch_mask=torch_mask,
         )
+        trajectories[-1].calc = mace_calc
         return trajectories
 
 
@@ -105,8 +116,7 @@ class Hydrogenate(UpdateScene):
     )
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        calc = load_mace_calc(num_reference_mols=2, num_to_sample_uniformly_per_size=0)
-        print("Loaded the calc")
+        calc = try_to_get_calc(atoms)
         try:
             connectivity_graph = atoms.info["graph_representation"]
         except KeyError:
@@ -119,6 +129,7 @@ class Hydrogenate(UpdateScene):
         relaxed_hydrogenated_atoms = relax_hydrogens(
             [relaxed_hydrogenated_atoms], calc, num_steps=self.num_steps, max_step=0.1
         )[0]
+        relaxed_hydrogenated_atoms.calc = calc
         return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
 
 
@@ -126,18 +137,19 @@ class Relax(UpdateScene):
     num_steps: int = Field(10, ge=1, le=100, description="Number of calculation steps")
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        calc = try_to_get_calc(atoms)
         original_atoms = atoms.copy()
-        calc = load_mace_calc(num_reference_mols=2, num_to_sample_uniformly_per_size=0)
         if len(atom_ids) != 0:
             print("Will relax only the selected atoms")
             mask = np.ones(len(atoms)).astype(bool)
             mask[atom_ids] = False
         else:
             print("Will relax all atoms")
-            mask = None
+            mask = np.zeros(len(atoms)).astype(bool)
 
         relaxed_atoms = attach_calculator(
             [atoms], calc, calculation_type="mace", mask=mask
         )
         relaxed_atoms = run_dynamics(relaxed_atoms, num_steps=self.num_steps)
+        relaxed_atoms[-1].calc = calc
         return [original_atoms, *relaxed_atoms]
