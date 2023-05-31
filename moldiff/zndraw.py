@@ -23,7 +23,7 @@ from moldiff.hydrogenation import (
 )
 from moldiff.manifolds import PointCloudPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import get_mace_similarity_calculator, initialize_mol
+from moldiff.utils import get_mace_similarity_calculator
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -80,7 +80,8 @@ class ConstrainedGeneration(UpdateScene):
             device=DEVICE,
             restorative_force_strength=restorative_force_strength,
         )
-        mol = initialize_mol(f"C{self.num_atoms}")
+        mol = ase.Atoms(f"C{self.num_atoms}")
+        mol = prior.initialise_positions(mol, scale=0.5)
         molecule, mask, torch_mask = generator._merge_scaffold_and_create_mask(
             mol, atoms, num_particles=10, device=DEVICE
         )

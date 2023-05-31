@@ -115,7 +115,8 @@ class PointCloudPrior(PriorManifold):
         if len(molecule) < len(self.points):
             warnings.warn("More points than atoms, some points will be unused")
         mol = molecule.copy()
-        atom_centres = np.random.choice(len(self.points), len(mol), replace=False)
+        replace = len(mol) > len(self.points)
+        atom_centres = np.random.choice(len(self.points), len(mol), replace=replace)
         offsets = self.point_shape.get_n_positions(len(mol))
         positions = self.points[atom_centres] + offsets * scale
         mol.set_positions(positions)
