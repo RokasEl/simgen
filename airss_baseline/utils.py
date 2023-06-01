@@ -1,4 +1,7 @@
+from collections import Counter
+
 import ase
+import ase.io as aio
 from ase.calculators.mixing import LinearCombinationCalculator
 from ase.calculators.morse import MorsePotential
 from ase.optimize import LBFGS
@@ -31,3 +34,19 @@ def do_mopac_relaxation(initialised_atoms):
     calc = MOPACLight()
     calc.calculate(initialised_atoms)
     return calc.atoms
+
+
+def get_composition(sybmol_list):
+    counts = Counter(sybmol_list)
+    list_representation = [f"{k}{v}" for k, v in counts.items()]
+    list_representation.sort()
+    return "".join(list_representation)
+
+
+def get_composition_counter(qm9_path):
+    all_atoms = aio.read(qm9_path, index=":")
+    compositions = [
+        get_composition(atoms.get_chemical_symbols()) for atoms in all_atoms
+    ]
+    counts = Counter(compositions)
+    return counts
