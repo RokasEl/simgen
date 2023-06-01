@@ -139,6 +139,7 @@ wandb/*
 *.png
 *.pdf
 *.pt
+mopac*
 # temporary files
 *temp*
 
@@ -154,6 +155,7 @@ wandb/*
 # Movie files
 *.avi
 *.mp4
+*.traj
 
 # slurm launch files
 launch_*
