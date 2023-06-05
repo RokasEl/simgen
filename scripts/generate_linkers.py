@@ -18,7 +18,6 @@ import logging
 
 import ase.io as ase_io
 from mace.modules.blocks import (
-    RadialDistanceTransformBlock,
     RealAgnosticInteractionBlock,
     RealAgnosticResidualInteractionBlock,
 )
@@ -27,7 +26,10 @@ from mace.modules.models import ScaleShiftMACE
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import remove_elements
+from moldiff.generation_utils import (
+    RadialDistanceTransformBlock,
+    remove_elements,
+)
 from moldiff.manifolds import MultivariateGaussianPrior
 
 

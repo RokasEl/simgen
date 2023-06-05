@@ -10,7 +10,6 @@ from ase import Atoms
 from ase.build import molecule
 from e3nn import o3
 from mace.modules.blocks import (
-    RadialDistanceTransformBlock,
     RealAgnosticInteractionBlock,
     RealAgnosticResidualInteractionBlock,
 )
@@ -18,7 +17,10 @@ from mace.modules.models import ScaleShiftMACE
 from torch import nn
 
 from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.generation_utils import remove_elements
+from moldiff.generation_utils import (
+    RadialDistanceTransformBlock,
+    remove_elements,
+)
 
 QM9_PROPERTIES = (
     "rotational_constants",

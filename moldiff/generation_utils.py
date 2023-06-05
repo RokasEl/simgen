@@ -7,6 +7,7 @@ import torch
 from ase.neighborlist import natural_cutoffs, neighbor_list
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
+from mace.modules.blocks import RadialEmbeddingBlock
 from mace.tools import AtomicNumberTable
 from torch import nn
 
@@ -128,3 +129,20 @@ class ExponentialRepulsionBlock(nn.Module):
         energies = torch.exp(-self.alpha * lengths)
         energies = 0.5 * scatter_sum(energies, data["edge_index"][0], dim=0).squeeze(-1)
         return energies
+
+
+class RadialDistanceTransformBlock(RadialEmbeddingBlock):
+    def __init__(self, r_min: float = 0.8, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.register_buffer(
+            "r_min", torch.tensor(r_min, dtype=torch.get_default_dtype())
+        )
+
+    def forward(
+        self,
+        edge_lengths: torch.Tensor,  # [n_edges, 1]
+    ):
+        transformed_edges = (
+            torch.nn.functional.relu(edge_lengths - self.r_min) + self.r_min
+        )
+        return super().forward(transformed_edges)

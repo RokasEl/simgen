@@ -6,6 +6,7 @@ torch.set_default_dtype(torch.float64)
 from ase import Atoms
 from mace.data.atomic_data import AtomicData
 
+from moldiff.generation_utils import RadialDistanceTransformBlock
 from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -15,7 +16,6 @@ import logging
 import ase.io as ase_io
 import matplotlib.pyplot as plt
 from mace.modules.blocks import (
-    RadialDistanceTransformBlock,
     RealAgnosticInteractionBlock,
     RealAgnosticResidualInteractionBlock,
 )
