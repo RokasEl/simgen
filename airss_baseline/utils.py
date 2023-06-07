@@ -5,8 +5,8 @@ import ase.io as aio
 from ase.calculators.mixing import LinearCombinationCalculator
 from ase.calculators.morse import MorsePotential
 from ase.optimize import LBFGS
+from calculators import MOPACLight, RestorativeCalculator
 
-from airss_baseline.calculators import MOPACLight, RestorativeCalculator
 from moldiff.manifolds import StandardGaussianPrior
 
 
@@ -46,7 +46,7 @@ def get_composition(sybmol_list):
 def get_composition_counter(qm9_path):
     all_atoms = aio.read(qm9_path, index=":")
     compositions = [
-        get_composition(atoms.get_chemical_symbols()) for atoms in all_atoms
+        get_composition(atoms.get_chemical_symbols()) for atoms in all_atoms  # type: ignore
     ]
     counts = Counter(compositions)
     return counts

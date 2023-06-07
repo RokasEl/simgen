@@ -2,12 +2,12 @@ from collections import Counter
 
 import ase.io as aio
 import numpy as np
-
-from airss_baseline.utils import (
+from utils import (
     build_mol,
     do_mopac_relaxation,
     get_composition_counter,
 )
+
 from moldiff.manifolds import MultivariateGaussianPrior
 
 most_common_qm9_composition = "C7H10O2"
@@ -33,13 +33,13 @@ def main(qm9_path: str | None = None):
         composition_generator = get_composition_generator(composition_counter, rng)
     else:
         composition_generator = get_composition_generator(None, rng)
-    prior = MultivariateGaussianPrior(np.diag([1, 1, 2]).astype(np.float32))
-    for _ in range(50):
+    prior = MultivariateGaussianPrior(np.diag([1, 1, 0.5]).astype(np.float32))
+    for _ in range(1000):
         composition = next(composition_generator)
         atoms = build_mol(composition, prior=prior)
         relaxed_atoms = do_mopac_relaxation(atoms)
         aio.write(
-            f"most_common_qm9_composition.xyz",
+            f"airss_initially_squashed.xyz",
             relaxed_atoms,
             append=True,
             format="extxyz",
