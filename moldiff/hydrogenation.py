@@ -12,7 +12,7 @@ from moldiff.generation_utils import (
 from moldiff.hydrogenation_deterministic import build_xae_molecule
 
 NATURAL_VALENCES = frozendict(
-    {6: 4, 7: 3, 8: 2, 9: 1, 15: 3, 16: 2, 17: 1, 35: 1, 53: 1}
+    {1: 1, 6: 4, 7: 3, 8: 2, 9: 1, 15: 3, 16: 2, 17: 1, 35: 1, 53: 1}
 )
 
 
