@@ -20,7 +20,7 @@ class BaseReport:
     num_heavy_atoms: None | int = None
     num_atoms_stable: None | int = None
     molecule_stable: None | bool = None
-    bond_lengths: None | Counter = None
+    bond_lengths: None | np.ndarray = None
 
 
 @dataclass
@@ -30,7 +30,7 @@ class RDKitReport:
     descriptors: None | dict = None
     num_fragments: None | int = None
     num_rings: None | int = None
-    ring_sizes: None | set = None
+    ring_sizes: None | list = None
 
 
 @dataclass
@@ -46,9 +46,7 @@ def get_number_of_nearest_neighbours(atoms: ase.Atoms):
     _, _, edge_array = build_xae_molecule(
         positions,
         atomic_symbols,
-        use_margins=False,
-        single_bond_stretch_factor=1.1,
-        multi_bond_stretch_factor=1.05,
+        use_margins=True,
     )
     return edge_array, edge_array.sum(axis=1)
 
@@ -73,7 +71,6 @@ def get_bond_lengths(atoms: ase.Atoms, edge_array):
     if len(bond_lengths) == 0:
         return None
     bond_lengths = np.round(bond_lengths, 3)
-    bond_lengths = Counter(bond_lengths)
     return bond_lengths
 
 
@@ -98,9 +95,9 @@ def analyse_rings(mol):
     ssr = Chem.GetSymmSSSR(mol)
     num_rings = len(ssr)
     if num_rings == 0:
-        return num_rings, set()
+        return num_rings, []
     else:
-        ring_sizes = {len(ring) for ring in ssr}
+        ring_sizes = [len(ring) for ring in ssr]
         return num_rings, ring_sizes
 
 

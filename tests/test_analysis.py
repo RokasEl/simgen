@@ -33,8 +33,12 @@ def test_analyse_base():
         num_heavy_atoms=6,
         num_atoms_stable=12,
         molecule_stable=True,
-        bond_lengths=Counter({1.395: 6, 1.087: 6}),
+        bond_lengths=None,
     )
+    expected_bond_lengths = np.array([1.395, 1.087] * 6)
+    actual_bond_lengths = np.array(report.bond_lengths)
+    report.bond_lengths = None
+    assert Counter(expected_bond_lengths) == Counter(actual_bond_lengths)
     assert report == expected_report
 
 
@@ -47,7 +51,7 @@ def test_analyse_rdkit():
         descriptors=Descriptors.CalcMolDescriptors(Chem.AddHs(Chem.MolFromSmiles("C"))),
         num_fragments=1,
         num_rings=0,
-        ring_sizes=set(),
+        ring_sizes=[],
     )
     assert report == expected_report
 
@@ -64,7 +68,7 @@ def test_analyse_rdkit():
         ),
         num_fragments=2,
         num_rings=1,
-        ring_sizes={6},
+        ring_sizes=[6],
     )
     assert report == expected_report
 

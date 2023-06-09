@@ -151,6 +151,9 @@ def get_mace_similarity_calculator(
     device: str = "cuda",
     rng: np.random.Generator | None = None,
 ) -> MaceSimilarityCalculator:
+    """
+    remove_halogenides: whether to remove Hydrogen and Fluorine from the reference data, this is only for evaluation purposes. Should be True for all other purposes.
+    """
     mace_model = get_loaded_mace_model(model_path, device)
     if rng is None:
         rng = np.random.default_rng(0)
@@ -230,6 +233,9 @@ def get_reference_data(
 
     # now add further random molecules
     too_add = num_reference_mols - already_sampled
+    if too_add <= 0:
+        logging.info("After sampling uniformly, got more molecules than requested.")
+        return training_data
     all_data = np.asarray(all_data, dtype=object)
     rand_mols = [x for x in rng.choice(all_data, size=too_add, replace=False)]
     training_data.extend(rand_mols)
