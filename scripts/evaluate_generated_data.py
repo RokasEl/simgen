@@ -110,11 +110,14 @@ def get_atoms_iterator(atoms_path: str, trajectory_index: int = -1) -> Iterable:
 
 
 def read_atoms_from_directory(atoms_path: str, trajectory_index: int = -1):
+    names, read_atoms = [], []
     for atoms_file in pathlib.Path(atoms_path).glob("*.xyz"):
         all_atoms = aio.read(atoms_file, index=":", format="xyz")
         atoms = all_atoms[trajectory_index]
         file_name = atoms_file.stem
-        yield file_name, atoms
+        names.append(file_name)
+        read_atoms.append(atoms)
+    return zip(names, read_atoms)
 
 
 if __name__ == "__main__":
