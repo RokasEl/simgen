@@ -18,6 +18,7 @@ from .hydrogenation_deterministic import build_xae_molecule
 class BaseReport:
     composition: None | str = None
     num_heavy_atoms: None | int = None
+    atom_valences_possible: None | np.ndarray = None
     num_atoms_stable: None | int = None
     molecule_stable: None | bool = None
     bond_lengths: None | np.ndarray = None
@@ -58,9 +59,10 @@ def check_valences(atoms: ase.Atoms, nearest_neigh_array):
             for atomic_number in atoms.get_atomic_numbers()
         ]
     )
-    num_atoms_stable = (nearest_neigh_array <= max_bonds_allowed).sum()
+    valences_possible = nearest_neigh_array <= max_bonds_allowed
+    num_atoms_stable = valences_possible.sum()
     molecule_stable = num_atoms_stable == len(atoms)
-    return num_atoms_stable, molecule_stable
+    return valences_possible, num_atoms_stable, molecule_stable
 
 
 def get_bond_lengths(atoms: ase.Atoms, edge_array):
@@ -103,7 +105,9 @@ def analyse_rings(mol):
 
 def analyse_base(atoms: ase.Atoms):
     edge_array, neigbour_numbers = get_number_of_nearest_neighbours(atoms)
-    num_atoms_stable, molecule_stable = check_valences(atoms, neigbour_numbers)
+    valences_possible, num_atoms_stable, molecule_stable = check_valences(
+        atoms, neigbour_numbers
+    )
     composition = str(atoms.symbols)
     # bond lengths and num of heavy atoms
     bond_lengths = get_bond_lengths(atoms, edge_array)
@@ -111,6 +115,7 @@ def analyse_base(atoms: ase.Atoms):
     report = BaseReport(
         composition=composition,
         num_heavy_atoms=num_heavy_atoms,
+        atom_valences_possible=valences_possible,
         num_atoms_stable=num_atoms_stable,
         molecule_stable=molecule_stable,
         bond_lengths=bond_lengths,

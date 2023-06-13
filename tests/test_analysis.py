@@ -20,6 +20,7 @@ def test_analyse_base():
     expected_report = BaseReport(
         composition="C",
         num_heavy_atoms=1,
+        atom_valences_possible=np.array([True]),
         num_atoms_stable=1,
         molecule_stable=True,
         bond_lengths=None,
@@ -31,14 +32,19 @@ def test_analyse_base():
     expected_report = BaseReport(
         composition="C6H6",
         num_heavy_atoms=6,
+        atom_valences_possible=None,
         num_atoms_stable=12,
         molecule_stable=True,
         bond_lengths=None,
     )
     expected_bond_lengths = np.array([1.395, 1.087] * 6)
+    expected_atom_valences_possible = np.array([True] * 12)
     actual_bond_lengths = np.array(report.bond_lengths)
+    actual_atom_valences_possible = np.array(report.atom_valences_possible)
     report.bond_lengths = None
+    report.atom_valences_possible = None
     assert Counter(expected_bond_lengths) == Counter(actual_bond_lengths)
+    assert (expected_atom_valences_possible == actual_atom_valences_possible).all()
     assert report == expected_report
 
 
