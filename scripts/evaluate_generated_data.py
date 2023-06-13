@@ -1,12 +1,9 @@
 import pathlib
-from dataclasses import asdict
-from io import StringIO
 from typing import Iterable
 
 import ase
 import ase.io as aio
 import fire
-import h5py
 import numpy as np
 import pandas as pd
 import torch
@@ -24,7 +21,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def main(
     atoms_path,
     experiment_name: str,
-    save_path: str = "./results.hdf5",
+    save_path: str = "./results/",
     trajectory_index: int = -1,
     do_calculator_analysis=False,
     model_path: str | None = None,
@@ -61,44 +58,12 @@ def main(
         reports["rdkit"].append(analyse_rdkit(atoms))
         if do_calculator_analysis and calc is not None:
             reports["calc"].append(analyse_calculator(atoms, calc))
-
-    with h5py.File(save_path, "a") as f:
-        group = f.require_group(experiment_name)
-        write_dataset(group, "index", index)
-        for key, value in reports.items():
-            flattened_reports = [flatten_report(report) for report in value]
-            df = pd.DataFrame(flattened_reports, index=index)
-            report_group = group.require_group(key)
-            # purge old data
-            for key in report_group.keys():
-                del report_group[key]
-            for column in df.columns:
-                if df[column].dtype == object:
-                    adict = df[column].to_dict()
-                    for k, v in adict.items():
-                        if v is None:
-                            v = np.nan
-                        report_group.create_dataset(f"{column}/{k}", data=v)
-                else:
-                    data = np.array(df[column])
-                    report_group.create_dataset(column, data=data)
-
-
-def write_dataset(group, name, data):
-    if name in group:
-        del group[name]
-    group.create_dataset(name, data=data)
-
-
-def flatten_report(report):
-    flattened_report = {}
-    report_as_dict = asdict(report)
-    for key, value in report_as_dict.items():
-        if isinstance(value, dict):
-            flattened_report.update(value)
-        else:
-            flattened_report[key] = value
-    return flattened_report
+    save_path = pathlib.Path(save_path)
+    print(f"Saving to {save_path}")
+    save_path.mkdir(exist_ok=True, parents=True)
+    for key, value in reports.items():
+        df = pd.DataFrame(value, index=index)
+        df.to_json(f"{save_path}/{experiment_name}_{key}.json")
 
 
 def get_atoms_iterator(atoms_path: str, trajectory_index: int = -1) -> Iterable:

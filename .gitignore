@@ -140,6 +140,7 @@ wandb/*
 *.pdf
 *.pt
 mopac*
+results
 # temporary files
 *temp*
 
