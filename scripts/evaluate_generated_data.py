@@ -1,92 +1,89 @@
 import pathlib
-from io import StringIO
+from typing import Iterable
 
 import ase
 import ase.io as aio
+import fire
 import numpy as np
-from rdkit import Chem
-from rdkit.Chem import rdDetermineBonds
-from xyz2mol import read_xyz_file, xyz2mol
+import pandas as pd
+import torch
 
-from moldiff.hydrogenation import NATURAL_VALENCES
-from moldiff.hydrogenation_deterministic import build_xae_molecule
+from moldiff.analysis import (
+    analyse_base,
+    analyse_calculator,
+    analyse_rdkit,
+)
+from moldiff.utils import get_mace_similarity_calculator
 
-
-def evaluate_atoms_with_no_hs_stability(atoms: ase.Atoms):
-    positions, atomic_symbols = atoms.get_positions(), atoms.get_chemical_symbols()
-    _, _, edge_array = build_xae_molecule(
-        positions,
-        atomic_symbols,
-        use_margins=True,
-    )
-    max_bonds = np.array(
-        [
-            NATURAL_VALENCES[atomic_number]
-            for atomic_number in atoms.get_atomic_numbers()
-        ]
-    )
-    num_bonds = edge_array.sum(axis=1)
-    num_atoms_stable = (num_bonds <= max_bonds).sum()
-    molecule_stable = num_atoms_stable == len(atoms)
-    return num_atoms_stable, molecule_stable
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def try_build_molecule_using_rdkit(atoms: ase.Atoms):
-    holder = StringIO()
-    aio.write(holder, atoms, format="xyz")
-    try:
-        raw_mol = Chem.MolFromXYZBlock(holder.getvalue())
-        conn_mol = Chem.Mol(raw_mol)
-        rdDetermineBonds.DetermineBonds(conn_mol, charge=0)
-    except Exception as e:
-        print(e)
-        return False
-    if conn_mol is None:
-        return False
+def main(
+    atoms_path,
+    experiment_name: str,
+    save_path: str = "./results/",
+    trajectory_index: int = -1,
+    do_calculator_analysis=False,
+    model_path: str | None = None,
+    reference_data_path: str | None = None,
+    remove_halogenides: bool = False,
+    num_reference_mols: int = 32,
+    num_to_sample_uniformly_per_size: int = 0,
+):
+    atoms_iterator = get_atoms_iterator(atoms_path, trajectory_index=trajectory_index)
+
+    if do_calculator_analysis:
+        if model_path is None or reference_data_path is None:
+            raise ValueError(
+                "model_path and reference_data_path must be specified for calculator analysis"
+            )
+        rng = np.random.default_rng(0)
+        calc = get_mace_similarity_calculator(
+            model_path=model_path,
+            reference_data_path=reference_data_path,
+            remove_halogenides=remove_halogenides,
+            num_reference_mols=num_reference_mols,
+            num_to_sample_uniformly_per_size=num_to_sample_uniformly_per_size,
+            device=DEVICE,
+            rng=rng,
+        )
     else:
-        print(Chem.MolToSmiles(conn_mol))
-        return True
+        calc = None
+    index = []
+    reports = {"base": [], "rdkit": [], "calc": []}
+    for name, atoms in atoms_iterator:
+        print(name, atoms)
+        index.append(name)
+        reports["base"].append(analyse_base(atoms))
+        reports["rdkit"].append(analyse_rdkit(atoms))
+        if do_calculator_analysis and calc is not None:
+            reports["calc"].append(analyse_calculator(atoms, calc))
+    save_path = pathlib.Path(save_path)
+    print(f"Saving to {save_path}")
+    save_path.mkdir(exist_ok=True, parents=True)
+    for key, value in reports.items():
+        df = pd.DataFrame(value, index=index)
+        df.to_json(f"{save_path}/{experiment_name}_{key}.json")
+
+
+def get_atoms_iterator(atoms_path: str, trajectory_index: int = -1) -> Iterable:
+    if pathlib.Path(atoms_path).is_dir():
+        atoms_iterator = read_atoms_from_directory(atoms_path, trajectory_index)
+    else:
+        atoms_iterator = enumerate(aio.read(atoms_path, index=":", format="xyz"))
+    return atoms_iterator
+
+
+def read_atoms_from_directory(atoms_path: str, trajectory_index: int = -1):
+    names, read_atoms = [], []
+    for atoms_file in pathlib.Path(atoms_path).glob("*.xyz"):
+        all_atoms = aio.read(atoms_file, index=":", format="xyz")
+        atoms = all_atoms[trajectory_index]
+        file_name = atoms_file.stem
+        names.append(file_name)
+        read_atoms.append(atoms)
+    return zip(names, read_atoms)
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--atoms_directory", help="Path to directory containing atoms files"
-    )
-    args = parser.parse_args()
-    # use pathlib to get all atoms files
-    total_atoms, total_stable_atoms, total_molecules, total_stable_molecules = (
-        0,
-        0,
-        0,
-        0,
-    )
-    rdkit_stable_molecules = 0
-    for atoms_file in pathlib.Path(args.atoms_directory).glob("*.xyz"):
-        print(atoms_file)
-        try:
-            trajectory = aio.read(atoms_file, index=":")
-        except:
-            continue
-        no_h_atoms = trajectory[-6]
-        with_h_atoms = trajectory[-1]
-        num_atoms_stable, molecule_stable = evaluate_atoms_with_no_hs_stability(
-            no_h_atoms
-        )
-        total_atoms += len(no_h_atoms)
-        total_stable_atoms += num_atoms_stable
-        total_stable_molecules += molecule_stable
-        rdkit_stable_molecules += try_build_molecule_using_rdkit(with_h_atoms)
-        total_molecules += 1
-
-    print(
-        f"Total atoms: {total_atoms}, total stable atoms: {total_stable_atoms}, i.e. {total_stable_atoms/total_atoms*100:.2f}%"
-    )
-    print(
-        f"Total molecules: {total_molecules}, total stable molecules: {total_stable_molecules}, i.e. {total_stable_molecules/total_molecules*100:.2f}%"
-    )
-    print(
-        f"Total molecules that rdkit could build: {rdkit_stable_molecules}, i.e. {rdkit_stable_molecules/total_molecules*100:.2f}%"
-    )
+    fire.Fire(main)

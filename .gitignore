@@ -140,6 +140,7 @@ wandb/*
 *.pdf
 *.pt
 mopac*
+results
 # temporary files
 *temp*
 
@@ -151,6 +152,7 @@ mopac*
 *.tar.gz
 *.pkl
 *.dat
+*.hdf5
 
 # Movie files
 *.avi

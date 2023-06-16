@@ -145,16 +145,24 @@ def setup_logger(
 def get_mace_similarity_calculator(
     model_path: str,
     reference_data_path: str,
+    remove_halogenides: bool = True,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
     device: str = "cuda",
     rng: np.random.Generator | None = None,
 ) -> MaceSimilarityCalculator:
+    """
+    remove_halogenides: whether to remove Hydrogen and Fluorine from the reference data, this is only for evaluation purposes. Should be True for all other purposes.
+    """
     mace_model = get_loaded_mace_model(model_path, device)
     if rng is None:
         rng = np.random.default_rng(0)
     reference_data = get_reference_data(
-        reference_data_path, rng, num_reference_mols, num_to_sample_uniformly_per_size
+        reference_data_path,
+        rng,
+        num_reference_mols,
+        num_to_sample_uniformly_per_size,
+        remove_halogenides,
     )
     mace_similarity_calculator = MaceSimilarityCalculator(
         mace_model, reference_data=reference_data, device=device
@@ -200,12 +208,14 @@ def get_reference_data(
     rng: np.random.Generator,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
+    remove_halogenides: bool = True,
 ) -> List[Atoms]:
     """
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
     all_data = aio.read(reference_data_path, index=":", format="extxyz")
-    all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
+    if remove_halogenides:
+        all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
     if num_reference_mols == -1:
         return all_data
 
@@ -223,6 +233,9 @@ def get_reference_data(
 
     # now add further random molecules
     too_add = num_reference_mols - already_sampled
+    if too_add <= 0:
+        logging.info("After sampling uniformly, got more molecules than requested.")
+        return training_data
     all_data = np.asarray(all_data, dtype=object)
     rand_mols = [x for x in rng.choice(all_data, size=too_add, replace=False)]
     training_data.extend(rand_mols)

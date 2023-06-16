@@ -47,13 +47,26 @@ def load_mace_calc(model_path, reference_data_path):
     return mace_calc
 
 
+def load_hydrogenation_model(model_path):
+    try:
+        from hydromace.interface import HydroMaceCalculator
+
+        model = torch.load(model_path)
+        model = model.to(torch.float)
+        hydrogenation_model = HydroMaceCalculator(model, device=DEVICE)
+        return hydrogenation_model
+    except Exception as e:
+        print(f"Could not load hydrogenation model due to exception: {e}")
+        return None
+
+
 noise_params = SamplerNoiseParameters(
     sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
 )
 swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
 
 
-def hydrogenate(atoms, graph_representation):
+def hydrogenate_by_bond_lengths(atoms, graph_representation):
     edge_array = nx.adjacency_matrix(graph_representation).todense()  # type: ignore
     current_neighbours = edge_array.sum(axis=0)
     max_valence = np.array(
@@ -67,12 +80,22 @@ def hydrogenate(atoms, graph_representation):
     return atoms_with_hs
 
 
+def hydrogenate_by_model(atoms, model):
+    num_hs_to_add_per_atom = model.predict_missing_hydrogens(atoms)
+    num_hs_to_add_per_atom = np.round(num_hs_to_add_per_atom).astype(int)
+    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+    return atoms_with_hs
+
+
 class MoldiffGeneration(UpdateScene):
     model_path: str = Field(
         "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
     )
     reference_data_path: str = Field(
         "/home/rokas/Programming/data/qm9_reference_data.xyz"
+    )
+    hydrogenation_model_path: str = Field(
+        "/home/rokas/Programming/hydromace/spice_hydrogenation.model"
     )
     num_atoms_to_add: int = Field(
         5, ge=1, le=30, description="Number of atoms to generate"
@@ -82,6 +105,7 @@ class MoldiffGeneration(UpdateScene):
     )
     run_type: str = Field("generate", description="Type of operation to do")
     _calc = PrivateAttr(None)
+    _hydro_model = PrivateAttr(None)
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
         if self._calc is None:
@@ -155,21 +179,46 @@ class MoldiffGeneration(UpdateScene):
             else self.relaxation_steps
         )
         relaxation_steps = int(relaxation_steps)
-        try:
-            connectivity_graph = atoms.info["graph_representation"]
-        except KeyError:
-            print(
-                "No graph representation found, try resetting the scene of clicking `Save` in the `Bonds` tab"
+        hydro_model = self._get_hydrogenation_model(kwargs["hydrogenation_model_path"])
+        if hydro_model is None:
+            connectivity_graph, found, error = self._try_to_get_graph_representation(
+                atoms
             )
-            return [atoms]
-        except Exception as e:
-            raise e
-        hydrogenated_atoms = hydrogenate(atoms, connectivity_graph)
+            if not found:
+                print(
+                    "No graph representation found, try resetting the scene or clicking `Save` in the `Bonds` tab"
+                )
+                print(f"Error: {error}")
+                return [atoms]
+            hydrogenated_atoms = hydrogenate_by_bond_lengths(atoms, connectivity_graph)
+        else:
+            hydrogenated_atoms = hydrogenate_by_model(atoms, hydro_model)
+
         relaxed_hydrogenated_atoms = hydrogenated_atoms.copy()
         relaxed_hydrogenated_atoms = relax_hydrogens(
             [relaxed_hydrogenated_atoms], calc, num_steps=relaxation_steps, max_step=0.1
         )[0]
         return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
+
+    def _get_hydrogenation_model(self, hydrogenation_model_path):
+        if self._hydro_model is None:
+            print("Initializing hydrogenation model")
+            self._hydro_model = load_hydrogenation_model(hydrogenation_model_path)
+        else:
+            print("Using loaded hydrogenation model")
+        return self._hydro_model
+
+    @staticmethod
+    def _try_to_get_graph_representation(atoms):
+        try:
+            connectivity_graph = atoms.info["graph_representation"]
+            found = True
+            error = None
+        except Exception as e:
+            connectivity_graph = None
+            found = False
+            error = e
+        return connectivity_graph, found, error
 
     def _relax(
         self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
