@@ -11,7 +11,6 @@ from moldiff.atoms_cleanup import (
     relax_hydrogens,
     run_dynamics,
 )
-from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     calculate_path_length,
@@ -22,6 +21,7 @@ from moldiff.hydrogenation import (
     NATURAL_VALENCES,
     add_hydrogens_to_atoms,
 )
+from moldiff.integrators import IntegrationParameters
 from moldiff.manifolds import PointCloudPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
 from moldiff.utils import get_mace_similarity_calculator
@@ -62,9 +62,7 @@ def load_hydrogenation_model(model_path):
         return None
 
 
-noise_params = SamplerNoiseParameters(
-    sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
-)
+INTEGRATION_PARAMS = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
 swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
 
 
@@ -167,7 +165,7 @@ class MoldiffGeneration(UpdateScene):
         generator = ParticleFilterGenerator(
             calc,
             prior,
-            noise_params=noise_params,
+            integration_parameters=INTEGRATION_PARAMS,
             device=DEVICE,
             restorative_force_strength=restorative_force_strength,
         )

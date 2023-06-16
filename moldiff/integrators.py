@@ -1,10 +1,21 @@
 import logging
+from dataclasses import dataclass
 
 import torch
 from mace.data import AtomicData
 
-from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.manifolds import PriorManifold
+
+
+@dataclass
+class IntegrationParameters:
+    S_churn: float = (
+        0.0  # Churn rate of the noise level. 0 corresponds to an ODE solver.
+    )
+    S_min: float = 0.0  # S_min and S_max define the noise level range, in which additional noise is added to the positions.
+    S_max: float = float("inf")
+    S_noise: float = 1  # The calculator sees the current noise level as `sigma_cur * S_churn`, whereas the noise added to the positions is `sigma_cur * S_churn * S_noise`.
+    min_noise: float = 1e-2  # Minimum noise level. If not zero, then `min_noise` is added to the positions even after `sigma_cur` has dropped below `S_min`.
 
 
 class HeunIntegrator:
@@ -12,7 +23,7 @@ class HeunIntegrator:
         self,
         similarity_calculator,
         guiding_manifold: PriorManifold,
-        sampler_noise_parameters=SamplerNoiseParameters(),
+        integration_parameters=IntegrationParameters(),
         restorative_force_strength: float = 1.5,
         device=torch.device("cuda")
         if torch.cuda.is_available()
@@ -20,7 +31,7 @@ class HeunIntegrator:
     ):
         self.prior_manifold = guiding_manifold
         self.similarity_calculator = similarity_calculator
-        self.noise_parameters = sampler_noise_parameters
+        self.integration_parameters = integration_parameters
         self.restorative_force_strength = restorative_force_strength
         self.device = device
 
@@ -28,11 +39,10 @@ class HeunIntegrator:
         """
         This does NOT update the neighbout list. DANGER!
         """
-        S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
+        S_churn, S_min, S_max, S_noise, min_noise = self._get_integrator_parameters()
         mol_cur = x.clone()
         if mask is None:
             mask = torch.ones(len(x)).to(self.device)
-        # mol_cur.positions.requires_grad = True
 
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
         gamma = S_churn if S_min <= sigma_cur <= S_max else 1
@@ -40,7 +50,7 @@ class HeunIntegrator:
         sigma_increased = sigma_cur * gamma
         # Add noise to the current sample.
         noise_level = torch.sqrt(sigma_increased**2 - sigma_cur**2) * S_noise
-        noise_level = torch.max(noise_level, torch.tensor(1e-2).to(self.device))
+        noise_level = torch.max(noise_level, min_noise)
         logging.debug(f"Current step: {step}")
         logging.debug(f"Noise added to positions: {noise_level:.2e}")
         with torch.no_grad():
@@ -49,12 +59,10 @@ class HeunIntegrator:
             )
 
         mol_increased = mol_cur
-        device = mol_increased.positions.device
         # Euler step.
-        # mol_increased.positions.requires_grad = True
         mol_increased.positions.grad = None
         forces = self.similarity_calculator(mol_increased, sigma_increased)
-        forces = torch.tensor(forces, device=device)
+        forces = torch.tensor(forces, device=self.device)
         restorative_forces = self.prior_manifold.calculate_resorative_forces(
             mol_increased.positions
         )
@@ -75,7 +83,7 @@ class HeunIntegrator:
             mol_next.positions.grad = None
 
             forces_next = self.similarity_calculator(mol_next, sigma_next)
-            forces_next = torch.tensor(forces_next, device=device) * mask[:, None]
+            forces_next = torch.tensor(forces_next, device=self.device) * mask[:, None]
 
             mol_next = mol_increased.clone()
             with torch.no_grad():
@@ -86,8 +94,9 @@ class HeunIntegrator:
 
     def _get_integrator_parameters(self):
         return (
-            self.noise_parameters.S_churn,
-            self.noise_parameters.S_min,
-            self.noise_parameters.S_max,
-            self.noise_parameters.S_noise,
+            self.integration_parameters.S_churn,
+            self.integration_parameters.S_min,
+            self.integration_parameters.S_max,
+            self.integration_parameters.S_noise,
+            torch.tensor(self.integration_parameters.min_noise).to(self.device),
         )

@@ -24,12 +24,12 @@ from mace.modules.blocks import (
 from mace.modules.models import ScaleShiftMACE
 
 from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     RadialDistanceTransformBlock,
     remove_elements,
 )
+from moldiff.integrators import IntegrationParameters
 from moldiff.manifolds import MultivariateGaussianPrior
 
 
@@ -99,9 +99,7 @@ def main():
         mol.info["time"] = 1e-2
         energies[i] = mol.get_potential_energy()
     logging.debug(f"Energies of training data: {energies}")
-    noise_params = SamplerNoiseParameters(
-        sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
-    )
+    noise_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
 
     linkers_data_path = "../data/zinc_fragments_difflinker.xyz"
     all_fragments = ase_io.read(linkers_data_path, index=":", format="extxyz")
@@ -129,7 +127,7 @@ def main():
             guiding_manifold=MultivariateGaussianPrior(
                 covariance_matrix=np.diag([1.0, 1.0, 1.0])
             ),
-            noise_params=noise_params,
+            integration_parameters=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
         trajectories = particle_filter.generate(

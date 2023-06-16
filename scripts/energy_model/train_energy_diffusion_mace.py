@@ -12,15 +12,14 @@ torch.set_default_dtype(torch.float64)
 from functools import partial
 
 from fire import Fire
-from lion_pytorch import Lion
 
 import wandb
-from moldiff.diffusion_tools import (
+from moldiff.energy_model.diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
     EnergyMACEDiffusion,
 )
-from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
+from moldiff.utils import setup_logger
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -88,7 +87,7 @@ def main(data_path="./Data/qm9_data", model_path="test_model.pt", restart=False)
     )
     loss_fn = EDMLossFn(P_mean=-1.2, P_std=1.2, sigma_data=1)
 
-    optimizer = Lion(model.parameters(), lr=PARAMS["lr"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     for epoch in range(PARAMS["epochs"]):
         for i, batch_data in enumerate(data_loader):
             batch_data = batch_data.to(DEVICE)

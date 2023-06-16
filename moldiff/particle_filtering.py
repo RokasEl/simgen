@@ -10,7 +10,6 @@ from mace.tools import AtomicNumberTable
 
 from moldiff.atoms_cleanup import cleanup_atoms
 from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import (
     collect_particles,
     create_element_swapped_particles,
@@ -20,7 +19,7 @@ from moldiff.generation_utils import (
     duplicate_atoms,
     get_atoms_from_batch,
 )
-from moldiff.integrators import HeunIntegrator
+from moldiff.integrators import HeunIntegrator, IntegrationParameters
 from moldiff.manifolds import MultivariateGaussianPrior, PriorManifold
 from moldiff.temperature_annealing import ExponentialThermostat
 
@@ -34,7 +33,7 @@ class ParticleFilterGenerator:
         ),
         device="cuda" if torch.cuda.is_available() else "cpu",
         restorative_force_strength: float = 1.5,
-        noise_params=SamplerNoiseParameters(),
+        integration_parameters=IntegrationParameters(),
     ):
         self.similarity_calculator = similarity_calculator
         self.guiding_manifold = guiding_manifold
@@ -42,7 +41,6 @@ class ParticleFilterGenerator:
             [int(z) for z in similarity_calculator.model.atomic_numbers]  # type: ignore
         )
         self.device = device
-        self.noise_parameters = noise_params
         self.sigmas = torch.concatenate(
             [
                 torch.linspace(1, 0.05, 50),
@@ -52,7 +50,7 @@ class ParticleFilterGenerator:
         self.integrator = HeunIntegrator(
             similarity_calculator=similarity_calculator,
             guiding_manifold=guiding_manifold,
-            sampler_noise_parameters=noise_params,
+            integration_parameters=integration_parameters,
             restorative_force_strength=restorative_force_strength,
         )
         self.thermostat = ExponentialThermostat(
