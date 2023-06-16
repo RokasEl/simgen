@@ -48,7 +48,7 @@ MACE_CONFIG = dict(
 PARAMS = {
     "model_params": MACE_CONFIG,
     "lr": 5e-3,
-    "batch_size": 128,
+    "batch_size": 16,
     "epochs": 100,
 }
 
@@ -86,7 +86,8 @@ def main(
     )
 
     avg_num_neighbors = modules.compute_avg_num_neighbors(data_loader)
-    PARAMS["avg_num_neighbors"] = avg_num_neighbors
+    logging.info(f"Average number of neighbors: {avg_num_neighbors}")
+    PARAMS["model_params"]["avg_num_neighbors"] = avg_num_neighbors
     wandb.init(
         # set the wandb project where this run will be logged
         project="energy-diffusion",
@@ -127,17 +128,18 @@ def main(
         for _, batch_data in enumerate(validation_data_loader):
             batch_data = batch_data.to(DEVICE)
             weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
-            val_pos_loss.append(weight * pos_loss)
-            val_elem_loss.append(weight * elem_loss)
-        val_pos_loss = torch.cat(val_pos_loss).mean()
-        val_elem_loss = torch.cat(val_elem_loss).mean()
+            model.zero_grad()
+            val_pos_loss.append((weight * pos_loss).detach().cpu().numpy())
+            val_elem_loss.append((weight * elem_loss).detach().cpu().numpy())
+        val_pos_loss = np.concatenate(val_pos_loss).mean()
+        val_elem_loss = np.concatenate(val_elem_loss).mean()
         val_loss = val_pos_loss + val_elem_loss
         scheduler.step(val_loss)
         wandb.log(
             {
-                "val_loss": val_loss.item(),
-                "val_pos_loss": val_pos_loss.item(),
-                "val_elem_loss": val_elem_loss.item(),
+                "val_loss": val_loss,
+                "val_pos_loss": val_pos_loss,
+                "val_elem_loss": val_elem_loss,
                 "epoch": epoch,
             }
         )

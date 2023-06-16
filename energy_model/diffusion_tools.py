@@ -93,9 +93,11 @@ class EDMLossFn:
         return molecule_sigmas
 
     def _get_weight(self, molecule_sigmas: torch.Tensor):
-        return (molecule_sigmas**2 + self.sigma_data**2) / (
+        weight = (molecule_sigmas**2 + self.sigma_data**2) / (
             molecule_sigmas * self.sigma_data
         ) ** 2
+        weight = weight.squeeze()
+        return weight
 
     @staticmethod
     def _calculate_loss(
