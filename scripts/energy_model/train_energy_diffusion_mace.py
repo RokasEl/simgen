@@ -48,7 +48,7 @@ MACE_CONFIG = dict(
 PARAMS = {
     "model_params": MACE_CONFIG,
     "lr": 5e-3,
-    "batch_size": 16,
+    "batch_size": 128,
     "epochs": 100,
 }
 
