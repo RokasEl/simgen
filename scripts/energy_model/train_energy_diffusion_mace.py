@@ -14,7 +14,7 @@ from functools import partial
 from fire import Fire
 
 import wandb
-from moldiff.energy_model.diffusion_tools import (
+from energy_model.diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
     EnergyMACEDiffusion,
@@ -47,16 +47,46 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 1e-4,
+    "lr": 5e-3,
     "batch_size": 128,
-    "epochs": 200,
+    "epochs": 100,
 }
 
 
-def main(data_path="./Data/qm9_data", model_path="test_model.pt", restart=False):
+def main(
+    data_path="./Data/qm9_data",
+    model_path="test_model.pt",
+    restart=False,
+):
     setup_logger(
         level=logging.DEBUG, tag="train_energy_diffusion_mace", directory="./logs/"
     )
+
+    collections, _ = get_dataset_from_xyz(
+        data_path,
+        config_type_weights={},
+        valid_path=None,  # type: ignore
+        valid_fraction=0.1,
+    )
+    to_atomic_data = partial(data.AtomicData.from_config, z_table=Z_TABLE, cutoff=10.0)
+
+    training_data = [to_atomic_data(conf) for conf in collections.train]
+    data_loader = torch_geometric.dataloader.DataLoader(
+        dataset=training_data,  # type: ignore
+        batch_size=PARAMS["batch_size"],
+        shuffle=True,
+        drop_last=True,
+    )
+    validation_data = [to_atomic_data(conf) for conf in collections.valid]
+    validation_data_loader = torch_geometric.dataloader.DataLoader(
+        dataset=validation_data,  # type: ignore
+        batch_size=PARAMS["batch_size"],
+        shuffle=False,
+        drop_last=False,
+    )
+
+    avg_num_neighbors = modules.compute_avg_num_neighbors(data_loader)
+    PARAMS["avg_num_neighbors"] = avg_num_neighbors
     wandb.init(
         # set the wandb project where this run will be logged
         project="energy-diffusion",
@@ -67,37 +97,52 @@ def main(data_path="./Data/qm9_data", model_path="test_model.pt", restart=False)
     )
 
     model = EnergyMACEDiffusion(noise_embed_dim=32, **PARAMS["model_params"])
-    model = EDMModelWrapper(model, sigma_data=1).to(DEVICE)
+    model = EDMModelWrapper(model, sigma_data=0.5).to(DEVICE)
     if restart:
         save_dict = torch.load(model_path, map_location=DEVICE)
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    _, all_train_configs = data.load_from_xyz(
-        file_path=data_path,
-        config_type_weights={},
-    )
-    to_atomic_data = partial(data.AtomicData.from_config, z_table=Z_TABLE, cutoff=10.0)
-    training_data = [to_atomic_data(conf) for conf in all_train_configs]
-    data_loader = torch_geometric.dataloader.DataLoader(
-        dataset=training_data,  # type: ignore
-        batch_size=PARAMS["batch_size"],
-        shuffle=True,
-        drop_last=False,
-    )
-    loss_fn = EDMLossFn(P_mean=-1.2, P_std=1.2, sigma_data=1)
+    loss_fn = EDMLossFn(P_mean=-1.2, P_std=1.0, sigma_data=0.5)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer=optimizer, factor=0.8, patience=5, verbose=True
+    )
     for epoch in range(PARAMS["epochs"]):
-        for i, batch_data in enumerate(data_loader):
+        model.train()
+        for _, batch_data in enumerate(data_loader):
             batch_data = batch_data.to(DEVICE)
             optimizer.zero_grad()
-            loss = loss_fn(batch_data, model, training=True)
+            weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
+            loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
             clip_grad_norm_(model.parameters(), 1000.0)
             wandb.log({"loss": loss.item()})
             optimizer.step()
-        logging.info(f"Epoch {epoch}: {loss.item()}")
+        # validation
+        val_pos_loss = []
+        val_elem_loss = []
+        model.eval()
+        for _, batch_data in enumerate(validation_data_loader):
+            batch_data = batch_data.to(DEVICE)
+            weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
+            val_pos_loss.append(weight * pos_loss)
+            val_elem_loss.append(weight * elem_loss)
+        val_pos_loss = torch.cat(val_pos_loss).mean()
+        val_elem_loss = torch.cat(val_elem_loss).mean()
+        val_loss = val_pos_loss + val_elem_loss
+        scheduler.step(val_loss)
+        wandb.log(
+            {
+                "val_loss": val_loss.item(),
+                "val_pos_loss": val_pos_loss.item(),
+                "val_elem_loss": val_elem_loss.item(),
+                "epoch": epoch,
+            }
+        )
+        logging.info(f"Epoch {epoch}: {val_loss.item()}")
+
     # save model
     save_dict = {
         "model_params": PARAMS["model_params"],

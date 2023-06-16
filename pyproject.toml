@@ -14,4 +14,5 @@ authors = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moldiff"] 
+include = ["moldiff", "energy_model"]
+namespaces = false

@@ -81,8 +81,7 @@ class EDMLossFn:
         D_yn = model(model_input.to_dict(), molecule_sigmas, **model_kwargs)
         pos_loss, elem_loss = self._calculate_loss(batch_data, D_yn)
         # reweight the element loss to penalise missing elements more when sigma is small
-        weighted_loss = weight * (pos_loss + elem_loss)
-        return weighted_loss.mean()
+        return weight, pos_loss, elem_loss
 
     def _generate_sigmas(self, batch_data: AtomicData):
         num_graphs = batch_data.num_graphs
@@ -104,13 +103,13 @@ class EDMLossFn:
     ):
         position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
         position_loss = einops.reduce(
-            position_loss, "num_nodes cartesians -> num_nodes", "sum"
+            position_loss, "num_nodes cartesians -> num_nodes", "mean"
         )
         element_loss = (
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
         element_loss = einops.reduce(
-            element_loss, "num_nodes elements -> num_nodes", "sum"
+            element_loss, "num_nodes elements -> num_nodes", "mean"
         )
         return position_loss, element_loss
 
