@@ -38,6 +38,7 @@ MACE_CONFIG = dict(
     num_elements=len(Z_TABLE.zs),
     hidden_irreps=o3.Irreps("64x0e + 64x1o"),
     MLP_irreps=o3.Irreps("64x0e"),
+    radial_MLP=[64] * 3,
     gate=torch.nn.functional.silu,
     atomic_energies=atomic_energies,
     avg_num_neighbors=8,
@@ -47,9 +48,9 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 5e-4,
+    "lr": 1e-2,
     "batch_size": 128,
-    "epochs": 100,
+    "epochs": 250,
 }
 
 
@@ -108,7 +109,7 @@ def main(
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer=optimizer, factor=0.8, patience=5, verbose=True
+        optimizer=optimizer, factor=0.85, patience=10, verbose=True
     )
     for epoch in range(PARAMS["epochs"]):
         model.train()
@@ -119,27 +120,38 @@ def main(
             loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
             clip_grad_norm_(model.parameters(), 1000.0)
-            wandb.log({"loss": loss.item()})
+            wandb.log(
+                {
+                    "loss": loss.item(),
+                    "unweighted_loss": (pos_loss + elem_loss).mean().item(),
+                }
+            )
             optimizer.step()
         # validation
         val_pos_loss = []
         val_elem_loss = []
+        weights = []
         model.eval()
         for _, batch_data in enumerate(validation_data_loader):
             batch_data = batch_data.to(DEVICE)
             weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
             model.zero_grad()
-            val_pos_loss.append((weight * pos_loss).detach().cpu().numpy())
-            val_elem_loss.append((weight * elem_loss).detach().cpu().numpy())
-        val_pos_loss = np.concatenate(val_pos_loss).mean()
-        val_elem_loss = np.concatenate(val_elem_loss).mean()
-        val_loss = val_pos_loss + val_elem_loss
+            weights.append(weight.detach().cpu().numpy())
+            val_pos_loss.append((pos_loss).detach().cpu().numpy())
+            val_elem_loss.append((elem_loss).detach().cpu().numpy())
+        val_pos_loss = np.concatenate(val_pos_loss)
+        val_elem_loss = np.concatenate(val_elem_loss)
+        weights = np.concatenate(weights)
+        val_loss = ((val_pos_loss + val_elem_loss) * weights).mean()
+        unweighted_val_loss = (val_pos_loss + val_elem_loss).mean()
         scheduler.step(val_loss)
         wandb.log(
             {
                 "val_loss": val_loss,
-                "val_pos_loss": val_pos_loss,
-                "val_elem_loss": val_elem_loss,
+                "unweighted_val_loss": unweighted_val_loss,
+                "lr": optimizer.param_groups[0]["lr"],
+                "val_pos_loss": val_pos_loss.mean(),
+                "val_elem_loss": val_elem_loss.mean(),
                 "epoch": epoch,
             }
         )
