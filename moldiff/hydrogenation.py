@@ -4,6 +4,7 @@ import ase
 import numpy as np
 from ase.data import covalent_radii
 from frozendict import frozendict
+from hydromace.interface import HydroMaceCalculator
 from scipy.stats import binom
 
 from moldiff.generation_utils import (
@@ -48,6 +49,13 @@ def hydrogenate_deterministically(
         max_valence = NATURAL_VALENCES[atomic_numbers[idx]]
         num_hs_to_add_per_atom[idx] = max_valence - current_neighbours
     print(num_hs_to_add_per_atom)
+    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
+    return atoms_with_hs
+
+
+def hydrogenate_hydromace(atoms, hydromace_calc: HydroMaceCalculator):
+    num_hs_to_add = hydromace_calc.predict_missing_hydrogens(atoms)
+    num_hs_to_add_per_atom = np.round(num_hs_to_add).astype(int)
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
     return atoms_with_hs
 

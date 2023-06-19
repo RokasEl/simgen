@@ -6,7 +6,6 @@ from ase.calculators.calculator import Calculator
 from ase.neighborlist import natural_cutoffs, neighbor_list
 from ase.optimize import LBFGS
 from mace.tools import AtomicNumberTable
-from scipy.stats import betabinom
 
 from moldiff.element_swapping import (
     collect_particles,
@@ -18,6 +17,7 @@ from moldiff.generation_utils import (
 )
 from moldiff.hydrogenation import (
     hydrogenate_deterministically,
+    hydrogenate_hydromace,
     hydrogenate_stochastically,
 )
 
@@ -78,6 +78,23 @@ def attach_calculator(
     return atoms_list
 
 
+def add_hydrogens(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc):
+    if hydrogenation_type.lower().strip() == "valence":
+        atoms = hydrogenate_deterministically(atoms)
+    elif hydrogenation_type.lower().strip() == "hydromace":
+        if hydrogenation_calc is None:
+            raise ValueError(
+                "Trying to use model to hydrogenate, but no model provided."
+            )
+        atoms = hydrogenate_hydromace(atoms, hydrogenation_calc)
+    else:
+        raise NotImplementedError(
+            f"Hydrogenation type {hydrogenation_type} not implemented."
+        )
+
+    return atoms
+
+
 def relax_hydrogens(atoms_list: List[ase.Atoms], calculator, num_steps=5, max_step=0.2):
     for atoms in atoms_list:
         atoms.info["calculation_type"] = "mace"
@@ -134,8 +151,9 @@ def relax_elements(
 
 def cleanup_atoms(
     atoms: ase.Atoms,
+    hydrogenation_type: str,
+    hydrogenation_calc,
     z_table: AtomicNumberTable,
-    num_hydrogenations: int = 10,
     num_element_sweeps: int | Literal["all"] = "all",
 ) -> ase.Atoms:
     """
@@ -151,9 +169,11 @@ def cleanup_atoms(
     pruned_relaxed_atoms = run_dynamics(
         pruned_relaxed_atoms, num_steps=5, max_step=0.2 / 5
     )[0]
-    hydrogenated_atoms = hydrogenate_deterministically(pruned_relaxed_atoms)
+    hydrogenated_atoms = add_hydrogens(
+        pruned_relaxed_atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
     relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=20, max_step=0.1
+        [hydrogenated_atoms.copy()], calc, num_steps=10, max_step=0.1
     )[0]
     element_relaxed_atoms = relax_elements(
         relaxed_hydrogenated_atoms, z_table, num_element_sweeps=num_element_sweeps

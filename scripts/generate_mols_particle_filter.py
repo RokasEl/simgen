@@ -19,17 +19,14 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 import logging
 
 import ase.io as ase_io
+from hydromace.interface import HydroMaceCalculator
 
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     calculate_restorative_force_strength,
 )
-from moldiff.manifolds import (
-    HeartPointCloudPrior,
-    MultivariateGaussianPrior,
-    PointCloudPrior,
-)
+from moldiff.manifolds import MultivariateGaussianPrior
 
 
 def main():
@@ -45,20 +42,13 @@ def main():
         device=DEVICE,
         rng=rng,
     )
+    hydromace_model = torch.load("./models/hydromace_model.pt", map_location=DEVICE)
+    hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/size_one/"
-    # theta = np.linspace(0, 2 * np.pi, 100)
-    # x, y = np.cos(theta), np.sin(theta)
-    # points = np.stack([x, y, np.zeros_like(x)], axis=1) * 4
-    # prior = PointCloudPrior(
-    #     points=points,
-    #     beta=3,
-    #     point_shape=MultivariateGaussianPrior(
-    #         covariance_matrix=np.diag([1.5, 1.5, 0.5])
-    #     ),
-    # )
+    destination = "./scripts/Generated_trajectories/hydromace/"
+
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
@@ -73,7 +63,7 @@ def main():
         particle_filter = ParticleFilterGenerator(
             score_model,
             num_steps=150,
-            guiding_manifold=MultivariateGaussianPrior(np.eye(3)),
+            guiding_manifold=MultivariateGaussianPrior(np.diag([1.0, 1.0, 0.333])),
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
@@ -83,8 +73,9 @@ def main():
             mol,
             swapping_z_table,
             num_particles=10,
-            particle_swap_frequency=3,
-            # scaffold=scaffold,
+            particle_swap_frequency=2,
+            hydrogenation_type="hydromace",
+            hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
             f"{destination}/scaffolded_CHONF_{i}_{size}.xyz",

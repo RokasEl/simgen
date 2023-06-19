@@ -1,10 +1,11 @@
 import logging
 from functools import partial
-from typing import List
+from typing import List, Literal
 
 import ase
 import numpy as np
 import torch
+from hydromace.interface import HydroMaceCalculator
 from mace.tools import AtomicNumberTable
 
 from moldiff.atoms_cleanup import cleanup_atoms
@@ -39,7 +40,7 @@ class ParticleFilterGenerator:
         self.similarity_calculator = similarity_calculator
         self.guiding_manifold = guiding_manifold
         self.z_table = AtomicNumberTable(
-            [int(z) for z in similarity_calculator.model.atomic_numbers]
+            [int(z) for z in similarity_calculator.model.atomic_numbers]  # type: ignore
         )
         self.device = device
         self.noise_parameters = noise_params
@@ -76,6 +77,8 @@ class ParticleFilterGenerator:
         particle_swap_frequency: int = 1,
         do_final_cleanup: bool = True,
         scaffold: ase.Atoms | None = None,
+        hydrogenation_type: Literal["valence"] | Literal["hydromace"] = "valence",
+        hydrogenation_calc: HydroMaceCalculator | None = None,
     ):
         # initialise mol
         molecule = self.guiding_manifold.initialise_positions(molecule, scale=0.5)
@@ -100,6 +103,8 @@ class ParticleFilterGenerator:
             atoms.calc = self.similarity_calculator
             cleaned = cleanup_atoms(
                 atoms,
+                hydrogenation_type,
+                hydrogenation_calc,
                 swapping_z_table,
                 num_element_sweeps=10,
             )
