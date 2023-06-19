@@ -42,7 +42,9 @@ def main():
         device=DEVICE,
         rng=rng,
     )
-    hydromace_model = torch.load("./models/hydromace_model.pt", map_location=DEVICE)
+    hydromace_model = torch.load(
+        "./models/qm9_and_spice_hydrogenation.model", map_location=DEVICE
+    )
     hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
@@ -54,7 +56,7 @@ def main():
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(100):
         logging.debug(f"Generating molecule {i}")
-        size = 4
+        size = rng.integers(3, 29)
         mol = initialize_mol(f"C{size}")
         restorative_force_strength = calculate_restorative_force_strength(size)
         logging.debug(
@@ -67,8 +69,6 @@ def main():
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
-        scaffold = initialize_mol("C6H6")
-        scaffold = scaffold[:6]
         trajectories = particle_filter.generate(
             mol,
             swapping_z_table,
@@ -78,7 +78,7 @@ def main():
             hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
-            f"{destination}/scaffolded_CHONF_{i}_{size}.xyz",
+            f"{destination}/CHONF_{i}_{size}.xyz",
             trajectories,
             format="extxyz",
             append=True,
