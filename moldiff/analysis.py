@@ -77,6 +77,8 @@ def get_bond_lengths(atoms: ase.Atoms, edge_array):
 
 
 def atoms_to_rdkit_mol(atoms: ase.Atoms):
+    if np.isnan(atoms.get_positions()).any():
+        raise ValueError("Atoms has NaN positions")
     holder = StringIO()
     aio.write(holder, atoms, format="xyz")
     raw_mol = Chem.MolFromXYZBlock(holder.getvalue())
