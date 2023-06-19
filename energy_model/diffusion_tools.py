@@ -281,10 +281,10 @@ class EnergyMACEDiffusion(MACE):
         final_readout.weight.data.zero_()
         # Add a positional embedding for the noise level.
         self.noise_embedding = PositionalEmbedding(noise_embed_dim)
-        noise_in_irreps = o3.Irreps([(noise_embed_dim, (0, 1))])
-        noise_out_irreps = o3.Irreps(
-            [(kwargs["hidden_irreps"].count(o3.Irrep(0, 1)), (0, 1))]
+        noise_in_irreps = o3.Irreps(
+            [(noise_embed_dim + kwargs["num_elements"], (0, 1))]
         )
+        noise_out_irreps = o3.Irreps(kwargs["num_elements"], (0, 1))
         self.noise_linear = LinearNodeEmbeddingBlock(noise_in_irreps, noise_out_irreps)
 
     def forward(
@@ -307,19 +307,14 @@ class EnergyMACEDiffusion(MACE):
         # Embeddings
         node_feats, edge_attrs, edge_feats = self._get_initial_embeddings(data)
         sigma_embedding = self.noise_embedding(sigmas)
-
+        node_feats = torch.cat([node_feats, sigma_embedding], dim=-1)
+        node_feats = F.silu(self.noise_linear(node_feats))
         # Interactions
         energies = []
         node_energies_list = []
         for interaction, product, readout in zip(
             self.interactions, self.products, self.readouts
         ):
-            sigma_addition = F.silu(self.noise_linear(sigma_embedding))
-            # Pad sigma_addition on the right by zeros to match node_feats.
-            sigma_addition = F.pad(
-                sigma_addition, (0, node_feats.shape[-1] - sigma_addition.shape[-1])
-            )
-            node_feats = node_feats + sigma_addition
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
                 node_feats=node_feats,
