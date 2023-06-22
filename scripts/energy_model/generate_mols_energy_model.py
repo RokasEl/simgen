@@ -93,7 +93,7 @@ def main(
     noise_params = sampler_params
     sampler = EDMSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
 
-    data_loader = get_dataloader(3, 29, num_samples_per_size, batch_size=16)
+    data_loader = get_dataloader(3, 29, num_samples_per_size, batch_size=32)
 
     for batch in data_loader:
         batch_data = batch.to(DEVICE)

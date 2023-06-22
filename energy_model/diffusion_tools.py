@@ -177,7 +177,8 @@ class EDMSampler:
         S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
         for i, (sigma_cur, sigma_next) in enumerate(zip(sigmas[:-1], sigmas[1:])):
             x_cur = x_next.clone()
-
+            x_cur.positions.grad = None
+            x_cur.node_attrs.grad = None
             # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
             gamma = (
                 min(S_churn / num_steps, np.sqrt(2) - 1)
@@ -236,8 +237,12 @@ class EDMSampler:
                 )
                 if track_trajectory:
                     trajectories.append(x_next.clone())
+            print(
+                torch.cuda.memory_reserved() / 1e9, torch.cuda.memory_allocated() / 1e9
+            )
         if track_trajectory:
             return x_next, trajectories
+        print("next batch")
         return x_next, []
 
     def _get_integrator_parameters(self):
@@ -284,7 +289,7 @@ class EnergyMACEDiffusion(MACE):
         noise_in_irreps = o3.Irreps(
             [(noise_embed_dim + kwargs["num_elements"], (0, 1))]
         )
-        noise_out_irreps = o3.Irreps(kwargs["num_elements"], (0, 1))
+        noise_out_irreps = o3.Irreps([(kwargs["num_elements"], (0, 1))])
         self.noise_linear = LinearNodeEmbeddingBlock(noise_in_irreps, noise_out_irreps)
 
     def forward(
