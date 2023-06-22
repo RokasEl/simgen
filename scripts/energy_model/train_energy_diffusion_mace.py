@@ -34,7 +34,7 @@ MACE_CONFIG = dict(
     interaction_cls_first=modules.interaction_classes[
         "RealAgnosticResidualInteractionBlock"
     ],
-    num_interactions=2,
+    num_interactions=3,
     num_elements=len(Z_TABLE.zs),
     hidden_irreps=o3.Irreps("64x0e + 64x1o"),
     MLP_irreps=o3.Irreps("64x0e"),
@@ -48,7 +48,7 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 1e-2,
+    "lr": 5e-3,
     "batch_size": 128,
     "epochs": 250,
 }
