@@ -132,11 +132,15 @@ def relax_elements(
     atoms: ase.Atoms,
     z_table: AtomicNumberTable,
     num_element_sweeps: int | Literal["all"] = "all",
+    mask: np.ndarray | None = None,
 ) -> ase.Atoms:
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
     already_switched = [idx for idx in range(len(atoms)) if atoms.numbers[idx] == 1]
+    if mask is not None:
+        masked_atoms = np.where(mask == 0)[0]
+        already_switched += list(masked_atoms)
     mol = duplicate_atoms(atoms)
     edge_array, _ = get_edge_array_and_neighbour_numbers(mol, mult=1.2)
     num_element_sweeps = determine_number_of_element_swaps(
@@ -168,6 +172,7 @@ def cleanup_atoms(
     hydrogenation_calc,
     z_table: AtomicNumberTable,
     num_element_sweeps: int | Literal["all"] = "all",
+    mask=None,
 ) -> ase.Atoms:
     """
     Wrapper function to allow easy extension with other cleanup functions if needed.
@@ -182,7 +187,10 @@ def cleanup_atoms(
         [hydrogenated_atoms.copy()], calc, num_steps=20, max_step=0.1
     )[0]
     element_relaxed_atoms = relax_elements(
-        relaxed_hydrogenated_atoms, z_table, num_element_sweeps=num_element_sweeps
+        relaxed_hydrogenated_atoms,
+        z_table,
+        num_element_sweeps=num_element_sweeps,
+        mask=mask,
     )
     final_relaxed_atoms = attach_calculator(
         [element_relaxed_atoms.copy()], calc, calculation_type="mace"

@@ -106,7 +106,8 @@ class ParticleFilterGenerator:
                 hydrogenation_type,
                 hydrogenation_calc,
                 swapping_z_table,
-                num_element_sweeps=10,
+                num_element_sweeps="all",
+                mask=mask,
             )
             trajectories.extend(cleaned)
         return trajectories
