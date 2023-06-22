@@ -5,6 +5,7 @@ import networkx as nx
 import numpy as np
 import torch
 from pydantic import BaseModel, Field, PrivateAttr
+from scipy.interpolate import splev, splprep
 
 from moldiff.atoms_cleanup import (
     attach_calculator,
@@ -87,6 +88,14 @@ def hydrogenate_by_model(atoms, model):
     return atoms_with_hs
 
 
+def interpolate_points(points, num_interpolated_points=100):
+    k = min(3, len(points) - 1)
+    tck, u = splprep(points.T, s=0, k=k)
+    u = np.linspace(0, 1, num_interpolated_points)
+    new_points = np.array(splev(u, tck)).T
+    return new_points
+
+
 class MoldiffGeneration(UpdateScene):
     model_path: str = Field(
         "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
@@ -120,7 +129,6 @@ class MoldiffGeneration(UpdateScene):
             run_type = kwargs["run_type"].strip().lower()
         else:
             run_type = self.run_type.strip().lower()
-
         if run_type == "generate":
             return self._generate(atom_ids, atoms, **kwargs)
         elif run_type == "hydrogenate":
@@ -137,7 +145,12 @@ class MoldiffGeneration(UpdateScene):
         self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
     ) -> list[ase.Atoms]:
         calc = self._calc
-        prior = PointCloudPrior(kwargs["points"], beta=5.0)
+        if kwargs["points"] is not None and kwargs["points"].shape[0] > 0:
+            print("Interpolating points")
+            points = interpolate_points(kwargs["points"])
+        else:
+            points = kwargs["points"]
+        prior = PointCloudPrior(points, beta=5.0)
         num_atoms_to_add = (
             kwargs["num_atoms_to_add"]
             if "num_atoms_to_add" in kwargs
