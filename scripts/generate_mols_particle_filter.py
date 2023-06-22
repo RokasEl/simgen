@@ -49,7 +49,7 @@ def main():
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
-    destination = "./scripts/Generated_trajectories/hydromace/"
+    destination = "./scripts/Generated_trajectories/hydromace_new_swaps/"
 
     # create destination folder if it does not exist
     os.makedirs(destination, exist_ok=True)
