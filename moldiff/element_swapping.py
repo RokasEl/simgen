@@ -1,10 +1,10 @@
 import logging
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 
 import numpy as np
 from ase import Atoms
 from mace.tools import AtomicNumberTable
-from scipy.special import softmax
+from scipy.special import softmax  # type: ignore
 
 from moldiff.generation_utils import duplicate_atoms
 
@@ -129,14 +129,14 @@ def apply_mask_to_probabilities(probibilities, mask):
 def collect_particles(
     ensemble: List[Atoms],
     beta: float,
-) -> Atoms:
+) -> Tuple[Atoms, int]:
     energies = np.array([mol.get_potential_energy() for mol in ensemble])
     energies = energies.flatten()
     num_atoms = np.mean([len(mol) for mol in ensemble])
     energies = catch_diverged_energies(energies, num_atoms) * beta * -1
     probabilities = softmax(energies)
     collect_idx = np.random.choice(len(ensemble), p=probabilities)
-    return duplicate_atoms(ensemble[collect_idx])
+    return duplicate_atoms(ensemble[collect_idx]), collect_idx
 
 
 def catch_diverged_energies(

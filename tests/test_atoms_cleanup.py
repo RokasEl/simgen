@@ -6,6 +6,7 @@ from mace.tools import AtomicNumberTable
 
 from moldiff.atoms_cleanup import (
     get_higest_energy_unswapped_idx,
+    get_swapping_candidates,
     relax_elements,
     relax_hydrogens,
     remove_isolated_atoms_fixed_cutoff,
@@ -118,6 +119,29 @@ def test_relax_hydrogens_keeps_positions_of_heavy_elements_unchanged(
         )
 
 
+def test_get_swapping_candidates():
+    mol = initialize_mol("C2H6")
+    idx = 0
+    neighbours = np.array([1, 2, 3, 4])
+    already_switched = [2, 3, 4]
+    z_table = AtomicNumberTable([6, 7, 8])
+    ensemble, swapped_indices = get_swapping_candidates(
+        mol, idx, neighbours, already_switched, z_table
+    )
+    expected_ensemble = []
+    for elem in [7, 8]:
+        m = mol.copy()
+        m.set_atomic_numbers([elem, 6, 1, 1, 1, 1, 1, 1])
+        expected_ensemble.append(m)
+    for elem in [7, 8]:
+        m = mol.copy()
+        m.set_atomic_numbers([6, elem, 1, 1, 1, 1, 1, 1])
+        expected_ensemble.append(m)
+    expected_swapped_indices = [0, 0, 1, 1]
+    assert ensemble == expected_ensemble
+    assert swapped_indices == expected_swapped_indices
+
+
 @pytest.fixture()
 def element_swapping_test_suite():
     test_suite = []
@@ -144,7 +168,7 @@ def element_swapping_test_suite():
 def test_relax_elements(loaded_mace_similarity_calculator, element_swapping_test_suite):
     for mol, expected_mol in element_swapping_test_suite:
         mol.calc = loaded_mace_similarity_calculator
-        relaxed_mol = relax_elements(mol, z_table=z_table, should_run_dynamics=False)
+        relaxed_mol = relax_elements(mol, z_table=z_table)
         assert relaxed_mol == expected_mol
 
 

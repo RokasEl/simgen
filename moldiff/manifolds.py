@@ -138,7 +138,7 @@ class PointCloudPrior(PriorManifold):
             positions[:, None, :] - points[None, :, :]
         )  # (n_atoms, n_points, 3)
         distances = (
-            reduce(differences**2, "i j k -> i j", "sum") * self.beta
+            reduce(differences**2, "i j k -> i j", "sum") ** (0.5) * self.beta
         )  # (n_atoms, n_points)
 
         weights = self.get_weights(distances)  # (n_atoms, n_points)

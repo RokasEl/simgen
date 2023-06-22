@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Tuple
 
 import ase
 import numpy as np
@@ -111,13 +111,28 @@ def determine_number_of_element_swaps(num_element_sweeps, already_switched, mol)
     return num_element_sweeps
 
 
+def get_swapping_candidates(
+    mol, idx, neighbours, already_switched, z_table
+) -> Tuple[List[ase.Atoms], List[int]]:
+    """
+    Generate ensemble of molecules with one element swapped.
+    We construct the ensemble by swapping the highest energy atom and its neighbours.
+    """
+    candidates = [idx] + [idx for idx in neighbours if idx not in already_switched]
+    ensemble = []
+    swapped_indices = []
+    for candidate_idx in candidates:
+        sweep = sweep_all_elements(mol, candidate_idx, z_table)
+        ensemble.extend(sweep)
+        swapped_indices += [candidate_idx] * len(sweep)
+    return ensemble, swapped_indices
+
+
 def relax_elements(
     atoms: ase.Atoms,
     z_table: AtomicNumberTable,
-    should_run_dynamics: bool = True,
     num_element_sweeps: int | Literal["all"] = "all",
 ) -> ase.Atoms:
-    """should_run_dynamics: should only be False for testing"""
     assert atoms.calc is not None
     atoms.info["time"] = 0.0
     atoms.info["calculation_type"] = "mace"
@@ -135,17 +150,15 @@ def relax_elements(
         calc.calculate(mol)
         energies = mol.get_potential_energies()
         idx = get_higest_energy_unswapped_idx(already_switched, energies)
-        already_switched.append(idx)
         neighbours = edge_array[edge_array[:, 0] == idx][:, 1]
-        mask = np.append(neighbours, idx)
-        ensemble = sweep_all_elements(mol, idx, z_table)
-        ensemble = [mol, *ensemble]
-        ensemble = attach_calculator(
-            ensemble, mol.calc, calculation_type="mace", mask=mask
+        ensemble, swapped_indices = get_swapping_candidates(
+            mol, idx, neighbours, already_switched, z_table
         )
-        if should_run_dynamics:
-            ensemble = run_dynamics(ensemble, num_steps=5)
-        mol = collect_particles(ensemble, beta=100.0)
+        ensemble = [mol, *ensemble]
+        ensemble = attach_calculator(ensemble, calc, calculation_type="mace")
+        swapped_indices = [idx, *swapped_indices]
+        mol, lowest_energy_index = collect_particles(ensemble, beta=100.0)
+        already_switched.append(swapped_indices[lowest_energy_index])
     return mol
 
 

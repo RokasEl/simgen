@@ -143,7 +143,7 @@ class ParticleFilterGenerator:
 
         if self.swapped:
             atoms = self._prepare_atoms_for_swap(atoms, self.sigmas[-1])
-            atoms = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
+            atoms, _ = collect_particles(atoms, self.thermostat(self.sigmas[-1]))
             intermediate_configs.append(atoms)
         return intermediate_configs
 
@@ -151,7 +151,7 @@ class ParticleFilterGenerator:
         self, atoms_list: List[ase.Atoms], beta, num_particles, z_table, mask
     ):
         if self.swapped:
-            collected_mol = collect_particles(atoms_list, beta)  # type: ignore
+            collected_mol, _ = collect_particles(atoms_list, beta)  # type: ignore
             collected_mol.calc = self.similarity_calculator
             atoms_list = [collected_mol]
             self.swapped = False
