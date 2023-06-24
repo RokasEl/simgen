@@ -10,11 +10,18 @@ from mace.data.atomic_data import AtomicData
 from mace.modules.blocks import LinearNodeEmbeddingBlock
 from mace.modules.models import MACE
 from mace.modules.utils import compute_forces, get_outputs
-from mace.tools.scatter import scatter_sum
+from mace.tools.scatter import scatter_mean, scatter_sum
 
 # Many ideas from https://github.com/NVlabs/edm/
 
 
+# From Ilyes' code
+def remove_mean(x: torch.Tensor, batch: torch.Tensor) -> torch.Tensor:
+    """Remove mean of each edge feature vector."""
+    return x - scatter_mean(x, batch, dim=0, dim_size=batch.max() + 1)[batch]
+
+
+# -----------------
 class PositionalEmbedding(torch.nn.Module):
     def __init__(self, embed_dim, max_positions=1024, endpoint=False):
         super().__init__()
@@ -77,6 +84,7 @@ class EDMLossFn:
     def __call__(self, batch_data: AtomicData, model, **model_kwargs):
         molecule_sigmas = self._generate_sigmas(batch_data)
         weight = self._get_weight(molecule_sigmas)
+        batch_data.positions = remove_mean(batch_data.positions, batch_data.batch)
         model_input = self._get_corrupted_input(batch_data, molecule_sigmas)
         D_yn = model(model_input.to_dict(), molecule_sigmas, **model_kwargs)
         pos_loss, elem_loss = self._calculate_loss(batch_data, D_yn)
@@ -118,8 +126,8 @@ class EDMLossFn:
     @staticmethod
     def _get_corrupted_input(batch_data: AtomicData, molecule_sigmas: torch.Tensor):
         model_input = batch_data.clone()
-        model_input.positions += molecule_sigmas * torch.randn_like(
-            model_input.positions
+        model_input.positions += molecule_sigmas * remove_mean(
+            torch.randn_like(model_input.positions), batch_data.batch
         )
         model_input.node_attrs += molecule_sigmas * torch.randn_like(
             model_input.node_attrs
@@ -187,9 +195,14 @@ class EDMSampler:
             )
             # Added noise depends on the current noise level. So, it decreases over the course of the integration.
             sigma_increased = sigma_cur * (1 + gamma)
+            sigma_increased = (torch.ones_like(x_cur.batch) * sigma_increased).view(
+                -1, 1
+            )
             # Add noise to the current sample.
             noise_level = (sigma_increased**2 - sigma_cur**2).sqrt() * S_noise
-            x_cur.positions += torch.randn_like(x_cur.positions) * noise_level
+            x_cur.positions += remove_mean(
+                torch.randn_like(x_cur.positions) * noise_level, x_cur.batch
+            )
             x_cur.node_attrs += torch.randn_like(x_cur.node_attrs) * noise_level
             x_increased = x_cur
 
@@ -207,6 +220,7 @@ class EDMSampler:
                 / sigma_increased,
             )
             x_next = x_cur.clone()
+            sigma_next = (torch.ones_like(x_next.batch) * sigma_next).view(-1, 1)
             x_next.positions += (
                 sigma_next - sigma_increased
             ) * grad_log_P_noisy.positions
@@ -237,12 +251,8 @@ class EDMSampler:
                 )
                 if track_trajectory:
                     trajectories.append(x_next.clone())
-            print(
-                torch.cuda.memory_reserved() / 1e9, torch.cuda.memory_allocated() / 1e9
-            )
         if track_trajectory:
             return x_next, trajectories
-        print("next batch")
         return x_next, []
 
     def _get_integrator_parameters(self):
@@ -268,12 +278,14 @@ class EDMSampler:
         sigmas = (max_noise_rhod + noise_interpolation) ** rho
         # Add a zero sigma at the end to get the sample.
         sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1]).to(self.device)])
+        sigmas.requires_grad = False
         return sigmas
 
     @staticmethod
     def _initialize_sample(batch_data: AtomicData, sigma: torch.Tensor) -> AtomicData:
         x_next = batch_data
         x_next.positions = sigma * torch.randn_like(x_next.positions)
+        x_next.positions = remove_mean(x_next.positions, x_next.batch)
         x_next.node_attrs = sigma * torch.randn_like(x_next.node_attrs)
         return x_next
 
@@ -301,7 +313,6 @@ class EnergyMACEDiffusion(MACE):
         data: Dict[str, torch.Tensor],
         sigmas: torch.Tensor,
         training: bool = False,
-        compute_force: bool = True,
     ) -> Dict[str, Optional[torch.Tensor]]:
         # Setup
         data["positions"].requires_grad_(True)
@@ -349,18 +360,18 @@ class EnergyMACEDiffusion(MACE):
         node_energy_contributions = torch.stack(node_energies_list, dim=-1)
         node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
         # Outputs
-        forces, _, _ = get_outputs(
-            energy=total_energy,
-            positions=data["positions"],
-            displacement=displacement,
-            cell=data["cell"],
-            training=training,
-            compute_force=compute_force,
-            compute_stress=False,
-            compute_virials=False,
-        )
-        node_forces = compute_forces(
-            energy=total_energy, positions=data["node_attrs"], training=training
+
+        grad_outputs: List[Optional[torch.Tensor]] = [
+            torch.ones_like(total_energy),
+            torch.ones_like(total_energy),
+        ]
+        forces, node_forces = torch.autograd.grad(
+            outputs=[total_energy],  # [n_graphs, ]
+            inputs=[data["positions"], data["node_attrs"]],  # [n_nodes, 3]
+            grad_outputs=grad_outputs,
+            retain_graph=training,  # Make sure the graph is not destroyed during training
+            create_graph=training,  # Create graph for second derivative
+            allow_unused=True,
         )
         return {
             "energy": total_energy,

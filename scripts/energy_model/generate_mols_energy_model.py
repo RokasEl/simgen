@@ -42,16 +42,19 @@ Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def get_dataloader(min_size, max_size, num_samples_per_size, batch_size=32):
+def get_dataloader(
+    min_size, max_size, num_samples_per_size, batch_size=32, cutoff=10.0
+):
     dataset = []
     for size in range(min_size, max_size + 1):
         mol = initialize_mol("C" * size)
         config = data.Configuration(
             atomic_numbers=mol.get_atomic_numbers(),
             positions=mol.positions,
-            energy=-1.5,
         )
-        atomic_data = data.AtomicData.from_config(config, z_table=Z_TABLE, cutoff=10.0)
+        atomic_data = data.AtomicData.from_config(
+            config, z_table=Z_TABLE, cutoff=cutoff
+        )
         dataset += [atomic_data] * num_samples_per_size
 
     data_loader = torch_geometric.dataloader.DataLoader(
@@ -79,10 +82,11 @@ def check_generated_structures_for_nans(save_path, threshold=100):
 def main(
     model_path="./trained_energy_mace.pt",
     save_path="./mols_energy_model.xyz",
-    num_samples_per_size=10,
+    num_samples_per_size=50,
     sampler_params=SamplerNoiseParameters(),
 ):
     save_dict = torch.load(model_path, map_location=DEVICE)
+    cutoff = save_dict["model_params"]["r_max"]
     model = EnergyMACEDiffusion(noise_embed_dim=32, **save_dict["model_params"])
     model = EDMModelWrapper(model, sigma_data=1.0).to(DEVICE)
     model.load_state_dict(save_dict["model_state_dict"])
@@ -93,11 +97,12 @@ def main(
     noise_params = sampler_params
     sampler = EDMSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
 
-    data_loader = get_dataloader(3, 29, num_samples_per_size, batch_size=32)
-
+    data_loader = get_dataloader(
+        19, 20, num_samples_per_size, batch_size=128, cutoff=cutoff
+    )
     for batch in data_loader:
         batch_data = batch.to(DEVICE)
-        final, _ = sampler.generate_samples(batch_data, num_steps=30, training=True)
+        final, _ = sampler.generate_samples(batch_data, num_steps=40, training=False)
         batch_data = None
         model.zero_grad()
         as_ase = [x for x in batch_to_ase(final)]
@@ -113,6 +118,6 @@ def main(
 
 if __name__ == "__main__":
     params = SamplerNoiseParameters(
-        sigma_max=20, sigma_min=1e-3, S_churn=20, S_min=0.10, S_noise=1.00
+        sigma_max=20, sigma_min=1e-3, S_churn=20, S_min=0.10, S_noise=0.5
     )
     main(sampler_params=params)

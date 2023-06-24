@@ -26,15 +26,15 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
 MACE_CONFIG = dict(
-    r_max=10,
-    num_bessel=5,
+    r_max=10.0,
+    num_bessel=4,
     num_polynomial_cutoff=6,
     max_ell=2,
     interaction_cls=modules.interaction_classes["RealAgnosticResidualInteractionBlock"],
     interaction_cls_first=modules.interaction_classes[
         "RealAgnosticResidualInteractionBlock"
     ],
-    num_interactions=3,
+    num_interactions=2,
     num_elements=len(Z_TABLE.zs),
     hidden_irreps=o3.Irreps("64x0e + 64x1o"),
     MLP_irreps=o3.Irreps("64x0e"),
@@ -69,7 +69,10 @@ def main(
         valid_path=None,  # type: ignore
         valid_fraction=0.1,
     )
-    to_atomic_data = partial(data.AtomicData.from_config, z_table=Z_TABLE, cutoff=10.0)
+    cutoff = MACE_CONFIG["r_max"]
+    to_atomic_data = partial(
+        data.AtomicData.from_config, z_table=Z_TABLE, cutoff=cutoff
+    )
 
     training_data = [to_atomic_data(conf) for conf in collections.train]
     data_loader = torch_geometric.dataloader.DataLoader(
@@ -108,8 +111,10 @@ def main(
     loss_fn = EDMLossFn(P_mean=-1.2, P_std=1.0, sigma_data=1.0)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer=optimizer, factor=0.85, patience=10, verbose=True
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer=optimizer,
+        max_lr=PARAMS["lr"],
+        total_steps=len(data_loader) * PARAMS["epochs"],
     )
     for epoch in range(PARAMS["epochs"]):
         model.train()
@@ -119,11 +124,13 @@ def main(
             weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
             loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
-            clip_grad_norm_(model.parameters(), 1000.0)
+            clip_grad_norm_(model.parameters(), 250.0)
+            scheduler.step()
             wandb.log(
                 {
                     "loss": loss.item(),
                     "unweighted_loss": (pos_loss + elem_loss).mean().item(),
+                    "lr": scheduler.get_last_lr()[0],
                 }
             )
             optimizer.step()
@@ -144,12 +151,10 @@ def main(
         weights = np.concatenate(weights)
         val_loss = ((val_pos_loss + val_elem_loss) * weights).mean()
         unweighted_val_loss = (val_pos_loss + val_elem_loss).mean()
-        scheduler.step(val_loss)
         wandb.log(
             {
                 "val_loss": val_loss,
                 "unweighted_val_loss": unweighted_val_loss,
-                "lr": optimizer.param_groups[0]["lr"],
                 "val_pos_loss": val_pos_loss.mean(),
                 "val_elem_loss": val_elem_loss.mean(),
                 "epoch": epoch,
