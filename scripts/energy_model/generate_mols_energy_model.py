@@ -7,6 +7,7 @@ torch.set_default_dtype(torch.float64)
 import ase
 import ase.io as aio
 from ase import Atoms
+from fire import Fire
 
 from energy_model.diffusion_tools import (
     EDMModelWrapper,
@@ -19,23 +20,21 @@ from moldiff.utils import initialize_mol
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def atomic_data_to_ase(node_attrs, positions, energy):
+def atomic_data_to_ase(node_attrs, positions):
     elements = node_attrs.detach().cpu().numpy()
     elements = np.argmax(elements, axis=1)
     elements = [Z_TABLE.zs[z] for z in elements]
     positions = positions.detach().cpu().numpy()
     atoms = Atoms(elements, positions)
-    atoms.info["energy"] = energy.detach().cpu().numpy()
     return atoms
 
 
 def batch_to_ase(batch):
     ptr = batch.ptr.detach().cpu().numpy()
-    for num, (i, j) in enumerate(zip(ptr[:-1], ptr[1:])):
-        energy = batch.energy[num]
+    for i, j in zip(ptr[:-1], ptr[1:]):
         node_attrs = batch.node_attrs[i:j]
         positions = batch.positions[i:j]
-        yield atomic_data_to_ase(node_attrs, positions, energy)
+        yield atomic_data_to_ase(node_attrs, positions)
 
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
@@ -82,8 +81,11 @@ def check_generated_structures_for_nans(save_path, threshold=100):
 def main(
     model_path="./trained_energy_mace.pt",
     save_path="./mols_energy_model.xyz",
-    num_samples_per_size=50,
-    sampler_params=SamplerNoiseParameters(),
+    num_samples_per_size=10,
+    sampler_params=SamplerNoiseParameters(
+        sigma_max=10, sigma_min=1.5e-4, S_churn=77, S_min=1.5e-4, S_noise=1.014
+    ),
+    track_trajectory=False,
 ):
     save_dict = torch.load(model_path, map_location=DEVICE)
     cutoff = save_dict["model_params"]["r_max"]
@@ -97,15 +99,20 @@ def main(
     noise_params = sampler_params
     sampler = EDMSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
 
+    batch_size = 1 if track_trajectory else 128
     data_loader = get_dataloader(
-        19, 20, num_samples_per_size, batch_size=128, cutoff=cutoff
+        15, 25, num_samples_per_size, batch_size=batch_size, cutoff=cutoff
     )
     for batch in data_loader:
         batch_data = batch.to(DEVICE)
-        final, _ = sampler.generate_samples(batch_data, num_steps=40, training=False)
+        final, trajectory = sampler.generate_samples(
+            batch_data, num_steps=40, training=False, track_trajectory=track_trajectory
+        )
         batch_data = None
         model.zero_grad()
         as_ase = [x for x in batch_to_ase(final)]
+        if track_trajectory:
+            as_ase = [y for x in trajectory for y in batch_to_ase(x)] + as_ase
         final = None
         aio.write(save_path, as_ase, format="extxyz", append=True)
         should_break = check_generated_structures_for_nans(save_path)
@@ -117,7 +124,4 @@ def main(
 
 
 if __name__ == "__main__":
-    params = SamplerNoiseParameters(
-        sigma_max=20, sigma_min=1e-3, S_churn=20, S_min=0.10, S_noise=0.5
-    )
-    main(sampler_params=params)
+    Fire(main)
