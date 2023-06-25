@@ -96,7 +96,31 @@ def interpolate_points(points, num_interpolated_points=100):
     return new_points
 
 
+# a function to calculate total length of a path going through all points
+def calculate_path_length(points):
+    path_length = 0
+    for p1, p2 in zip(points[:-1], points[1:]):
+        path_length += np.linalg.norm(p1 - p2)
+    return path_length
+
+
 class MoldiffGeneration(UpdateScene):
+    run_type: str = Field("generate", description="Type of operation to do")
+    num_atoms_to_add: int = Field(
+        5, ge=1, le=30, description="Number of atoms to generate"
+    )
+    atoms_per_angstrom: float = Field(
+        -1.0,
+        ge=-1.0,
+        le=3.0,
+        description="Will supersede num_atoms_to_add if positive",
+    )
+    guiding_force_multiplier: float = Field(
+        1.0, ge=1.0, le=10.0, description="Multiplier for guiding force"
+    )
+    relaxation_steps: int = Field(
+        10, ge=1, le=100, description="Number of relaxation steps"
+    )
     model_path: str = Field(
         "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
     )
@@ -106,13 +130,6 @@ class MoldiffGeneration(UpdateScene):
     hydrogenation_model_path: str = Field(
         "/home/rokas/Programming/hydromace/spice_hydrogenation.model"
     )
-    num_atoms_to_add: int = Field(
-        5, ge=1, le=30, description="Number of atoms to generate"
-    )
-    relaxation_steps: int = Field(
-        10, ge=1, le=100, description="Number of relaxation steps"
-    )
-    run_type: str = Field("generate", description="Type of operation to do")
     _calc = PrivateAttr(None)
     _hydro_model = PrivateAttr(None)
 
@@ -151,15 +168,17 @@ class MoldiffGeneration(UpdateScene):
         else:
             points = kwargs["points"]
         prior = PointCloudPrior(points, beta=5.0)
-        num_atoms_to_add = (
-            kwargs["num_atoms_to_add"]
-            if "num_atoms_to_add" in kwargs
-            else self.num_atoms_to_add
+        num_atoms_to_add = self._get_num_atoms_to_add(
+            points, kwargs, self.num_atoms_to_add
         )
-        num_atoms_to_add = int(num_atoms_to_add)
+        restorative_force_multiplier = (
+            kwargs["guiding_force_multiplier"]
+            if "guiding_force_multiplier" in kwargs
+            else self.guiding_force_multiplier
+        )
         restorative_force_strength = calculate_restorative_force_strength(
             num_atoms_to_add
-        )
+        ) * float(restorative_force_multiplier)
         generator = ParticleFilterGenerator(
             calc,
             prior,
@@ -220,6 +239,33 @@ class MoldiffGeneration(UpdateScene):
         else:
             print("Using loaded hydrogenation model")
         return self._hydro_model
+
+    @staticmethod
+    def _get_num_atoms_to_add(
+        points: np.ndarray, kwargs: dict, default_num_atoms_to_add: int
+    ) -> int:
+        atoms_per_angstrom = (
+            float(kwargs["atoms_per_angstrom"])
+            if "atoms_per_angstrom" in kwargs
+            else -1
+        )
+        if atoms_per_angstrom > 0 and points is not None and points.shape[0] > 0:
+            print(
+                "Calculating number of atoms to add based on curve length and density"
+            )
+            curve_length = calculate_path_length(points)
+            num_atoms_to_add = np.ceil(curve_length * atoms_per_angstrom).astype(int)
+            print(
+                f"Path length defined by points: {curve_length:.1f} A; atoms to add: {num_atoms_to_add}"
+            )
+            return num_atoms_to_add
+        else:
+            num_atoms_to_add = (
+                int(kwargs["num_atoms_to_add"])
+                if "num_atoms_to_add" in kwargs
+                else default_num_atoms_to_add
+            )
+            return num_atoms_to_add
 
     @staticmethod
     def _try_to_get_graph_representation(atoms):
