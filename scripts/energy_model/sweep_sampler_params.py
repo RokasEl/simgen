@@ -23,7 +23,7 @@ def main():
     for i in range(100):
         sigma_min = sigma_min_gen()
         sampler_params = SamplerNoiseParameters(
-            sigma_max=20,
+            sigma_max=7.5,
             sigma_min=sigma_min,
             S_churn=s_churn_gen(),
             S_min=s_min_gen(sigma_min),

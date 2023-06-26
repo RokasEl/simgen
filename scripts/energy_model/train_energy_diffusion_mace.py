@@ -18,6 +18,8 @@ from energy_model.diffusion_tools import (
     EDMLossFn,
     EDMModelWrapper,
     EnergyMACEDiffusion,
+    iDDPMLossFunction,
+    iDDPMModelWrapper,
 )
 from moldiff.utils import setup_logger
 
@@ -48,8 +50,7 @@ MACE_CONFIG = dict(
 
 PARAMS = {
     "model_params": MACE_CONFIG,
-    "lr": 5e-3,
-    "sigma_data": 0.7,
+    "lr": 2e-3,
     "batch_size": 128,
     "epochs": 250,
 }
@@ -103,13 +104,13 @@ def main(
     )
 
     model = EnergyMACEDiffusion(noise_embed_dim=32, **PARAMS["model_params"])
-    model = EDMModelWrapper(model, sigma_data=PARAMS["sigma_data"]).to(DEVICE)
+    model = iDDPMModelWrapper(model).to(DEVICE)
     if restart:
         save_dict = torch.load(model_path, map_location=DEVICE)
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    loss_fn = EDMLossFn(P_mean=-1.6, P_std=1.0, sigma_data=PARAMS["sigma_data"])
+    loss_fn = iDDPMLossFunction(P_mean=-1.4, P_std=1.0)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -126,6 +127,7 @@ def main(
             loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
             clip_grad_norm_(model.parameters(), 250.0)
+            optimizer.step()
             scheduler.step()
             wandb.log(
                 {
@@ -134,7 +136,6 @@ def main(
                     "lr": scheduler.get_last_lr()[0],
                 }
             )
-            optimizer.step()
         # validation
         val_pos_loss = []
         val_elem_loss = []

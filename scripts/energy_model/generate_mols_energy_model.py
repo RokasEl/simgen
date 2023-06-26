@@ -11,8 +11,8 @@ from fire import Fire
 
 from energy_model.diffusion_tools import (
     EDMModelWrapper,
-    EDMSampler,
     EnergyMACEDiffusion,
+    HeunSampler,
     SamplerNoiseParameters,
 )
 from moldiff.utils import initialize_mol
@@ -83,21 +83,21 @@ def main(
     save_path="./mols_energy_model.xyz",
     num_samples_per_size=10,
     sampler_params=SamplerNoiseParameters(
-        sigma_max=10, sigma_min=1.5e-4, S_churn=77, S_min=1.5e-4, S_noise=1.014
+        sigma_max=3, sigma_min=1.5e-4, S_churn=10, S_min=2e-3, S_noise=1.014
     ),
     track_trajectory=False,
 ):
     save_dict = torch.load(model_path, map_location=DEVICE)
     cutoff = save_dict["model_params"]["r_max"]
     model = EnergyMACEDiffusion(noise_embed_dim=32, **save_dict["model_params"])
-    model = EDMModelWrapper(model, sigma_data=1.0).to(DEVICE)
+    model = EDMModelWrapper(model, sigma_data=0.7).to(DEVICE)
     model.load_state_dict(save_dict["model_state_dict"])
     model.eval()
     for param in model.parameters():
         param.requires_grad = False
 
     noise_params = sampler_params
-    sampler = EDMSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
+    sampler = HeunSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
 
     batch_size = 1 if track_trajectory else 128
     data_loader = get_dataloader(
@@ -106,7 +106,7 @@ def main(
     for batch in data_loader:
         batch_data = batch.to(DEVICE)
         final, trajectory = sampler.generate_samples(
-            batch_data, num_steps=40, training=False, track_trajectory=track_trajectory
+            batch_data, num_steps=30, training=False, track_trajectory=track_trajectory
         )
         batch_data = None
         model.zero_grad()

@@ -40,6 +40,92 @@ class PositionalEmbedding(torch.nn.Module):
         return x
 
 
+class iDDPMModelWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        model,
+    ):
+        super().__init__()
+        self.model = model
+
+    def forward(self, model_input_dict, sigma, **model_kwargs):
+        c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
+
+        model_input_dict["positions"] = c_in * model_input_dict["positions"]
+        model_input_dict["node_attrs"] = c_in * model_input_dict["node_attrs"]
+
+        D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
+        D_x["node_forces"] = c_out * D_x["node_forces"]
+        D_x["forces"] = c_out * D_x["forces"]
+        D_x["positions"] = c_skip * model_input_dict["positions"] + D_x["forces"]
+        D_x["node_attrs"] = c_skip * model_input_dict["node_attrs"] + D_x["node_forces"]
+        return D_x
+
+    def compute_prefactors(self, sigma):
+        c_skip = 1.0 / (1 + sigma**2)
+        c_out = sigma
+        c_in = 1 / (1 + sigma**2).sqrt()
+        c_noise = sigma.log()
+        return c_skip, c_out, c_in, c_noise
+
+
+class iDDPMLossFunction:
+    def __init__(self, P_mean=-1.2, P_std=1.2):
+        self.P_mean = P_mean
+        self.P_std = P_std
+
+    def __call__(self, batch_data: AtomicData, model, **model_kwargs):
+        molecule_sigmas = self._generate_sigmas(batch_data)
+        weight = self._get_weight(molecule_sigmas)
+        batch_data.positions = remove_mean(batch_data.positions, batch_data.batch)
+        model_input = self._get_corrupted_input(batch_data, molecule_sigmas)
+        D_yn = model(model_input.to_dict(), molecule_sigmas, **model_kwargs)
+        pos_loss, elem_loss = self._calculate_loss(batch_data, D_yn)
+        # reweight the element loss to penalise missing elements more when sigma is small
+        return weight, pos_loss, elem_loss
+
+    def _generate_sigmas(self, batch_data: AtomicData):
+        num_graphs = batch_data.num_graphs
+        device = batch_data.positions.device  # type: ignore
+        log_sigmas = self.P_mean + self.P_std * torch.randn(num_graphs).to(device)
+        sigmas = torch.exp(log_sigmas)
+        molecule_sigmas = sigmas[batch_data.batch.to(torch.long)]  # type: ignore
+        molecule_sigmas = molecule_sigmas.to(torch.float64).reshape(-1, 1)
+        return molecule_sigmas
+
+    def _get_weight(self, molecule_sigmas: torch.Tensor):
+        weight = 1 / (molecule_sigmas) ** 2
+        weight = weight.squeeze()
+        return weight
+
+    @staticmethod
+    def _calculate_loss(
+        original_data: AtomicData, reconstructed_data: Dict[str, torch.Tensor]
+    ):
+        position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
+        position_loss = einops.reduce(
+            position_loss, "num_nodes cartesians -> num_nodes", "mean"
+        )
+        element_loss = (
+            original_data.node_attrs - reconstructed_data["node_attrs"]
+        ) ** 2
+        element_loss = einops.reduce(
+            element_loss, "num_nodes elements -> num_nodes", "mean"
+        )
+        return position_loss, element_loss
+
+    @staticmethod
+    def _get_corrupted_input(batch_data: AtomicData, molecule_sigmas: torch.Tensor):
+        model_input = batch_data.clone()
+        model_input.positions += molecule_sigmas * remove_mean(
+            torch.randn_like(model_input.positions), batch_data.batch
+        )
+        model_input.node_attrs += molecule_sigmas * torch.randn_like(
+            model_input.node_attrs
+        )
+        return model_input
+
+
 class EDMModelWrapper(torch.nn.Module):
     def __init__(
         self,
@@ -154,7 +240,7 @@ class GradLogP:
     node_attrs: torch.Tensor
 
 
-class EDMSampler:
+class HeunSampler:
     def __init__(
         self,
         model,
@@ -200,10 +286,11 @@ class EDMSampler:
             )
             # Add noise to the current sample.
             noise_level = (sigma_increased**2 - sigma_cur**2).sqrt() * S_noise
-            x_cur.positions += remove_mean(
-                torch.randn_like(x_cur.positions) * noise_level, x_cur.batch
-            )
-            x_cur.node_attrs += torch.randn_like(x_cur.node_attrs) * noise_level
+            with torch.no_grad():
+                x_cur.positions += remove_mean(
+                    torch.randn_like(x_cur.positions) * noise_level, x_cur.batch
+                )
+                x_cur.node_attrs += torch.randn_like(x_cur.node_attrs) * noise_level
             x_increased = x_cur
 
             # Euler step.
@@ -221,12 +308,13 @@ class EDMSampler:
             )
             x_next = x_cur.clone()
             sigma_next = (torch.ones_like(x_next.batch) * sigma_next).view(-1, 1)
-            x_next.positions += (
-                sigma_next - sigma_increased
-            ) * grad_log_P_noisy.positions
-            x_next.node_attrs += (
-                sigma_next - sigma_increased
-            ) * grad_log_P_noisy.node_attrs
+            with torch.no_grad():
+                x_next.positions += (
+                    sigma_next - sigma_increased
+                ) * grad_log_P_noisy.positions
+                x_next.node_attrs += (
+                    sigma_next - sigma_increased
+                ) * grad_log_P_noisy.node_attrs
 
             # Apply 2nd order correction.
             if i < num_steps - 1:
@@ -239,16 +327,20 @@ class EDMSampler:
                     / sigma_next,
                 )
                 x_next = x_increased.clone()
-                x_next.positions += (
-                    (sigma_next - sigma_increased)
-                    * (grad_log_P_correction.positions + grad_log_P_noisy.positions)
-                    / 2
-                )
-                x_next.node_attrs += (
-                    (sigma_next - sigma_increased)
-                    * (grad_log_P_correction.node_attrs + grad_log_P_noisy.node_attrs)
-                    / 2
-                )
+                with torch.no_grad():
+                    x_next.positions += (
+                        (sigma_next - sigma_increased)
+                        * (grad_log_P_correction.positions + grad_log_P_noisy.positions)
+                        / 2
+                    )
+                    x_next.node_attrs += (
+                        (sigma_next - sigma_increased)
+                        * (
+                            grad_log_P_correction.node_attrs
+                            + grad_log_P_noisy.node_attrs
+                        )
+                        / 2
+                    )
                 if track_trajectory:
                     trajectories.append(x_next.clone())
         if track_trajectory:
