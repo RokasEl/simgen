@@ -32,7 +32,6 @@ class ParticleFilterGenerator:
         guiding_manifold: PriorManifold = MultivariateGaussianPrior(
             covariance_matrix=np.diag([1.0, 1.0, 4.0])
         ),
-        num_steps=100,
         device="cuda" if torch.cuda.is_available() else "cpu",
         restorative_force_strength: float = 1.5,
         noise_params=SamplerNoiseParameters(),
@@ -44,14 +43,12 @@ class ParticleFilterGenerator:
         )
         self.device = device
         self.noise_parameters = noise_params
-        self.sigmas = self._get_sigma_schedule(num_steps=num_steps)
         self.sigmas = torch.concatenate(
             [
                 torch.linspace(1, 0.05, 50),
                 torch.logspace(-1.31, -3, 50),
             ]
         ).to(device)
-        num_steps = len(self.sigmas)
         self.integrator = HeunIntegrator(
             similarity_calculator=similarity_calculator,
             guiding_manifold=guiding_manifold,
@@ -61,7 +58,6 @@ class ParticleFilterGenerator:
         self.thermostat = ExponentialThermostat(
             initial_T_log_10=6, final_T_log_10=-1, sigma_max=self.sigmas[0]
         )
-        self.num_steps = num_steps
         self.batch_atoms = partial(
             batch_atoms,
             z_table=self.z_table,
@@ -125,8 +121,9 @@ class ParticleFilterGenerator:
         batched = self.batch_atoms(atoms)
         self.swapped = False
         intermediate_configs = []
-        for step in range(self.num_steps - 1):
-            sigma_cur, sigma_next = self.sigmas[step], self.sigmas[step + 1]
+        for step, (sigma_cur, sigma_next) in enumerate(
+            zip(self.sigmas[:-1], self.sigmas[1:])
+        ):
             if step % particle_swap_frequency == 0 and num_particles > 1:
                 atoms = self._prepare_atoms_for_swap(atoms, sigma_next)
                 atoms = self._collect_and_swap(
@@ -197,20 +194,3 @@ class ParticleFilterGenerator:
         mask = np.concatenate([np.ones(len(molecule)), np.zeros(len(scaffold))], axis=0)
         torch_mask = torch.tensor(mask).repeat(num_particles).to(device)
         return merged, mask, torch_mask
-
-    def _get_sigma_schedule(self, num_steps: int):
-        step_indices = torch.arange(num_steps).to(self.device)
-        sigma_max, sigma_min, rho = (
-            self.noise_parameters.sigma_max,
-            self.noise_parameters.sigma_min,
-            self.noise_parameters.rho,
-        )
-        max_noise_rhod = sigma_max ** (1 / rho)
-        min_noise_rhod = sigma_min ** (1 / rho)
-        noise_interpolation = (
-            step_indices / (num_steps - 1) * (min_noise_rhod - max_noise_rhod)
-        )
-        sigmas = (max_noise_rhod + noise_interpolation) ** rho
-        # Add a zero sigma at the end to get the sample.
-        sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1]).to(self.device)])
-        return sigmas

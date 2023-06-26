@@ -19,23 +19,27 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 import logging
 
 import ase.io as ase_io
+from hydromace.interface import HydroMaceCalculator
 
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     calculate_restorative_force_strength,
 )
-from moldiff.manifolds import MultivariateGaussianPrior
+from moldiff.manifolds import CirclePrior, MultivariateGaussianPrior
 
 
 def main(
     mace_model_path,
     reference_data_path,
     num_reference_mols,
+    hydromace_model_path,
     save_path,
     prior_gaussian_covariance,
     num_molecules,
-    num_heavy_atoms,
+    circle_radius,
+    atoms_per_length,
+    restorative_force_multiplier,
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
     pretrained_mace_path = mace_model_path
@@ -49,34 +53,44 @@ def main(
         device=DEVICE,
         rng=rng,
     )
+    hydromace_model = torch.load(hydromace_model_path, map_location=DEVICE)
+    hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
     noise_params = SamplerNoiseParameters(
         sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
     )
     destination = save_path
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
+    point_shape = MultivariateGaussianPrior(prior_gaussian_covariance)
+    prior = CirclePrior(circle_radius, num_points=100, beta=5, point_shape=point_shape)
+    num_atoms = np.ceil(prior.curve_length * atoms_per_length).astype(int)
+
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
-        size = num_heavy_atoms
+        size = num_atoms
         mol = initialize_mol(f"C{size}")
-        restorative_force_strength = calculate_restorative_force_strength(size)
+        restorative_force_strength = (
+            calculate_restorative_force_strength(size) * restorative_force_multiplier
+        )
         logging.debug(
             f"Mol size {size}, restorative force strength {restorative_force_strength:.2f}"
         )
         particle_filter = ParticleFilterGenerator(
             score_model,
-            guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance),
+            guiding_manifold=prior,
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,
         )
         trajectories = particle_filter.generate(
             mol,
             swapping_z_table,
-            num_particles=10,
+            num_particles=15,
             particle_swap_frequency=3,
+            hydrogenation_type="hydromace",
+            hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
-            f"{destination}/qm9_like_{i}_{size}.xyz",
+            f"{destination}/macrocycle_{i}_{size}.xyz",
             trajectories,
             format="extxyz",
             append=True,
@@ -106,6 +120,12 @@ if __name__ == "__main__":
         default=256,
     )
     parser.add_argument(
+        "--hydromace_path",
+        help="Path to hydrogenation model",
+        type=str,
+        default="./models/qm9_and_spice_hydromace.model",
+    )
+    parser.add_argument(
         "--save_path",
         help="Path to save generated molecules",
         type=str,
@@ -122,19 +142,34 @@ if __name__ == "__main__":
         "--num_molecules", help="Number of molecules to generate", type=int, default=100
     )
     parser.add_argument(
-        "--num_heavy_atoms",
-        help="Number of heavy atoms in generated molecules",
-        type=int,
+        "--circle_radius",
+        help="Radius of circle prior in Angstroms",
+        type=float,
         default=4,
     )
+    parser.add_argument(
+        "--atoms_per_length",
+        type=float,
+        default=1.5,
+        help="Atoms per Angstrom of circle length",
+    )
+    parser.add_argument(
+        "--restorative_force_multiplier",
+        type=float,
+        default=1.0,
+        help="Multiplier for restorative force strength",
+    )
     args = parser.parse_args()
-    covariance_matrix = np.diag(args.prior_gaussian_covariance)
+    covariance_matrix = np.diag(args.prior_gaussian_covariance).astype(np.float64)
     main(
-        args.mace_model_path,
-        args.reference_data_path,
-        args.num_reference_mols,
-        args.save_path,
-        covariance_matrix,
-        args.num_molecules,
-        args.num_heavy_atoms,
+        mace_model_path=args.mace_model_path,
+        reference_data_path=args.reference_data_path,
+        num_reference_mols=args.num_reference_mols,
+        hydromace_model_path=args.hydromace_path,
+        save_path=args.save_path,
+        prior_gaussian_covariance=covariance_matrix,
+        num_molecules=args.num_molecules,
+        circle_radius=args.circle_radius,
+        atoms_per_length=args.atoms_per_length,
+        restorative_force_multiplier=args.restorative_force_multiplier,
     )

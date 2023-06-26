@@ -9,6 +9,7 @@ from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
 from mace.modules.blocks import RadialEmbeddingBlock
 from mace.tools import AtomicNumberTable
+from scipy.interpolate import splev, splprep  # type: ignore
 from torch import nn
 
 
@@ -27,10 +28,25 @@ def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
 
 
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
-    sqrt_prefactor = 1.5664519
+    sqrt_prefactor = 1.5664519  # prefactor fit to qm9
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
     force_strength = 1 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2
     return force_strength
+
+
+def interpolate_points(points, num_interpolated_points=100):
+    k = min(3, len(points) - 1)
+    tck, u = splprep(points.T, s=0, k=k)
+    u = np.linspace(0, 1, num_interpolated_points)
+    new_points = np.array(splev(u, tck)).T
+    return new_points
+
+
+def calculate_path_length(points):
+    path_length = 0
+    for p1, p2 in zip(points[:-1], points[1:]):
+        path_length += np.linalg.norm(p1 - p2)
+    return path_length
 
 
 def change_indices_to_atomic_numbers(

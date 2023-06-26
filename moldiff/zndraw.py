@@ -5,7 +5,6 @@ import networkx as nx
 import numpy as np
 import torch
 from pydantic import BaseModel, Field, PrivateAttr
-from scipy.interpolate import splev, splprep
 
 from moldiff.atoms_cleanup import (
     attach_calculator,
@@ -15,7 +14,9 @@ from moldiff.atoms_cleanup import (
 from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
+    calculate_path_length,
     calculate_restorative_force_strength,
+    interpolate_points,
 )
 from moldiff.hydrogenation import (
     NATURAL_VALENCES,
@@ -86,22 +87,6 @@ def hydrogenate_by_model(atoms, model):
     num_hs_to_add_per_atom = np.round(num_hs_to_add_per_atom).astype(int)
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
     return atoms_with_hs
-
-
-def interpolate_points(points, num_interpolated_points=100):
-    k = min(3, len(points) - 1)
-    tck, u = splprep(points.T, s=0, k=k)
-    u = np.linspace(0, 1, num_interpolated_points)
-    new_points = np.array(splev(u, tck)).T
-    return new_points
-
-
-# a function to calculate total length of a path going through all points
-def calculate_path_length(points):
-    path_length = 0
-    for p1, p2 in zip(points[:-1], points[1:]):
-        path_length += np.linalg.norm(p1 - p2)
-    return path_length
 
 
 class MoldiffGeneration(UpdateScene):

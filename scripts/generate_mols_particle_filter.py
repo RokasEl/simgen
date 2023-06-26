@@ -64,7 +64,6 @@ def main():
         )
         particle_filter = ParticleFilterGenerator(
             score_model,
-            num_steps=150,
             guiding_manifold=MultivariateGaussianPrior(np.diag([1.0, 1.0, 0.333])),
             noise_params=noise_params,
             restorative_force_strength=restorative_force_strength,

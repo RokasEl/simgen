@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 from einops import einsum, reduce
-from scipy.special import softmax
+from scipy.special import softmax  # type: ignore
 
 
 class PriorManifold(ABC):
@@ -166,3 +166,24 @@ class HeartPointCloudPrior(PointCloudPrior):
         z = np.zeros(num_points)
         points = np.stack([x, y, z], axis=1) / rescaling
         super().__init__(points, beta)
+
+
+class CirclePrior(PointCloudPrior):
+    def __init__(
+        self,
+        radius,
+        num_points=20,
+        beta: float = 1,
+        point_shape: PointShape = StandardGaussianPrior(),
+    ):
+        self.radius = radius
+        t = np.linspace(0, 2 * np.pi, num_points)
+        x = np.cos(t) * radius
+        y = np.sin(t) * radius
+        z = np.zeros(num_points)
+        points = np.stack([x, y, z], axis=1)
+        super().__init__(points, beta, point_shape)
+
+    @property
+    def curve_length(self):
+        return 2 * np.pi * self.radius
