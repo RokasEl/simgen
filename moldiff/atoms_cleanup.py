@@ -184,7 +184,7 @@ def cleanup_atoms(
         pruned_atoms.copy(), hydrogenation_type, hydrogenation_calc
     )
     relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=20, max_step=0.1
+        [hydrogenated_atoms.copy()], calc, num_steps=40, max_step=0.05
     )[0]
     element_relaxed_atoms = relax_elements(
         relaxed_hydrogenated_atoms,

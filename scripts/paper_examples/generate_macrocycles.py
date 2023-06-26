@@ -61,8 +61,10 @@ def main(
     destination = save_path
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
-    point_shape = MultivariateGaussianPrior(prior_gaussian_covariance)
-    prior = CirclePrior(circle_radius, num_points=100, beta=5, point_shape=point_shape)
+    point_shape = MultivariateGaussianPrior(
+        prior_gaussian_covariance, normalise_covariance=False
+    )
+    prior = CirclePrior(circle_radius, num_points=100, beta=8, point_shape=point_shape)
     num_atoms = np.ceil(prior.curve_length * atoms_per_length).astype(int)
 
     for i in range(num_molecules):
@@ -84,8 +86,8 @@ def main(
         trajectories = particle_filter.generate(
             mol,
             swapping_z_table,
-            num_particles=15,
-            particle_swap_frequency=3,
+            num_particles=10,
+            particle_swap_frequency=2,
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
         )
@@ -123,7 +125,7 @@ if __name__ == "__main__":
         "--hydromace_path",
         help="Path to hydrogenation model",
         type=str,
-        default="./models/qm9_and_spice_hydromace.model",
+        default="./models/qm9_and_spice_hydrogenation.model",
     )
     parser.add_argument(
         "--save_path",

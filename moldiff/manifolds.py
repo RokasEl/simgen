@@ -48,13 +48,16 @@ class StandardGaussianPrior(PriorManifold, PointShape):
 
 
 class MultivariateGaussianPrior(PriorManifold, PointShape):
-    def __init__(self, covariance_matrix: npt.NDArray[np.float64]):
+    def __init__(
+        self, covariance_matrix: npt.NDArray[np.float64], normalise_covariance=True
+    ):
         assert (
             covariance_matrix.ndim == 2
             and covariance_matrix.shape[0] == covariance_matrix.shape[1]
         )
-        self.covariance_matrix = self._ensure_covariance_determinant_is_one(
-            covariance_matrix
+        self.covariance_matrix = self._check_covariance_determinant(
+            covariance_matrix,
+            normalise_covariance=normalise_covariance,
         )
         self.precision_matrix = np.linalg.inv(self.covariance_matrix)
         self.mean = np.zeros(self.covariance_matrix.shape[0])
@@ -78,15 +81,17 @@ class MultivariateGaussianPrior(PriorManifold, PointShape):
         return -1 * positions @ precision_matrix
 
     @staticmethod
-    def _ensure_covariance_determinant_is_one(
+    def _check_covariance_determinant(
         covariance_matrix: npt.NDArray[np.float64],
+        normalise_covariance: bool = True,
     ):
         determinant = np.linalg.det(covariance_matrix)
         if determinant <= 0:
             raise ValueError(
                 f"Covariance matrix has non-positive determinant: {determinant}"
             )
-        covariance_matrix /= determinant ** (1 / covariance_matrix.shape[0])
+        if normalise_covariance:
+            covariance_matrix /= determinant ** (1 / covariance_matrix.shape[0])
         return covariance_matrix
 
     def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
