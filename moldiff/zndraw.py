@@ -128,7 +128,7 @@ class MoldiffGeneration(UpdateScene):
         "/home/rokas/Programming/data/qm9_reference_data.xyz"
     )
     hydrogenation_model_path: str = Field(
-        "/home/rokas/Programming/hydromace/spice_hydrogenation.model"
+        "/home/rokas/Programming/Generative_model_energy/models/qm9_and_spice_hydrogenation.model"
     )
     _calc = PrivateAttr(None)
     _hydro_model = PrivateAttr(None)
