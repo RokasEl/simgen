@@ -110,7 +110,9 @@ class iDDPMLossFunction:
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
         element_loss = einops.reduce(
-            element_loss, "num_nodes elements -> num_nodes", "mean"
+            element_loss,
+            "num_nodes elements -> num_nodes",
+            "sum",  # sum increases the weight for missing elements
         )
         return position_loss, element_loss
 
@@ -383,7 +385,7 @@ class HeunSampler:
 
 
 class EnergyMACEDiffusion(MACE):
-    def __init__(self, noise_embed_dim, *args, **kwargs):
+    def __init__(self, noise_embed_dim, noise_hidden_dim=64, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Change the weight initialization of the final layer to zeros.
         final_readout = [module for _, module in self.readouts[-1].named_children()][-1]
@@ -398,7 +400,11 @@ class EnergyMACEDiffusion(MACE):
         noise_in_irreps = node_feats_irreps + noise_irreps
         noise_out_irreps = node_feats_irreps
 
-        self.noise_linear = LinearNodeEmbeddingBlock(noise_in_irreps, noise_out_irreps)
+        self.noise_linear = torch.nn.Sequential(
+            LinearNodeEmbeddingBlock(noise_in_irreps, noise_hidden_dim),
+            torch.nn.ReLU(),
+            LinearNodeEmbeddingBlock(noise_hidden_dim, noise_out_irreps),
+        )
 
     def forward(
         self,

@@ -14,6 +14,7 @@ from energy_model.diffusion_tools import (
     EnergyMACEDiffusion,
     HeunSampler,
     SamplerNoiseParameters,
+    iDDPMModelWrapper,
 )
 from moldiff.utils import initialize_mol
 
@@ -85,12 +86,13 @@ def main(
     sampler_params=SamplerNoiseParameters(
         sigma_max=3, sigma_min=1.5e-4, S_churn=10, S_min=2e-3, S_noise=1.014
     ),
+    batch_size=128,
     track_trajectory=False,
 ):
     save_dict = torch.load(model_path, map_location=DEVICE)
     cutoff = save_dict["model_params"]["r_max"]
     model = EnergyMACEDiffusion(noise_embed_dim=32, **save_dict["model_params"])
-    model = EDMModelWrapper(model, sigma_data=0.7).to(DEVICE)
+    model = iDDPMModelWrapper(model).to(DEVICE)
     model.load_state_dict(save_dict["model_state_dict"])
     model.eval()
     for param in model.parameters():
@@ -99,7 +101,7 @@ def main(
     noise_params = sampler_params
     sampler = HeunSampler(model, sampler_noise_parameters=noise_params, device=DEVICE)
 
-    batch_size = 1 if track_trajectory else 128
+    batch_size = 1 if track_trajectory else batch_size
     data_loader = get_dataloader(
         15, 25, num_samples_per_size, batch_size=batch_size, cutoff=cutoff
     )

@@ -9,9 +9,9 @@ from moldiff.analysis import RDKitReport, analyse_base, get_rdkit_mol
 
 
 def main(size_sweep_path="./results/energy_model/sweep_sampler_params/"):
-
     reports = []
     for atoms_file in pathlib.Path(size_sweep_path).glob("*.xyz"):
+        print(atoms_file.stem)
         all_atoms = aio.read(atoms_file, index=":", format="xyz")
         for atoms in all_atoms:
             base_report = analyse_base(atoms)
@@ -29,7 +29,6 @@ def main(size_sweep_path="./results/energy_model/sweep_sampler_params/"):
                 report = RDKitReport(error=error_text)
             else:
                 report = RDKitReport(smiles=Chem.MolToSmiles(mol))
-            print(report)
             report_dict = asdict(report)
             report_dict["group"] = atoms_file.stem
             report_dict["smiles_exists"] = report_dict["smiles"] is not None
@@ -38,8 +37,9 @@ def main(size_sweep_path="./results/energy_model/sweep_sampler_params/"):
     df = pd.DataFrame(reports)
     df.to_json(f"{size_sweep_path}/mols_parsed_as_smiles.json")
     groups = df.groupby("group")
+    for name, group in groups:
+        print(f"Group {name}, Succesful: {group['smiles_exists'].sum()}")
     max_avg_group = df.groupby("group")["smiles_exists"].sum().idxmax()
-    print(df)
     print(max_avg_group)
     print(groups.get_group(max_avg_group))
 
