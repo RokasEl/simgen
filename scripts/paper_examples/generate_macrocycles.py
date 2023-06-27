@@ -21,11 +21,11 @@ import logging
 import ase.io as ase_io
 from hydromace.interface import HydroMaceCalculator
 
-from moldiff.diffusion_tools import SamplerNoiseParameters
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
     calculate_restorative_force_strength,
 )
+from moldiff.integrators import IntegrationParameters
 from moldiff.manifolds import CirclePrior, MultivariateGaussianPrior
 
 
@@ -55,9 +55,7 @@ def main(
     )
     hydromace_model = torch.load(hydromace_model_path, map_location=DEVICE)
     hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
-    noise_params = SamplerNoiseParameters(
-        sigma_max=10, sigma_min=2e-3, S_churn=1.3, S_min=2e-3, S_noise=0.5
-    )
+    integration_parameters = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
     destination = save_path
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
@@ -80,7 +78,7 @@ def main(
         particle_filter = ParticleFilterGenerator(
             score_model,
             guiding_manifold=prior,
-            noise_params=noise_params,
+            integration_parameters=integration_parameters,
             restorative_force_strength=restorative_force_strength,
         )
         trajectories = particle_filter.generate(
