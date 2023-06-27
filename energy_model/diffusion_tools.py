@@ -399,11 +399,11 @@ class EnergyMACEDiffusion(MACE):
 
         noise_in_irreps = node_feats_irreps + noise_irreps
         noise_out_irreps = node_feats_irreps
-
+        noise_hidden_irreps = o3.Irreps([(noise_hidden_dim, (0, 1))])
         self.noise_linear = torch.nn.Sequential(
-            LinearNodeEmbeddingBlock(noise_in_irreps, noise_hidden_dim),
+            LinearNodeEmbeddingBlock(noise_in_irreps, noise_hidden_irreps),
             torch.nn.ReLU(),
-            LinearNodeEmbeddingBlock(noise_hidden_dim, noise_out_irreps),
+            LinearNodeEmbeddingBlock(noise_hidden_irreps, noise_out_irreps),
         )
 
     def forward(
