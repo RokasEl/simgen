@@ -110,7 +110,7 @@ def main(
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    loss_fn = iDDPMLossFunction(P_mean=-1.4, P_std=1.0)
+    loss_fn = iDDPMLossFunction(P_mean=-1.2, P_std=1.1)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(

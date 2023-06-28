@@ -49,10 +49,10 @@ class iDDPMModelWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, model_input_dict, sigma, **model_kwargs):
-        c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
+        c_skip, c_out, c_in, c_in_elements, c_noise = self.compute_prefactors(sigma)
 
         model_input_dict["positions"] = c_in * model_input_dict["positions"]
-        model_input_dict["node_attrs"] = c_in * model_input_dict["node_attrs"]
+        model_input_dict["node_attrs"] = c_in_elements * model_input_dict["node_attrs"]
 
         D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
         D_x["node_forces"] = c_out * D_x["node_forces"]
@@ -65,8 +65,9 @@ class iDDPMModelWrapper(torch.nn.Module):
         c_skip = 1.0 / (1 + sigma**2)
         c_out = sigma
         c_in = 1 / (1 + sigma**2).sqrt()
+        c_in_elements = 1 / (1 + sigma**2)  # go to uniform distribution faster
         c_noise = sigma.log()
-        return c_skip, c_out, c_in, c_noise
+        return c_skip, c_out, c_in, c_in_elements, c_noise
 
 
 class iDDPMLossFunction:
@@ -109,7 +110,7 @@ class iDDPMLossFunction:
         element_loss = (
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
-        element_loss = einops.reduce(
+        element_loss = 2 * einops.reduce(
             element_loss,
             "num_nodes elements -> num_nodes",
             "sum",  # sum increases the weight for missing elements
