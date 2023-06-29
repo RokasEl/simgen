@@ -105,15 +105,15 @@ class iDDPMLossFunction:
     ):
         position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
         position_loss = einops.reduce(
-            position_loss, "num_nodes cartesians -> num_nodes", "mean"
+            position_loss, "num_nodes cartesians -> num_nodes", "sum"
         )
         element_loss = (
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
-        element_loss = 2 * einops.reduce(
+        element_loss = 4 * einops.reduce(
             element_loss,
             "num_nodes elements -> num_nodes",
-            "sum",  # sum increases the weight for missing elements
+            "sum",
         )
         return position_loss, element_loss
 

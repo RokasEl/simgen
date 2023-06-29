@@ -29,7 +29,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
 MACE_CONFIG = dict(
     r_max=10.0,
-    num_bessel=4,
+    num_bessel=5,
     num_polynomial_cutoff=6,
     max_ell=2,
     interaction_cls=modules.interaction_classes["RealAgnosticResidualInteractionBlock"],
@@ -38,8 +38,8 @@ MACE_CONFIG = dict(
     ],
     num_interactions=2,
     num_elements=len(Z_TABLE.zs),
-    hidden_irreps=o3.Irreps("96x0e + 96x1o"),
-    MLP_irreps=o3.Irreps("96x0e"),
+    hidden_irreps=o3.Irreps("64x0e + 64x1o"),
+    MLP_irreps=o3.Irreps("64x0e"),
     radial_MLP=[64] * 3,
     gate=torch.nn.functional.silu,
     atomic_energies=atomic_energies,
@@ -51,7 +51,7 @@ MACE_CONFIG = dict(
 PARAMS = {
     "model_params": MACE_CONFIG,
     "lr": 2e-3,
-    "batch_size": 128,
+    "batch_size": 256,
     "epochs": 250,
 }
 
@@ -110,7 +110,7 @@ def main(
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    loss_fn = iDDPMLossFunction(P_mean=-1.2, P_std=1.1)
+    loss_fn = iDDPMLossFunction(P_mean=-1.2, P_std=1.2)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
