@@ -12,7 +12,7 @@ from energy_model.diffusion_tools import SamplerNoiseParameters
 
 def main():
     rng = np.random.default_rng(0)
-    sigma_max_gen = lambda: rng.uniform(low=2.5, high=7.5)
+    sigma_max_gen = lambda: rng.uniform(low=2.5, high=10.0)
     sigma_min_gen = lambda: 10 ** rng.uniform(low=-4, high=-3)
     s_churn_gen = lambda: rng.uniform(low=1, high=80)
     s_min_gen = lambda x: np.maximum(x, 10 ** rng.uniform(low=-3, high=0))
@@ -33,7 +33,7 @@ def main():
         params[i] = asdict(sampler_params)
         this_save_path = str(save_path / f"sampler_params_{i}.xyz")
         generate_mols_energy_model(
-            model_path="./trained_energy_mace_iddpm_new_precond.pt",
+            model_path="./trained_energy_mace_iddpm_narrow_after_pip_install.pt",
             sampler_params=sampler_params,
             num_samples_per_size=100,
             save_path=this_save_path,

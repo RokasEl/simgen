@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import einops
 import numpy as np
 import torch
 import torch.nn.functional as F
-from e3nn import o3
+from e3nn import nn, o3
+from e3nn.util.jit import compile_mode
 from mace.data.atomic_data import AtomicData
 from mace.modules.blocks import LinearNodeEmbeddingBlock
 from mace.modules.models import MACE
@@ -385,12 +386,76 @@ class HeunSampler:
         return x_next
 
 
+@compile_mode("script")
+class ResidualReadoutBlock(torch.nn.Module):
+    def __init__(
+        self,
+        irreps_in: o3.Irreps,
+        MLP_irreps: o3.Irreps,
+        gate: Optional[Callable],
+        n_layers: int = 5,
+    ):
+        super().__init__()
+        self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=MLP_irreps)
+        self.non_linearity = nn.Activation(irreps_in=MLP_irreps, acts=[gate])
+        if n_layers > 2:
+            middle_layers = [o3.Linear(irreps_in=MLP_irreps, irreps_out=MLP_irreps)] * (
+                n_layers - 2
+            )
+            self.middle_layers = torch.nn.ModuleList(middle_layers)
+        else:
+            self.middle_layers = torch.nn.ModuleList([])
+        self.linear_2 = o3.Linear(irreps_in=MLP_irreps, irreps_out=o3.Irreps("0e"))
+        self.linear_2.weight.data.zero_()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+        x = self.non_linearity(self.linear_1(x))
+        for layer in self.middle_layers:
+            x = self.non_linearity(layer(x)) + x
+        x = self.linear_2(x)  # [n_nodes, 1]
+        return x
+
+
+def initialize_model(energy_mace_params, mace_params):
+    noise_embed_dim, noise_hidden_dim, num_readout_layers = (
+        energy_mace_params["noise_embed_dim"],
+        energy_mace_params["noise_hidden_dim"],
+        energy_mace_params["num_readout_layers"],
+    )
+    model = EnergyMACEDiffusion(
+        noise_embed_dim, noise_hidden_dim, num_readout_layers, **mace_params
+    )
+    return model
+
+
 class EnergyMACEDiffusion(MACE):
-    def __init__(self, noise_embed_dim, noise_hidden_dim=64, *args, **kwargs):
+    def __init__(
+        self,
+        noise_embed_dim,
+        noise_hidden_dim=64,
+        num_readout_layers=5,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        # Change the weight initialization of the final layer to zeros.
-        final_readout = [module for _, module in self.readouts[-1].named_children()][-1]
-        final_readout.weight.data.zero_()
+        # Override the readout layers.
+        readouts = []
+        gate = kwargs["gate"]
+        gate = gate if gate is not None else torch.nn.Identity()
+        for i in range(kwargs["num_interactions"]):
+            if i == kwargs["num_interactions"] - 1:
+                input_irreps = str(kwargs["hidden_irreps"][0])
+            else:
+                input_irreps = kwargs["hidden_irreps"]
+            readouts.append(
+                ResidualReadoutBlock(
+                    input_irreps,
+                    kwargs["MLP_irreps"],
+                    gate,
+                    n_layers=num_readout_layers,
+                )
+            )
+        self.readouts = torch.nn.ModuleList(readouts)
         # Add a positional embedding for the noise level.
         self.noise_embedding = PositionalEmbedding(noise_embed_dim)
         node_feats_irreps = o3.Irreps(

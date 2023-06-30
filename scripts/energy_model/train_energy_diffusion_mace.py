@@ -20,6 +20,7 @@ from energy_model.diffusion_tools import (
     EnergyMACEDiffusion,
     iDDPMLossFunction,
     iDDPMModelWrapper,
+    initialize_model,
 )
 from moldiff.utils import setup_logger
 
@@ -48,7 +49,14 @@ MACE_CONFIG = dict(
     correlation=3,
 )
 
+ENERGY_MODEL_CONFIG = dict(
+    noise_embed_dim=32,
+    noise_hidden_dim=64,
+    num_readout_layers=5,
+)
+
 PARAMS = {
+    "energy_model_config": ENERGY_MODEL_CONFIG,
     "model_params": MACE_CONFIG,
     "lr": 2e-3,
     "batch_size": 256,
@@ -102,8 +110,7 @@ def main(
         config=PARAMS,
         save_code=True,
     )
-
-    model = EnergyMACEDiffusion(noise_embed_dim=32, **PARAMS["model_params"])
+    model = initialize_model(ENERGY_MODEL_CONFIG, MACE_CONFIG)
     model = iDDPMModelWrapper(model).to(DEVICE)
     if restart:
         save_dict = torch.load(model_path, map_location=DEVICE)
@@ -166,6 +173,7 @@ def main(
 
     # save model
     save_dict = {
+        "energy_model_config": PARAMS["energy_model_config"],
         "model_params": PARAMS["model_params"],
         "model_state_dict": model.state_dict(),
     }
