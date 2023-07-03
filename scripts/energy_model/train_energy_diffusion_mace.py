@@ -15,6 +15,8 @@ from fire import Fire
 
 import wandb
 from energy_model.diffusion_tools import (
+    EDMLossFn,
+    EDMModelWrapper,
     iDDPMLossFunction,
     iDDPMModelWrapper,
     initialize_model,
@@ -64,6 +66,7 @@ PARAMS = {
 def main(
     data_path="./Data/qm9_data",
     model_path="test_model.pt",
+    wrapper="iDDPM",
     restart=False,
 ):
     setup_logger(
@@ -108,13 +111,17 @@ def main(
         save_code=True,
     )
     model = initialize_model(ENERGY_MODEL_CONFIG, MACE_CONFIG)
-    model = iDDPMModelWrapper(model).to(DEVICE)
+    if wrapper == "iDDPM":
+        model = iDDPMModelWrapper(model).to(DEVICE)
+        loss_fn = iDDPMLossFunction(P_mean=-1.2, P_std=1.2)
+    elif wrapper == "EDM":
+        model = EDMModelWrapper(model, sigma_data=1.0).to(DEVICE)
+        loss_fn = EDMLossFn(P_mean=-1.2, P_std=1.2, sigma_data=1.0)
+
     if restart:
         save_dict = torch.load(model_path, map_location=DEVICE)
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
-
-    loss_fn = iDDPMLossFunction(P_mean=-1.2, P_std=1.2)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(

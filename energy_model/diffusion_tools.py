@@ -202,13 +202,13 @@ class EDMLossFn:
     ):
         position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
         position_loss = einops.reduce(
-            position_loss, "num_nodes cartesians -> num_nodes", "mean"
+            position_loss, "num_nodes cartesians -> num_nodes", "sum"
         )
         element_loss = (
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
         element_loss = einops.reduce(
-            element_loss, "num_nodes elements -> num_nodes", "mean"
+            element_loss, "num_nodes elements -> num_nodes", "sum"
         )
         return position_loss, element_loss
 
