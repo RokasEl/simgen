@@ -37,7 +37,7 @@ def main(qm9_path: str | None = None):
     for _ in range(1000):
         composition = next(composition_generator)
         atoms = build_mol(composition, prior=prior)
-        relaxed_atoms = do_hot_airss_relaxation(atoms)
+        relaxed_atoms = do_hot_airss_relaxation(atoms)[-1]
         aio.write(
             f"hot_airss_initially_squashed.xyz",
             relaxed_atoms,

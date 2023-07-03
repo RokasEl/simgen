@@ -15,6 +15,7 @@ from energy_model.diffusion_tools import (
     HeunSampler,
     SamplerNoiseParameters,
     iDDPMModelWrapper,
+    initialize_model,
 )
 from moldiff.utils import initialize_mol
 
@@ -91,7 +92,9 @@ def main(
 ):
     save_dict = torch.load(model_path, map_location=DEVICE)
     cutoff = save_dict["model_params"]["r_max"]
-    model = EnergyMACEDiffusion(noise_embed_dim=32, **save_dict["model_params"])
+    model = initialize_model(
+        save_dict["energy_model_config"], save_dict["model_params"]
+    )
     model = iDDPMModelWrapper(model).to(DEVICE)
     model.load_state_dict(save_dict["model_state_dict"])
     model.eval()
