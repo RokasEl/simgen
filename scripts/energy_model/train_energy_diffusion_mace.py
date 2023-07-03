@@ -15,9 +15,6 @@ from fire import Fire
 
 import wandb
 from energy_model.diffusion_tools import (
-    EDMLossFn,
-    EDMModelWrapper,
-    EnergyMACEDiffusion,
     iDDPMLossFunction,
     iDDPMModelWrapper,
     initialize_model,
@@ -30,7 +27,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
 MACE_CONFIG = dict(
     r_max=10.0,
-    num_bessel=5,
+    num_bessel=8,
     num_polynomial_cutoff=6,
     max_ell=2,
     interaction_cls=modules.interaction_classes["RealAgnosticResidualInteractionBlock"],
@@ -50,9 +47,9 @@ MACE_CONFIG = dict(
 )
 
 ENERGY_MODEL_CONFIG = dict(
-    noise_embed_dim=32,
-    noise_hidden_dim=64,
-    num_readout_layers=5,
+    noise_embed_dim=8,
+    noise_hidden_dim=16,
+    num_readout_layers=3,
 )
 
 PARAMS = {
@@ -60,7 +57,7 @@ PARAMS = {
     "model_params": MACE_CONFIG,
     "lr": 2e-3,
     "batch_size": 256,
-    "epochs": 300,
+    "epochs": 200,
 }
 
 
@@ -178,6 +175,7 @@ def main(
         "model_state_dict": model.state_dict(),
     }
     torch.save(save_dict, model_path)
+    torch.save(model, model_path.replace(".pt", ".model"))
 
 
 if __name__ == "__main__":

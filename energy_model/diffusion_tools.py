@@ -50,10 +50,10 @@ class iDDPMModelWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, model_input_dict, sigma, **model_kwargs):
-        c_skip, c_out, c_in, c_in_elements, c_noise = self.compute_prefactors(sigma)
+        c_skip, c_out, c_in, c_noise = self.compute_prefactors(sigma)
 
         model_input_dict["positions"] = c_in * model_input_dict["positions"]
-        model_input_dict["node_attrs"] = c_in_elements * model_input_dict["node_attrs"]
+        model_input_dict["node_attrs"] = c_in * model_input_dict["node_attrs"]
 
         D_x = self.model(model_input_dict, c_noise.flatten(), **model_kwargs)
         D_x["node_forces"] = c_out * D_x["node_forces"]
@@ -66,9 +66,8 @@ class iDDPMModelWrapper(torch.nn.Module):
         c_skip = 1.0 / (1 + sigma**2)
         c_out = sigma
         c_in = 1 / (1 + sigma**2).sqrt()
-        c_in_elements = 1 / (1 + sigma**2)  # go to uniform distribution faster
         c_noise = sigma.log()
-        return c_skip, c_out, c_in, c_in_elements, c_noise
+        return c_skip, c_out, c_in, c_noise
 
 
 class iDDPMLossFunction:
@@ -111,7 +110,7 @@ class iDDPMLossFunction:
         element_loss = (
             original_data.node_attrs - reconstructed_data["node_attrs"]
         ) ** 2
-        element_loss = 4 * einops.reduce(
+        element_loss = einops.reduce(
             element_loss,
             "num_nodes elements -> num_nodes",
             "sum",
@@ -409,10 +408,10 @@ class ResidualReadoutBlock(torch.nn.Module):
         self.linear_2.weight.data.zero_()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.non_linearity(self.linear_1(x))
+        x = self.linear_1(x)
         for layer in self.middle_layers:
-            x = self.non_linearity(layer(x)) + x
-        x = self.linear_2(x)  # [n_nodes, 1]
+            x = layer(self.non_linearity(x)) + x
+        x = self.linear_2(self.non_linearity(x))  # [n_nodes, 1]
         return x
 
 
@@ -457,6 +456,9 @@ class EnergyMACEDiffusion(MACE):
             )
         self.readouts = torch.nn.ModuleList(readouts)
         # Add a positional embedding for the noise level.
+        self.register_buffer(
+            "noise_embed_dim", torch.tensor(noise_embed_dim, dtype=torch.float64)
+        )
         self.noise_embedding = PositionalEmbedding(noise_embed_dim)
         node_feats_irreps = o3.Irreps(
             [(kwargs["hidden_irreps"].count(o3.Irrep(0, 1)), (0, 1))]
@@ -482,17 +484,12 @@ class EnergyMACEDiffusion(MACE):
         data["positions"].requires_grad_(True)
         data["node_attrs"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
-        displacement = torch.zeros(
-            (num_graphs, 3, 3),
-            dtype=data["positions"].dtype,
-            device=data["positions"].device,
-        )
 
         # Embeddings
         node_feats, edge_attrs, edge_feats = self._get_initial_embeddings(data)
-        sigma_embedding = self.noise_embedding(sigmas)
+        sigma_embedding = self.noise_embedding(sigmas) / self.noise_embed_dim
         node_feats = torch.cat([node_feats, sigma_embedding], dim=-1)
-        node_feats = F.silu(self.noise_linear(node_feats))
+        node_feats = self.noise_linear(node_feats)
         # Interactions
         energies = []
         node_energies_list = []
