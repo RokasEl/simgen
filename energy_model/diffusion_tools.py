@@ -416,7 +416,7 @@ class ResidualReadoutBlock(torch.nn.Module):
 
 
 def initialize_model(energy_mace_params, mace_params):
-    noise_embed_dim = (energy_mace_params["noise_embed_dim"],)
+    noise_embed_dim = energy_mace_params["noise_embed_dim"]
     model = EnergyMACEDiffusion(noise_embed_dim, **mace_params)
     return model
 
@@ -429,6 +429,7 @@ class EnergyMACEDiffusion(MACE):
             last_module = [module for _, module in readout.named_children()][-1]
             last_module.weight.data.zero_()
         # Add a positional embedding for the noise level.
+        self.register_buffer("noise_embed_dim", torch.tensor(noise_embed_dim))
         self.noise_embedding = PositionalEmbedding(noise_embed_dim)
         noise_in_irreps = o3.Irreps([(noise_embed_dim, (0, 1))])
         noise_out_irreps = o3.Irreps(
