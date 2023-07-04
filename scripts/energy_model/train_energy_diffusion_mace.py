@@ -57,7 +57,7 @@ PARAMS = {
     "model_params": MACE_CONFIG,
     "lr": 2e-3,
     "batch_size": 256,
-    "epochs": 150,
+    "epochs": 300,
 }
 
 

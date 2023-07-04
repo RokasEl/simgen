@@ -391,6 +391,7 @@ class ResidualReadoutBlock(torch.nn.Module):
         self,
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
+        irreps_out: o3.Irreps,
         gate: Optional[Callable],
         n_layers: int = 5,
     ):
@@ -404,8 +405,7 @@ class ResidualReadoutBlock(torch.nn.Module):
             self.middle_layers = torch.nn.ModuleList(middle_layers)
         else:
             self.middle_layers = torch.nn.ModuleList([])
-        self.linear_2 = o3.Linear(irreps_in=MLP_irreps, irreps_out=o3.Irreps("0e"))
-        self.linear_2.weight.data.zero_()
+        self.linear_2 = o3.Linear(irreps_in=MLP_irreps, irreps_out=irreps_out)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         x = self.linear_1(x)
@@ -422,12 +422,30 @@ def initialize_model(energy_mace_params, mace_params):
 
 
 class EnergyMACEDiffusion(MACE):
-    def __init__(self, noise_embed_dim, *args, **kwargs):
+    def __init__(
+        self, noise_embed_dim, energy_out_dim=16, num_readout_layers=3, *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
-        # Change the weight initialization of the readout layers to zero.
-        for readout in self.readouts:
-            last_module = [module for _, module in readout.named_children()][-1]
-            last_module.weight.data.zero_()
+        # Override the readout layers.
+        readouts = []
+        gate = kwargs["gate"]
+        gate = gate if gate is not None else torch.nn.Identity()
+        irreps_out = o3.Irreps(f"{energy_out_dim}x0e")
+        for i in range(kwargs["num_interactions"]):
+            if i == kwargs["num_interactions"] - 1:
+                input_irreps = str(kwargs["hidden_irreps"][0])
+            else:
+                input_irreps = kwargs["hidden_irreps"]
+            readouts.append(
+                ResidualReadoutBlock(
+                    input_irreps,
+                    kwargs["MLP_irreps"],
+                    irreps_out,
+                    gate,
+                    n_layers=num_readout_layers,
+                )
+            )
+        self.readouts = torch.nn.ModuleList(readouts)
         # Add a positional embedding for the noise level.
         self.register_buffer("noise_embed_dim", torch.tensor(noise_embed_dim))
         self.noise_embedding = PositionalEmbedding(noise_embed_dim)
@@ -475,7 +493,10 @@ class EnergyMACEDiffusion(MACE):
                 sc=sc,
                 node_attrs=data["node_attrs"],
             )
-            node_energies = readout(node_feats).squeeze(-1)  # [n_nodes, ]
+            node_energies = readout(node_feats)
+            node_energies = -0.5 * (node_energies * node_energies).sum(
+                dim=-1
+            )  # [n_nodes, ]
             energy = scatter_sum(
                 src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
             )  # [n_graphs,]
@@ -501,6 +522,7 @@ class EnergyMACEDiffusion(MACE):
             create_graph=training,  # Create graph for second derivative
             allow_unused=True,
         )
+        forces, node_forces = -1 * forces, -1 * node_forces
         return {
             "energy": total_energy,
             "node_energy": node_energy,
