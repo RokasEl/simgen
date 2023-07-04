@@ -49,9 +49,7 @@ MACE_CONFIG = dict(
 )
 
 ENERGY_MODEL_CONFIG = dict(
-    noise_embed_dim=8,
-    noise_hidden_dim=16,
-    num_readout_layers=3,
+    noise_embed_dim=16,
 )
 
 PARAMS = {
@@ -137,7 +135,7 @@ def main(
             weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
             loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
-            clip_grad_norm_(model.parameters(), 250.0)
+            clip_grad_norm_(model.parameters(), 1000.0)
             optimizer.step()
             scheduler.step()
             wandb.log(
