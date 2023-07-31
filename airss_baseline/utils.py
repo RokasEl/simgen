@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import List
+from typing import Dict, List, Tuple
 
 import ase
 import ase.io as aio
@@ -44,7 +44,7 @@ def do_hot_airss_relaxation(
     num_steps=100,
     step_size=0.2,
     rattle_sigma: float = 1,
-) -> List[ase.Atoms]:
+) -> Tuple[List[ase.Atoms], Dict[str, List[float]]]:
     restorative_calc = RestorativeCalculator(
         prior_manifold=prior, zero_energy_radius=1.5
     )
@@ -57,7 +57,7 @@ def do_hot_airss_relaxation(
     atoms.calc = calc
 
     traj = [atoms.copy()]
-
+    energies_dict = {"mopac": [], "restorative": [], "total": []}
     for weight in cosine_schedule:
         mopac_weight = 1 - weight
         restorative_weight = weight
@@ -67,9 +67,24 @@ def do_hot_airss_relaxation(
         total_force = forces + noise
         atoms.set_positions(atoms.get_positions() + total_force * step_size)
         traj.append(atoms.copy())
+        _update_energy_dict(
+            energies_dict, mopac_calc, restorative_calc, restorative_weight
+        )
     final_atoms = mopac_calc.do_full_relaxation(atoms.copy())
     traj.append(final_atoms)
-    return traj
+    return traj, energies_dict
+
+
+def _update_energy_dict(
+    dict_to_update, mopac_calc, restorative_calc, restorative_weight
+):
+    dict_to_update["mopac"].append(mopac_calc.results["energy"])
+    dict_to_update["restorative"].append(restorative_calc.results["energy"])
+    combined = (
+        mopac_calc.results["energy"] * (1 - restorative_weight)
+        + restorative_calc.results["energy"] * restorative_weight
+    )
+    dict_to_update["total"].append(combined)
 
 
 def get_composition(sybmol_list):

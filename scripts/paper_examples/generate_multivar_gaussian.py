@@ -61,7 +61,7 @@ def main(
     os.makedirs(destination, exist_ok=True)
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     prior = MultivariateGaussianPrior(
-        prior_gaussian_covariance, normalise_covariance=False
+        prior_gaussian_covariance, normalise_covariance=True
     )
     save_file = f"{destination}/covariance_{prior_gaussian_covariance[0,0]:.1f}_{prior_gaussian_covariance[1,1]:.1f}_{prior_gaussian_covariance[2,2]:.1f}.xyz"
     if save_name is not None:
