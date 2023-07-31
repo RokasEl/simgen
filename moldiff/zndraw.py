@@ -145,7 +145,7 @@ class MoldiffGeneration(UpdateScene):
         self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
     ) -> list[ase.Atoms]:
         calc = self._calc
-        if kwargs["points"] is not None and kwargs["points"].shape[0] > 0:
+        if kwargs["points"] is not None and kwargs["points"].shape[0] > 1:
             print("Interpolating points")
             points = interpolate_points(kwargs["points"])
         else:
