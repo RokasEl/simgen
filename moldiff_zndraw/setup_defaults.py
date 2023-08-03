@@ -14,15 +14,17 @@ if __name__ == "__main__":
     path = pathlib.Path(config_path).expanduser()
     if path.exists():
         print(f"Found an existing configuration at {path}")
-        config = GlobalConfig.from_file(path)
+        config = GlobalConfig.from_file(path)  # type: ignore
     else:
         config = GlobalConfig()
-    this_dir = pathlib.Path(__file__).parent
-    config.modify_functions.append("moldiff_zndraw.zndraw.MoldiffGeneration")
+    pkg = "moldiff_zndraw.main.MoldiffGeneration"
+    if pkg not in config.modify_functions:
+        config.modify_functions.append(pkg)
     moldiff_settings = {
         "model_path": args.default_mace_path,
         "reference_data_path": args.default_reference_data_path,
         "hydrogenation_model_path": args.default_hydrogenation_model_path,
     }
-    config.function_schema["moldiff_zndraw.zndraw.MoldiffGeneration"] = moldiff_settings
+    config.function_schema["moldiff_zndraw.main.MoldiffGeneration"] = moldiff_settings
     config.save()
+    print(f"Saved configuration to {path}")
