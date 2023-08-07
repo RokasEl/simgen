@@ -14,9 +14,13 @@ dependencies = [
     "einops>=0.6.1",
     "fire>=0.5.0",
     "frozendict>=2.3.7",
+    "typer[all]>=0.7.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["moldiff", "energy_model", "moldiff_zndraw"]
 namespaces = false
+
+[project.scripts]
+moldiff = "moldiff_zndraw.cli:app"

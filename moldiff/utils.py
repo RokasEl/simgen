@@ -180,7 +180,7 @@ def get_hydromace_calculator(model_repo_path, device):
 
 
 def get_loaded_mace_model(model_repo_path: str, device: str = "cuda") -> nn.Module:
-    model_loader = zntrack.from_rev("ani500k_small_DFT", remote=model_repo_path)
+    model_loader = zntrack.from_rev("mace_model", remote=model_repo_path)
     pretrained_model = model_loader.get_model()
     model_config = get_mace_config(pretrained_model)
     model = ScaleShiftMACE(

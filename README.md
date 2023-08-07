@@ -1,24 +1,11 @@
 # EnergyMolecularDiffusion
 
-To install
+The easiest way to setup the package is to install the associated model depository as shown below. This will automatically install this package and download the required model files.
 
 ```bash
-pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
-git clone -b extract-embeddings git@github.com:RokasEl/mace.git
-pip install ./mace
-pip install git+https://github.com/RokasEl/hydromace
-pip install zndraw==0.2.0a4
 git clone git@github.com:RokasEl/MACE-Models.git
 pip install ./MACE-Models
 cd ./MACE-Models ; dvc pull
-git clone git@github.com:RokasEl/EnergyMolecularDiffusion.git
-pip install ./EnergyMolecularDiffusion
+moldiff init .
 ```
-
-To setup `zndraw` features run:
-
-```bash
-cd ./EnergyMolecularDiffusion
-python ./moldiff_zndraw/setup_defaults.py --default_model_path PATH_TO_MACE-MODELS_CLONE
-```
-Now when you launch `zndraw` the generative model features should load automatically.
+The above will also install the `zndraw` package which allows the interactive use of the generative model. Run `zndraw YOUR_XYZ_FILE` to give it a try!
