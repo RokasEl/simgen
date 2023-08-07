@@ -129,7 +129,7 @@ class MoldiffGeneration(UpdateScene):
             points = interpolate_points(kwargs["points"])
         else:
             points = kwargs["points"]
-        if not points:
+        if points.size == 0:
             print("No location provided, will generate at origin")
             points = np.array([[0.0, 0.0, 0.0]])
         prior = PointCloudPrior(points, beta=5.0)
