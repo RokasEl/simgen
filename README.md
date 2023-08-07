@@ -1,6 +1,6 @@
 # EnergyMolecularDiffusion
 
-The easiest way to setup the package is to install the associated model depository as shown below. This will automatically install this package and download the required model files.
+The easiest way to setup the package is to install the associated model depository as shown below. This will automatically install this package and download the required model files. Make sure you're using `python>=3.10`!
 
 ```bash
 git clone git@github.com:RokasEl/MACE-Models.git
@@ -15,4 +15,9 @@ If you use GPG keys for authentication, instead use:
 pip install git+https://github.com/RokasEl/EnergyMolecularDiffusion.git@load_models_from_remote
 ```
 
-The above will also install the `zndraw` package which allows the interactive use of the generative model. Run `zndraw YOUR_XYZ_FILE` to give it a try!
+The above will also install the `zndraw` package which allows the interactive use of the generative model. If you followed the above instructions, you can now try building a linker between two fragments by running:
+```bash
+zndraw ./data/zinc_fragments_difflinker.xyz
+```
+
+If you get an error regarding `libcublas` try running: ```pip uninstall nvidia_cublas_cu11```.
