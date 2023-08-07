@@ -5,9 +5,7 @@ from zndraw.settings import GlobalConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--default_mace_path", type=str, required=True)
-    parser.add_argument("--default_reference_data_path", type=str, required=True)
-    parser.add_argument("--default_hydrogenation_model_path", type=str, required=True)
+    parser.add_argument("--default_model_path", type=str, required=True)
     args = parser.parse_args()
 
     config_path = "~/.zincware/zndraw/config.json"
@@ -21,9 +19,7 @@ if __name__ == "__main__":
     if pkg not in config.modify_functions:
         config.modify_functions.append(pkg)
     moldiff_settings = {
-        "model_path": args.default_mace_path,
-        "reference_data_path": args.default_reference_data_path,
-        "hydrogenation_model_path": args.default_hydrogenation_model_path,
+        "model_repo_path": args.default_model_path,
     }
     config.function_schema["moldiff_zndraw.main.MoldiffGeneration"] = moldiff_settings
     config.save()

@@ -3,16 +3,14 @@ import os
 import sys
 from typing import List, Optional, Tuple, Union
 
-import ase.io as aio
 import numpy as np
 import torch
+import zntrack
 from ase import Atoms
 from ase.build import molecule
 from e3nn import o3
-from mace.modules.blocks import (
-    RealAgnosticInteractionBlock,
-    RealAgnosticResidualInteractionBlock,
-)
+from hydromace.interface import HydroMaceCalculator
+from mace.modules import interaction_classes
 from mace.modules.models import ScaleShiftMACE
 from torch import nn
 
@@ -143,8 +141,7 @@ def setup_logger(
 
 
 def get_mace_similarity_calculator(
-    model_path: str,
-    reference_data_path: str,
+    model_repo_path: str,
     remove_halogenides: bool = True,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
@@ -154,11 +151,11 @@ def get_mace_similarity_calculator(
     """
     remove_halogenides: whether to remove Hydrogen and Fluorine from the reference data, this is only for evaluation purposes. Should be True for all other purposes.
     """
-    mace_model = get_loaded_mace_model(model_path, device)
+    mace_model = get_loaded_mace_model(model_repo_path, device)
     if rng is None:
         rng = np.random.default_rng(0)
     reference_data = get_reference_data(
-        reference_data_path,
+        model_repo_path,
         rng,
         num_reference_mols,
         num_to_sample_uniformly_per_size,
@@ -170,31 +167,33 @@ def get_mace_similarity_calculator(
     return mace_similarity_calculator
 
 
-def get_loaded_mace_model(model_path: str, device: str = "cuda") -> nn.Module:
-    pretrained_model = torch.load(model_path)
+def get_hydromace_calculator(model_repo_path, device):
+    try:
+        model_loader = zntrack.from_rev("hydromace", remote=model_repo_path)
+        model = model_loader.get_model(device=device)
+        model = model.to(torch.float)
+        hydrogenation_model = HydroMaceCalculator(model, device=device)
+        return hydrogenation_model
+    except Exception as e:
+        print(f"Could not load hydrogenation model due to exception: {e}")
+        return None
+
+
+def get_loaded_mace_model(model_repo_path: str, device: str = "cuda") -> nn.Module:
+    model_loader = zntrack.from_rev("ani500k_small_DFT", remote=model_repo_path)
+    pretrained_model = model_loader.get_model()
+    model_config = get_mace_config(pretrained_model)
     model = ScaleShiftMACE(
-        r_max=4.5,
-        num_bessel=8,
-        num_polynomial_cutoff=5,
-        radial_MLP=[64, 64, 64],
-        max_ell=3,
-        num_interactions=2,
-        num_elements=10,
-        atomic_energies=np.zeros(10),
-        avg_num_neighbors=15.653135299682617,
-        correlation=3,
-        interaction_cls_first=RealAgnosticInteractionBlock,
-        interaction_cls=RealAgnosticResidualInteractionBlock,
-        hidden_irreps=o3.Irreps("96x0e"),
-        MLP_irreps=o3.Irreps("16x0e"),
-        atomic_numbers=[1, 6, 7, 8, 9, 15, 16, 17, 35, 53],
-        gate=torch.nn.functional.silu,
-        atomic_inter_scale=1.088502,
-        atomic_inter_shift=0.0,
+        **model_config,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
     model.radial_embedding = RadialDistanceTransformBlock(
-        r_min=0.75, **dict(r_max=4.5, num_bessel=8, num_polynomial_cutoff=5)
+        r_min=0.75,
+        **dict(
+            r_max=model_config["r_max"],
+            num_bessel=model_config["num_bessel"],
+            num_polynomial_cutoff=model_config["num_polynomial_cutoff"],
+        ),
     )
     model.to(device)
     for param in model.parameters():
@@ -204,7 +203,7 @@ def get_loaded_mace_model(model_path: str, device: str = "cuda") -> nn.Module:
 
 
 def get_reference_data(
-    reference_data_path: str,
+    model_repo_path: str,
     rng: np.random.Generator,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
@@ -213,7 +212,8 @@ def get_reference_data(
     """
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
-    all_data = aio.read(reference_data_path, index=":", format="extxyz")
+    data_loader = zntrack.from_rev("reference_data", remote=model_repo_path)
+    all_data = data_loader.get_atoms()
     if remove_halogenides:
         all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
     if num_reference_mols == -1:
@@ -254,3 +254,59 @@ def sample_uniformly_across_heavy_atom_number(
         selected_indices.extend(rng.choice(indices, size=num_to_pick, replace=False))
     sampled_mols = [data[idx].copy() for idx in selected_indices]
     return sampled_mols, selected_indices
+
+
+def get_mace_config(model) -> dict:
+    r_max = model.radial_embedding.bessel_fn.r_max.item()
+    num_bessel = len(model.radial_embedding.bessel_fn.bessel_weights)
+    num_polynomial_cutoff = int(model.radial_embedding.cutoff_fn.p.item())
+    max_ell = model.spherical_harmonics._lmax
+    num_interactions = model.num_interactions.item()
+    num_species = model.node_embedding.linear.irreps_in.count(o3.Irrep(0, 1))
+    hidden_irreps = str(model.interactions[0].hidden_irreps)
+    readout_mlp_irreps = (
+        "16x0e" if num_interactions == 1 else model.readouts[-1].hidden_irreps
+    )  # not used when num_interactions == 1
+    avg_num_neighbors = model.interactions[0].avg_num_neighbors
+    correlation = model.products[0].symmetric_contractions.contractions[0].correlation
+    atomic_energies = model.atomic_energies_fn.atomic_energies.detach().cpu().numpy()
+    atomic_numbers = model.atomic_numbers.detach().cpu().numpy()
+    interaction_class_first = interaction_classes[
+        model.interactions[0].__class__.__name__
+    ]
+    interaction_class = interaction_classes[model.interactions[-1].__class__.__name__]
+    mean = 0.0
+    std = 1.0
+    if hasattr(model, "scale_shift"):
+        mean = model.scale_shift.shift.detach().cpu().numpy()
+        std = model.scale_shift.scale.detach().cpu().numpy()
+    if num_interactions == 1:
+        activation = None
+    else:
+        acts = model.readouts[-1].non_linearity.acts
+        activation = None
+        for act in acts:
+            if act is not None:
+                gate = act.f
+                activation = getattr(torch.nn.functional, gate.__name__)
+                break
+    config = dict(
+        r_max=r_max,
+        num_bessel=num_bessel,
+        num_polynomial_cutoff=num_polynomial_cutoff,
+        max_ell=max_ell,
+        interaction_cls=interaction_class,
+        interaction_cls_first=interaction_class_first,
+        num_interactions=num_interactions,
+        num_elements=num_species,
+        hidden_irreps=o3.Irreps(hidden_irreps),
+        MLP_irreps=o3.Irreps(readout_mlp_irreps),
+        atomic_energies=atomic_energies,
+        avg_num_neighbors=avg_num_neighbors,
+        atomic_numbers=atomic_numbers,
+        correlation=correlation,
+        gate=activation,
+        atomic_inter_scale=std,
+        atomic_inter_shift=mean,
+    )
+    return config

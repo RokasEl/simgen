@@ -24,7 +24,10 @@ from moldiff.hydrogenation import (
 from moldiff.integrators import IntegrationParameters
 from moldiff.manifolds import PointCloudPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import get_mace_similarity_calculator
+from moldiff.utils import (
+    get_hydromace_calculator,
+    get_mace_similarity_calculator,
+)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -35,31 +38,15 @@ class UpdateScene(BaseModel, abc.ABC):
         pass
 
 
-def load_mace_calc(model_path, reference_data_path):
-    pretrained_mace_path = model_path
+def load_mace_calc(model_repo_path):
     rng = np.random.default_rng(0)
-    data_path = reference_data_path
     mace_calc = get_mace_similarity_calculator(
-        pretrained_mace_path,
-        data_path,
+        model_repo_path,
         num_reference_mols=-1,
         device=DEVICE,
         rng=rng,
     )
     return mace_calc
-
-
-def load_hydrogenation_model(model_path):
-    try:
-        from hydromace.interface import HydroMaceCalculator
-
-        model = torch.load(model_path)
-        model = model.to(torch.float)
-        hydrogenation_model = HydroMaceCalculator(model, device=DEVICE)
-        return hydrogenation_model
-    except Exception as e:
-        print(f"Could not load hydrogenation model due to exception: {e}")
-        return None
 
 
 INTEGRATION_PARAMS = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
@@ -104,14 +91,8 @@ class MoldiffGeneration(UpdateScene):
     relaxation_steps: int = Field(
         10, ge=1, le=100, description="Number of relaxation steps"
     )
-    model_path: str = Field(
-        "/home/rokas/Programming/Generative_model_energy/models/SPICE_sm_inv_neut_E0_swa.model"
-    )
-    reference_data_path: str = Field(
-        "/home/rokas/Programming/data/qm9_reference_data.xyz"
-    )
-    hydrogenation_model_path: str = Field(
-        "/home/rokas/Programming/Generative_model_energy/models/qm9_and_spice_hydrogenation.model"
+    model_repo_path: str = Field(
+        "/home/rokas/Programming/MACE-Models",
     )
     _calc = PrivateAttr(None)
     _hydro_model = PrivateAttr(None)
@@ -119,9 +100,7 @@ class MoldiffGeneration(UpdateScene):
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
         if self._calc is None:
             print("Initializing MACE calculator")
-            self._calc = load_mace_calc(
-                kwargs["model_path"], kwargs["reference_data_path"]
-            )
+            self._calc = load_mace_calc(kwargs["model_repo_path"])
         else:
             print("Using existing MACE calculator")
 
@@ -150,6 +129,9 @@ class MoldiffGeneration(UpdateScene):
             points = interpolate_points(kwargs["points"])
         else:
             points = kwargs["points"]
+        if not points:
+            print("No location provided, will generate at origin")
+            points = np.array([[0.0, 0.0, 0.0]])
         prior = PointCloudPrior(points, beta=5.0)
         num_atoms_to_add = self._get_num_atoms_to_add(
             points, kwargs, self.num_atoms_to_add
@@ -194,7 +176,7 @@ class MoldiffGeneration(UpdateScene):
             else self.relaxation_steps
         )
         relaxation_steps = int(relaxation_steps)
-        hydro_model = self._get_hydrogenation_model(kwargs["hydrogenation_model_path"])
+        hydro_model = self._get_hydrogenation_model(kwargs["model_repo_path"])
         if hydro_model is None:
             connectivity_graph, found, error = self._try_to_get_graph_representation(
                 atoms
@@ -215,10 +197,10 @@ class MoldiffGeneration(UpdateScene):
         )[0]
         return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
 
-    def _get_hydrogenation_model(self, hydrogenation_model_path):
+    def _get_hydrogenation_model(self, model_repo_path: str):
         if self._hydro_model is None:
             print("Initializing hydrogenation model")
-            self._hydro_model = load_hydrogenation_model(hydrogenation_model_path)
+            self._hydro_model = get_hydromace_calculator(model_repo_path, DEVICE)
         else:
             print("Using loaded hydrogenation model")
         return self._hydro_model

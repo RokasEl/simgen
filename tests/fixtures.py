@@ -18,8 +18,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_default_dtype(torch.float64)
 
 
-@pytest.fixture
-def training_molecules(scope="module"):
+@pytest.fixture(scope="module")
+def training_molecules():
     mol_strs = [
         "C2H2",
         "C6H6",
@@ -48,8 +48,8 @@ def training_molecules(scope="module"):
     return atoms
 
 
-@pytest.fixture
-def test_molecules(scope="module"):
+@pytest.fixture(scope="module")
+def test_molecules():
     mol_strs = ["CH3COOH", "C2H4", "H2O"]
     atoms = [initialize_mol(mol_str) for mol_str in mol_strs]
     return atoms
