@@ -39,5 +39,31 @@ def readme():
     print("This is a CLI for moldiff_zndraw")
 
 
+@app.command()
+def test_repulsive_block():
+    import torch
+
+    from moldiff.element_swapping import SwappingAtomicNumberTable
+    from moldiff.generation_utils import (
+        ExponentialRepulsionBlock,
+        batch_atoms,
+    )
+    from moldiff.utils import get_system_torch_device_str
+
+    device = get_system_torch_device_str()
+    if device == "mps":
+        torch.set_default_dtype(torch.float32)
+
+    repulsion_block = ExponentialRepulsionBlock(alpha=8.0).to(device)
+    from moldiff.utils import initialize_mol
+
+    mol = initialize_mol("C6H6")
+    z_table = SwappingAtomicNumberTable([1, 6, 7, 8], [1, 1, 1, 1])
+    batched = batch_atoms([mol.copy(), mol.copy()], z_table, cutoff=5, device=device)
+    energies = repulsion_block(batched)
+    print(energies, energies.shape, energies.dtype)
+    print("success!")
+
+
 if __name__ == "__main__":
     app()

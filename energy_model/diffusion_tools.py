@@ -13,6 +13,8 @@ from mace.modules.models import MACE
 from mace.modules.utils import compute_forces, get_outputs
 from mace.tools.scatter import scatter_mean, scatter_sum
 
+from moldiff.utils import get_system_torch_device_str
+
 # Many ideas from https://github.com/NVlabs/edm/
 
 
@@ -248,7 +250,7 @@ class HeunSampler:
         self,
         model,
         sampler_noise_parameters=SamplerNoiseParameters(),
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=get_system_torch_device_str(),
     ):
         self.model = model
         self.device = device

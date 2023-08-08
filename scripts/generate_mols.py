@@ -16,12 +16,17 @@ from moldiff.sampling import (
     SOAPSimilarityModel,
     VarriancePreservingBackwardEulerSampler,
 )
-from moldiff.utils import initialize_mol, read_qm9_xyz, setup_logger
+from moldiff.utils import (
+    get_system_torch_device_str,
+    initialize_mol,
+    read_qm9_xyz,
+    setup_logger,
+)
 
 mace.tools.set_default_dtype("float64")
 
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 
 
 def init_args():

@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+from contextlib import contextmanager
+from time import perf_counter
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -310,3 +312,22 @@ def get_mace_config(model) -> dict:
         atomic_inter_shift=mean,
     )
     return config
+
+
+def get_system_torch_device_str() -> str:
+    # the hierarchy is: MPS > CUDA > CPU
+    if torch.backends.mps.is_available():
+        return "mps"
+    elif torch.cuda.is_available():
+        return "cuda"
+    else:
+        print("No GPU acceleration available, using CPU")
+        return "cpu"
+
+
+@contextmanager
+def time_function(name: str):
+    start = perf_counter()
+    yield
+    end = perf_counter()
+    print(f"{name} took {end-start:.2f} seconds")

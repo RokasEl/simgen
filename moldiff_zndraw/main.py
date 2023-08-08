@@ -27,9 +27,15 @@ from moldiff.particle_filtering import ParticleFilterGenerator
 from moldiff.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
+    get_system_torch_device_str,
+    time_function,
 )
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
+if DEVICE == "mps":
+    torch.set_default_dtype(torch.float32)
+else:
+    torch.set_default_dtype(torch.float64)
 
 
 class UpdateScene(BaseModel, abc.ABC):
@@ -89,7 +95,7 @@ class MoldiffGeneration(UpdateScene):
         1.0, ge=1.0, le=10.0, description="Multiplier for guiding force"
     )
     relaxation_steps: int = Field(
-        10, ge=1, le=100, description="Number of relaxation steps"
+        50, ge=1, le=100, description="Number of relaxation steps"
     )
     model_repo_path: str = Field(
         "/home/rokas/Programming/MACE-Models",
@@ -156,14 +162,17 @@ class MoldiffGeneration(UpdateScene):
         molecule, mask, torch_mask = generator._merge_scaffold_and_create_mask(
             mol, atoms, num_particles=10, device=DEVICE
         )
-        trajectories = generator._maximise_log_similarity(
-            molecule,
-            particle_swap_frequency=4,
-            num_particles=10,
-            swapping_z_table=swapping_z_table,
-            mask=mask,
-            torch_mask=torch_mask,
-        )
+        print(f"Running main generation loop on device {DEVICE}")
+        with time_function("Main generation loop") as _:
+            trajectories = generator._maximise_log_similarity(
+                molecule,
+                particle_swap_frequency=4,
+                num_particles=10,
+                swapping_z_table=swapping_z_table,
+                mask=mask,
+                torch_mask=torch_mask,
+            )
+        print("You can now add hydrogens and relax the structure.")
         return trajectories
 
     def _hydrogenate(
@@ -178,6 +187,9 @@ class MoldiffGeneration(UpdateScene):
         relaxation_steps = int(relaxation_steps)
         hydro_model = self._get_hydrogenation_model(kwargs["model_repo_path"])
         if hydro_model is None:
+            print(
+                "Could not find hydrogenation model, defaulting to using bond lengths"
+            )
             connectivity_graph, found, error = self._try_to_get_graph_representation(
                 atoms
             )
@@ -189,12 +201,14 @@ class MoldiffGeneration(UpdateScene):
                 return [atoms]
             hydrogenated_atoms = hydrogenate_by_bond_lengths(atoms, connectivity_graph)
         else:
+            print("Model loaded.")
             hydrogenated_atoms = hydrogenate_by_model(atoms, hydro_model)
-
+        print("Relaxing hydrogenated structure")
         relaxed_hydrogenated_atoms = hydrogenated_atoms.copy()
         relaxed_hydrogenated_atoms = relax_hydrogens(
             [relaxed_hydrogenated_atoms], calc, num_steps=relaxation_steps, max_step=0.1
         )[0]
+        print("Finished hydrogenation and relaxation")
         return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
 
     def _get_hydrogenation_model(self, model_repo_path: str):
@@ -262,9 +276,10 @@ class MoldiffGeneration(UpdateScene):
         else:
             print("Will relax all atoms")
             mask = np.zeros(len(atoms)).astype(bool)
-
+        print("Relaxing structure")
         relaxed_atoms = attach_calculator(
             [atoms], calc, calculation_type="mace", mask=mask
         )
         relaxed_atoms = run_dynamics(relaxed_atoms, num_steps=relaxation_steps)
+        print("Finished relaxation")
         return [original_atoms, *relaxed_atoms]

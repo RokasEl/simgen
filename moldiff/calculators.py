@@ -81,14 +81,33 @@ class MaceSimilarityCalculator(Calculator):
 
     def __call__(self, atomic_data, t):
         batch_index = atomic_data.batch
+        print("getting embedding")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         emb = self._get_node_embeddings(atomic_data)
+        print("calculating log k")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         log_dens = self._calculate_log_k(emb, t)
+        print("scatter sum")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         log_dens = scatter_sum(log_dens, batch_index)
+        print("getting gradient")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         grad = self._get_gradient(atomic_data.positions, log_dens)
+        print("getting repulsive energy")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         repulsive_energy = self.repulsion_block(atomic_data) / 3.0
+        print("getting repulsive force")
+        index = atomic_data["edge_index"]
+        print(f"index shape {index.shape}, device {index.device}, dtype {index.dtype}")
         repulsive_force = self._get_gradient(
             atomic_data.positions, repulsive_energy * -1
         )
+        print("clipping gradient")
         grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
         return grad + repulsive_force
 
@@ -164,6 +183,7 @@ class MaceSimilarityCalculator(Calculator):
 
     @staticmethod
     def _get_gradient(inp_tensor: torch.Tensor, log_dens: torch.Tensor):
+        print("running autograd")
         grad = torch.autograd.grad(
             outputs=log_dens,
             inputs=inp_tensor,
@@ -189,10 +209,12 @@ class MaceSimilarityCalculator(Calculator):
 
     def _get_node_embeddings(self, data: AtomicData):
         # Embeddings
+        print("getting invariant descriptors from model")
         node_feats = self.model.get_node_invariant_descriptors(
             data, track_gradient_on_positions=True
         )  # type: ignore
         node_feats = node_feats[:, :1, :]
+        print("doing an einops operation")
         node_feats = einops.rearrange(
             node_feats,
             "num_nodes interactions embed_dim -> num_nodes (interactions embed_dim)",
@@ -219,10 +241,12 @@ class MaceSimilarityCalculator(Calculator):
         return squared_distance_matrix
 
     def _calculate_log_k(self, embedding, time):
+        print("calculating squared distance matrix")
         squared_distance_matrix = self._calculate_distance_matrix(embedding)
         # squared_distance_matrix = squared_distance_matrix / 1.5 ** (time)
         additional_multiplier = 119 * (1 - (time / 10) ** 0.25) + 1 if time <= 10 else 1
         squared_distance_matrix = squared_distance_matrix * additional_multiplier
+        print("doing an logsumexp operation")
         log_k = torch.logsumexp(-squared_distance_matrix / 2, dim=1)
         return log_k
 

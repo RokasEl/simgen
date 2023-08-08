@@ -25,7 +25,7 @@ class PointShape(ABC):
     precision_matrix = np.eye(3)
 
     @abstractmethod
-    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+    def get_n_positions(self, n: int) -> npt.NDArray[np.floating]:
         raise NotImplementedError
 
 
@@ -43,13 +43,13 @@ class StandardGaussianPrior(PriorManifold, PointShape):
     ) -> npt.ArrayLike:
         return -1 * positions
 
-    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+    def get_n_positions(self, n: int) -> npt.NDArray[np.floating]:
         return np.random.randn(n, 3)
 
 
 class MultivariateGaussianPrior(PriorManifold, PointShape):
     def __init__(
-        self, covariance_matrix: npt.NDArray[np.float64], normalise_covariance=True
+        self, covariance_matrix: npt.NDArray[np.floating], normalise_covariance=True
     ):
         assert (
             covariance_matrix.ndim == 2
@@ -77,12 +77,15 @@ class MultivariateGaussianPrior(PriorManifold, PointShape):
     ) -> npt.ArrayLike:
         precision_matrix = self.precision_matrix
         if isinstance(positions, torch.Tensor):
-            precision_matrix = torch.from_numpy(precision_matrix).to(positions.device)
+            dtype, device = positions.dtype, positions.device
+            precision_matrix = torch.tensor(
+                precision_matrix, dtype=dtype, device=device
+            )
         return -1 * positions @ precision_matrix
 
     @staticmethod
     def _check_covariance_determinant(
-        covariance_matrix: npt.NDArray[np.float64],
+        covariance_matrix: npt.NDArray[np.floating],
         normalise_covariance: bool = True,
     ):
         determinant = np.linalg.det(covariance_matrix)
@@ -94,14 +97,14 @@ class MultivariateGaussianPrior(PriorManifold, PointShape):
             covariance_matrix /= determinant ** (1 / covariance_matrix.shape[0])
         return covariance_matrix
 
-    def get_n_positions(self, n: int) -> npt.NDArray[np.float64]:
+    def get_n_positions(self, n: int) -> npt.NDArray[np.floating]:
         return np.random.multivariate_normal(self.mean, self.covariance_matrix, (n,))
 
 
 class PointCloudPrior(PriorManifold):
     def __init__(
         self,
-        points: npt.NDArray[np.float64],
+        points: npt.NDArray[np.floating],
         beta: float = 1.0,
         point_shape: PointShape = StandardGaussianPrior(),
     ):
@@ -135,9 +138,14 @@ class PointCloudPrior(PriorManifold):
         Calculate the forces to move to the point cloud weighted by the softmin of the distance
         """
         points, precision_matrix = self.points, self.point_shape.precision_matrix
+        print(f"Calculating restorative forces, checking if tensor")
         if isinstance(positions, torch.Tensor):
-            points = torch.from_numpy(points).to(positions.device)
-            precision_matrix = torch.from_numpy(precision_matrix).to(positions.device)
+            dtype, device = positions.dtype, positions.device
+            print(f"tensor positions, dtype and device: {dtype}, {device}")
+            points = torch.tensor(points, dtype=dtype, device=device)
+            precision_matrix = torch.tensor(
+                precision_matrix, dtype=dtype, device=device
+            )
 
         differences = (
             positions[:, None, :] - points[None, :, :]
@@ -153,6 +161,7 @@ class PointCloudPrior(PriorManifold):
         forces = reduce(
             weights[:, :, None] * forces, "i j k -> i k", "sum"
         )  # (n_atoms, 3)
+        print(f"final forces {forces.shape}, {forces.dtype}, {forces.device}")
         return -forces
 
     @staticmethod

@@ -15,7 +15,7 @@ from moldiff.generation_utils import (
     interpolate_points,
     remove_elements,
 )
-from moldiff.utils import initialize_mol
+from moldiff.utils import get_system_torch_device_str, initialize_mol
 
 
 def test_calculate_path_length():
@@ -34,7 +34,7 @@ def test_calculate_path_length():
 
 def test_exponential_repulsive_block_returns_correct_forces():
     z_table = AtomicNumberTable([1, 6, 7, 8, 9])
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     water = initialize_mol("H2O")
     batched = batch_atoms(water, z_table, cutoff=10.0, device=device)
 
@@ -67,7 +67,7 @@ def test_exponential_repulsive_block_returns_correct_forces():
 
 def test_exponential_repulsive_block_correct_for_batches_of_molecules():
     z_table = AtomicNumberTable([1, 6, 7, 8, 9])
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     water = initialize_mol("H2O")
     batched = batch_atoms(
         [water.copy(), water.copy()], z_table, cutoff=10.0, device=device

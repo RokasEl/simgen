@@ -12,9 +12,9 @@ from mace.tools import AtomicNumberTable
 from mace.tools.utils import get_atomic_number_table_from_zs
 
 from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.utils import initialize_mol
+from moldiff.utils import get_system_torch_device_str, initialize_mol
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 torch.set_default_dtype(torch.float64)
 
 
@@ -112,7 +112,7 @@ def loaded_model():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     model.to(device)
     return model
 
@@ -142,7 +142,7 @@ def loaded_one_layer_model():
         atomic_inter_shift=0.0,
     )
     model.load_state_dict(pretrained_model.state_dict(), strict=False)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     model.to(device)
     return model
 

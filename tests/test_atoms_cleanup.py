@@ -13,7 +13,7 @@ from moldiff.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
 )
 from moldiff.generation_utils import batch_atoms
-from moldiff.utils import initialize_mol
+from moldiff.utils import get_system_torch_device_str, initialize_mol
 
 from .fixtures import (
     loaded_mace_similarity_calculator,
@@ -177,7 +177,7 @@ def test_calculate_mace_interaction_energies_and_forces_gives_same_node_energies
 ):
     pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
     pretrained_model = torch.load(pretrained_mace)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     pretrained_model.to(device)
     z_table = z_table = AtomicNumberTable(
         [int(z) for z in pretrained_model.atomic_numbers]

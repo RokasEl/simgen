@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from moldiff.sampling import MaceSimilarityScore
-from moldiff.utils import initialize_mol
+from moldiff.utils import get_system_torch_device_str, initialize_mol
 
 from .fixtures import (
     mace_model,
@@ -14,7 +14,7 @@ from .fixtures import (
 
 torch.set_default_dtype(torch.float64)
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 
 
 @pytest.fixture

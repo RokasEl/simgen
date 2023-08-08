@@ -21,10 +21,10 @@ from energy_model.diffusion_tools import (
     iDDPMModelWrapper,
     initialize_model,
 )
-from moldiff.utils import setup_logger
+from moldiff.utils import get_system_torch_device_str, setup_logger
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
 MACE_CONFIG = dict(

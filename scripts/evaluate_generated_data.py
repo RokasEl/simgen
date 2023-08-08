@@ -13,9 +13,12 @@ from moldiff.analysis import (
     analyse_calculator,
     analyse_rdkit,
 )
-from moldiff.utils import get_mace_similarity_calculator
+from moldiff.utils import (
+    get_mace_similarity_calculator,
+    get_system_torch_device_str,
+)
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 
 
 def main(

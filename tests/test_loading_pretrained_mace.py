@@ -4,6 +4,7 @@ from e3nn import o3
 
 from moldiff.generation_utils import batch_atoms
 from moldiff.particle_filtering import ParticleFilterGenerator
+from moldiff.utils import get_system_torch_device_str
 
 from .fixtures import (
     loaded_model,
@@ -14,7 +15,7 @@ from .fixtures import (
 torch.set_default_dtype(torch.float64)
 from mace.data.atomic_data import AtomicData
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = get_system_torch_device_str()
 
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
@@ -26,7 +27,7 @@ def test_both_loading_methods_give_same_total_energies(
 ):
     pretrained_mace = "./models/SPICE_sm_inv_neut_E0.model"
     pretrained_model = torch.load(pretrained_mace)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     pretrained_model.to(device)
     z_table = z_table = AtomicNumberTable([int(z) for z in loaded_model.atomic_numbers])
     r_max = pretrained_model.r_max.item()
@@ -44,7 +45,7 @@ def test_loading_single_layer_model_gives_same_energies(
 ):
     pretrained_mace = "./models/SPICE_1l_neut_E0_swa.model"
     pretrained_model = torch.load(pretrained_mace)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = get_system_torch_device_str()
     pretrained_model.to(device)
     z_table = z_table = AtomicNumberTable(
         [int(z) for z in loaded_one_layer_model.atomic_numbers]

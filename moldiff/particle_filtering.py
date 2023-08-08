@@ -22,6 +22,12 @@ from moldiff.generation_utils import (
 from moldiff.integrators import HeunIntegrator, IntegrationParameters
 from moldiff.manifolds import MultivariateGaussianPrior, PriorManifold
 from moldiff.temperature_annealing import ExponentialThermostat
+from moldiff.utils import get_system_torch_device_str
+
+if get_system_torch_device_str() == "mps":
+    torch.set_default_dtype(torch.float32)
+else:
+    torch.set_default_dtype(torch.float64)
 
 
 class ParticleFilterGenerator:
@@ -31,7 +37,7 @@ class ParticleFilterGenerator:
         guiding_manifold: PriorManifold = MultivariateGaussianPrior(
             covariance_matrix=np.diag([1.0, 1.0, 4.0])
         ),
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=get_system_torch_device_str(),
         restorative_force_strength: float = 1.5,
         integration_parameters=IntegrationParameters(),
     ):
@@ -120,7 +126,7 @@ class ParticleFilterGenerator:
         self.swapped = False
         intermediate_configs = []
         for step, (sigma_cur, sigma_next) in enumerate(
-            zip(self.sigmas[:-1], self.sigmas[1:])
+            zip(self.sigmas[:-1], self.sigmas[1:]),
         ):
             if step % particle_swap_frequency == 0 and num_particles > 1:
                 atoms = self._prepare_atoms_for_swap(atoms, sigma_next)
@@ -186,9 +192,11 @@ class ParticleFilterGenerator:
             return (
                 molecule,
                 np.ones(len(molecule)),
-                torch.ones(len(molecule)).repeat(num_particles).to(device),
+                torch.ones(len(molecule), device=device).repeat(num_particles),
             )
         merged = molecule.copy() + scaffold.copy()
         mask = np.concatenate([np.ones(len(molecule)), np.zeros(len(scaffold))], axis=0)
-        torch_mask = torch.tensor(mask).repeat(num_particles).to(device)
+        if device == "mps":
+            mask = mask.astype(np.float32)
+        torch_mask = torch.tensor(mask, device=device).repeat(num_particles)
         return merged, mask, torch_mask
