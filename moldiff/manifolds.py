@@ -138,10 +138,8 @@ class PointCloudPrior(PriorManifold):
         Calculate the forces to move to the point cloud weighted by the softmin of the distance
         """
         points, precision_matrix = self.points, self.point_shape.precision_matrix
-        print(f"Calculating restorative forces, checking if tensor")
         if isinstance(positions, torch.Tensor):
             dtype, device = positions.dtype, positions.device
-            print(f"tensor positions, dtype and device: {dtype}, {device}")
             points = torch.tensor(points, dtype=dtype, device=device)
             precision_matrix = torch.tensor(
                 precision_matrix, dtype=dtype, device=device
@@ -161,7 +159,6 @@ class PointCloudPrior(PriorManifold):
         forces = reduce(
             weights[:, :, None] * forces, "i j k -> i k", "sum"
         )  # (n_atoms, 3)
-        print(f"final forces {forces.shape}, {forces.dtype}, {forces.device}")
         return -forces
 
     @staticmethod

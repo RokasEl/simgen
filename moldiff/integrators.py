@@ -43,7 +43,6 @@ class HeunIntegrator:
         """
         This does NOT update the neighbout list. DANGER!
         """
-        print("setting parameters")
         S_churn, S_min, S_max, S_noise, min_noise = self._get_integrator_parameters()
         mol_cur = x.clone()
         if mask is None:
@@ -54,12 +53,10 @@ class HeunIntegrator:
         # Added noise depends on the current noise level. So, it decreases over the course of the integration.
         sigma_increased = sigma_cur * gamma
         # Add noise to the current sample.
-        print("setting noise level")
         noise_level = torch.sqrt(sigma_increased**2 - sigma_cur**2) * S_noise
         noise_level = torch.max(noise_level, min_noise)
         logging.debug(f"Current step: {step}")
         logging.debug(f"Noise added to positions: {noise_level:.2e}")
-        print("adding noise to positions 1")
         with torch.no_grad():
             mol_cur.positions += (
                 torch.randn_like(mol_cur.positions) * noise_level * mask[:, None]
@@ -67,29 +64,18 @@ class HeunIntegrator:
 
         mol_increased = mol_cur
         # Euler step.
-        print("removing old grad")
         mol_increased.positions.grad = None
-        print("getting forces")
         forces = self.similarity_calculator(mol_increased, sigma_increased)
         forces = torch.tensor(forces, device=self.device)
-        print("getting restorative forces")
         restorative_forces = self.prior_manifold.calculate_resorative_forces(
             mol_increased.positions
         )
-        print("combining forces")
-        print(f"force device and dtype: {forces.device}, {forces.dtype}")
-        print(
-            f"restorative force: {restorative_forces.device}, {restorative_forces.dtype}"
-        )
-        print(f"sigma schedule: {torch.tanh(20 * sigma_cur**2)}")
         forces += (
             self.restorative_force_strength
             * restorative_forces
             * torch.tanh(20 * sigma_cur**2)
         )
-        print("masking forces")
         forces *= mask[:, None]
-        print("cloning and doing first order step")
         mol_next = mol_cur.clone()
         logging.debug(f"Step size = {abs(sigma_next - sigma_increased):.2e}")
         with torch.no_grad():
@@ -97,15 +83,12 @@ class HeunIntegrator:
 
         # Apply 2nd order correction.
         if sigma_next != 0:
-            print("removing grad in 2nd order correction")
             mol_next.positions.grad = None
 
-            print("getting forces for 2nd order correction")
             forces_next = self.similarity_calculator(mol_next, sigma_next)
             forces_next = torch.tensor(forces_next, device=self.device) * mask[:, None]
 
             mol_next = mol_increased.clone()
-            print("applying correction")
             with torch.no_grad():
                 mol_next.positions += -1 * (
                     (sigma_next - sigma_increased) * (forces + forces_next) / 2

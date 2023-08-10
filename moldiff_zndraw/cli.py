@@ -40,29 +40,53 @@ def readme():
 
 
 @app.command()
-def test_repulsive_block():
+def show_pytorch_bug():
     import torch
 
-    from moldiff.element_swapping import SwappingAtomicNumberTable
-    from moldiff.generation_utils import (
-        ExponentialRepulsionBlock,
-        batch_atoms,
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    print(device)
+    a = torch.ones([5, 3], device=device)
+    index = torch.tensor([[0, 0, 0, 1, 1]], dtype=torch.int64, device=device).T
+    index_ = index.repeat(1, 3)
+    out = torch.zeros([2, 3], device=device)
+    result = out.scatter_add_(0, index_, a)
+    expected_result = torch.tensor(
+        [[3, 3, 3], [2, 2, 2]], dtype=torch.float32, device=device
     )
-    from moldiff.utils import get_system_torch_device_str
+    print((result == expected_result).all())
 
-    device = get_system_torch_device_str()
-    if device == "mps":
-        torch.set_default_dtype(torch.float32)
+    a = torch.ones(
+        [
+            5,
+        ],
+        device=device,
+    )
+    out = torch.zeros(
+        [
+            2,
+        ],
+        device=device,
+    )
+    result = out.scatter_add_(-1, index.squeeze(), a)
+    expected_result = torch.tensor([3, 2], dtype=torch.float32, device=device)
+    print((result == expected_result).all())
 
-    repulsion_block = ExponentialRepulsionBlock(alpha=8.0).to(device)
-    from moldiff.utils import initialize_mol
-
-    mol = initialize_mol("C6H6")
-    z_table = SwappingAtomicNumberTable([1, 6, 7, 8], [1, 1, 1, 1])
-    batched = batch_atoms([mol.copy(), mol.copy()], z_table, cutoff=5, device=device)
-    energies = repulsion_block(batched)
-    print(energies, energies.shape, energies.dtype)
-    print("success!")
+    a = torch.ones([5, 1], device=device)
+    out = torch.zeros([2, 1], device=device)
+    result = out.scatter_add_(0, index, a)
+    expected_result = torch.tensor(
+        [
+            [
+                3,
+            ],
+            [
+                2,
+            ],
+        ],
+        dtype=torch.float32,
+        device=device,
+    )
+    print((result == expected_result).all())
 
 
 if __name__ == "__main__":

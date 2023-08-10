@@ -139,32 +139,18 @@ class ExponentialRepulsionBlock(nn.Module):
 
     def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
         data["positions"].requires_grad_(True)
-        print("getting edge vectors")
-        print(f"edge_index shape {data['edge_index'].shape}")
         _, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
             edge_index=data["edge_index"],
             shifts=data["shifts"],
         )
         receiver = data["edge_index"][1]
-        print("running torch exp")
         all_energies = torch.exp(-self.alpha * lengths)  # [n_edges, 1]
         all_energies = all_energies.squeeze()
-        print(
-            f"got energies with shape {all_energies.shape} and device {all_energies.device}, and dtype {all_energies.dtype}"
-        )
-        index = data["edge_index"][0]
-        print(f"sender shape {index.shape}, device {index.device}, dtype {index.dtype}")
-        print(
-            f"receiver shape {receiver.shape}, device {receiver.device}, dtype {receiver.dtype}"
-        )
-        print("running scatter sum")
         num_nodes = data["positions"].shape[0]
-        print(f"num nodes {num_nodes}")
         energies = 0.5 * scatter_sum(
             src=all_energies, index=receiver, dim=-1, dim_size=num_nodes
         )  # [n_nodes]
-        print(f"got energies with shape {energies.shape}")
         return energies
 
 
