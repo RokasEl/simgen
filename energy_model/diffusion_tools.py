@@ -10,7 +10,11 @@ from e3nn.util.jit import compile_mode
 from mace.data.atomic_data import AtomicData
 from mace.modules.blocks import LinearNodeEmbeddingBlock
 from mace.modules.models import MACE
-from mace.modules.utils import compute_forces, get_outputs
+from mace.modules.utils import (
+    compute_forces,
+    get_edge_vectors_and_lengths,
+    get_outputs,
+)
 from mace.tools.scatter import scatter_mean, scatter_sum
 
 from moldiff.utils import get_system_torch_device_str
@@ -488,7 +492,14 @@ class EnergyMACEDiffusion(MACE):
         num_graphs = data["ptr"].numel() - 1
 
         # Embeddings
-        node_feats, edge_attrs, edge_feats = self._get_initial_embeddings(data)
+        node_feats = self.node_embedding(data["node_attrs"])
+        vectors, lengths = get_edge_vectors_and_lengths(
+            positions=data["positions"],
+            edge_index=data["edge_index"],
+            shifts=data["shifts"],
+        )
+        edge_attrs = self.spherical_harmonics(vectors)
+        edge_feats = self.radial_embedding(lengths)
         sigma_embedding = self.noise_embedding(sigmas) / self.noise_embed_dim
         node_feats = torch.cat([node_feats, sigma_embedding], dim=-1)
         node_feats = self.noise_linear(node_feats)

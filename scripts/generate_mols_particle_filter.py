@@ -38,12 +38,10 @@ def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
     pretrained_mace_path = "./models/SPICE_sm_inv_neut_E0_swa.model"
     rng = np.random.default_rng(0)
-    data_path = "../data/qm9_full_data.xyz"
+    model_repo_path = "/home/rokas/Programming/MACE-Models"
     score_model = get_mace_similarity_calculator(
-        pretrained_mace_path,
-        data_path,
-        num_reference_mols=256,
-        num_to_sample_uniformly_per_size=2,
+        model_repo_path,
+        num_reference_mols=-1,
         device=DEVICE,
         rng=rng,
     )
@@ -77,8 +75,8 @@ def main():
             swapping_z_table,
             num_particles=10,
             particle_swap_frequency=2,
-            hydrogenation_type="hydromace",
-            hydrogenation_calc=hydromace_calc,
+            # hydrogenation_type="hydromace",
+            # hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",

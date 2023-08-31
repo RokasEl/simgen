@@ -189,14 +189,14 @@ class MaceSimilarityCalculator(Calculator):
 
     def _get_node_embeddings(self, data: AtomicData):
         # Embeddings
-        node_feats = self.model.get_node_invariant_descriptors(
-            data, track_gradient_on_positions=True
-        )  # type: ignore
-        node_feats = node_feats[:, :1, :]
-        node_feats = einops.rearrange(
-            node_feats,
-            "num_nodes interactions embed_dim -> num_nodes (interactions embed_dim)",
-        )
+        out = self.model(data, compute_force=False)
+        node_feats = out["node_feats"]  # (n_nodes, features_per_layer*num_layers)
+        irreps_out = self.model.products[0].linear.__dict__["irreps_out"]  # type: ignore
+        l_max = irreps_out.lmax
+        num_features = irreps_out.dim // (l_max + 1) ** 2
+        node_feats = node_feats[
+            :, :num_features
+        ]  # extract invariant features only from the first layer
         return node_feats
 
     def _calculate_reference_embeddings(
