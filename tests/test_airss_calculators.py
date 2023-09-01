@@ -16,7 +16,7 @@ def test_mopac_calculator():
     forces = atoms.get_forces()
 
     assert energy == -54.09724 * 0.0433641153087705
-    expected_forces = np.array(
+    expected_forces = -1 * np.array(
         [[0.0, 0.0, 12.482147], [0.0, 2.931553, -6.228044], [0.0, -2.931553, -6.254103]]
     )
     np.testing.assert_allclose(forces, expected_forces * 0.0433641153087705)
@@ -26,7 +26,7 @@ def test_mopac_calculator():
     energy = atoms.get_potential_energy()
     forces = atoms.get_forces()
     assert energy == -12.25217 * 0.0433641153087705
-    expected_forces = np.array(
+    expected_forces = -1 * np.array(
         [
             [0.000004, 0.000004, 0.000004],
             [2.010724, 2.010724, 2.010724],

@@ -147,7 +147,7 @@ def loaded_one_layer_model():
     return model
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def loaded_mace_similarity_calculator(loaded_model, training_molecules):
     calc = MaceSimilarityCalculator(
         loaded_model, reference_data=training_molecules, device=DEVICE

@@ -33,7 +33,8 @@ class MaceSimilarityCalculator(Calculator):
         self,
         model: MACE,
         reference_data: List[ase.Atoms],
-        device="cpu",
+        device: str = "cpu",
+        alpha: float = 8.0,
         *args,
         restart=None,
         label=None,
@@ -47,11 +48,8 @@ class MaceSimilarityCalculator(Calculator):
         ----------
         model
             a pretrained MACE model
-        ref_soap_vectors
-            reference SOAP vectors [n_ref, len_soap]
-        scale
-            scaling for energy & forces, energy of calculator is
-            `-1 * scale * k_soap ^ zeta` where 0 < k_soap < 1
+        alpha
+            parameter for controlling range of repulsion. High alpha -> short repulsion range
         """
         super().__init__(
             restart=restart,
@@ -61,7 +59,7 @@ class MaceSimilarityCalculator(Calculator):
             **kwargs,
         )
         self.model = model
-        self.repulsion_block = ExponentialRepulsionBlock(alpha=8.0).to(device)
+        self.repulsion_block = ExponentialRepulsionBlock(alpha=alpha).to(device)
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
         self.cutoff = model.r_max.item()  # type: ignore
@@ -79,7 +77,11 @@ class MaceSimilarityCalculator(Calculator):
             self.reference_embeddings
         )
 
-    def __call__(self, atomic_data, t):
+    def __call__(
+        self,
+        atomic_data,
+        t,
+    ):
         batch_index = atomic_data.batch
         emb = self._get_node_embeddings(atomic_data)
         log_dens = self._calculate_log_k(emb, t)

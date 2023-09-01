@@ -9,8 +9,8 @@ from moldiff.utils import initialize_mol
 def test_merge_scaffold_and_create_mask():
     generated_atoms = initialize_mol("C3")
     scaffold = initialize_mol("C6H6")
-    merged, mask = ParticleFilterGenerator._merge_scaffold_and_create_mask(
-        generated_atoms, scaffold
+    merged, mask, _ = ParticleFilterGenerator._merge_scaffold_and_create_mask(
+        generated_atoms, scaffold, 1
     )
     expected_merged_positions = np.concatenate(
         [generated_atoms.positions, scaffold.positions], axis=0

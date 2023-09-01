@@ -17,21 +17,6 @@ NATURAL_VALENCES = frozendict(
 )
 
 
-def hydrogenate_stochastically(atoms):
-    _, num_neighbours = get_edge_array_and_neighbour_numbers(atoms)
-    num_hs_to_add_per_atom = np.zeros(len(atoms)).astype(int)
-    atomic_numbers = atoms.get_atomic_numbers()
-    for idx in range(len(atoms)):
-        current_valence = num_neighbours[idx]
-        max_valence = NATURAL_VALENCES[atomic_numbers[idx]]
-        num_hs_to_add_per_atom[idx] = sample_number_of_hs_to_add(
-            current_valence, max_valence
-        )
-
-    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
-    return atoms_with_hs
-
-
 def hydrogenate_deterministically(
     atoms, single_bond_stretch_factor=1.1, multi_bond_stretch_factor=1.05
 ):
@@ -89,17 +74,6 @@ def get_exclusion_radii(atoms, central_atom_idx):
     )
     exclusion_radii[central_atom_idx] = 0
     return exclusion_radii
-
-
-def sample_number_of_hs_to_add(current_valence, max_valence):
-    if current_valence >= max_valence:
-        return 0
-    else:
-        num_missing_bonds = max_valence - current_valence
-        # bias sampling towards fully saturating the atom
-        p = num_missing_bonds / (num_missing_bonds + 1)
-        to_add = binom.rvs(num_missing_bonds, p)
-        return to_add
 
 
 def find_valid_h_position(exclusion_radii, central_atom_idx, atoms, max_tries=20):

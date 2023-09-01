@@ -18,7 +18,6 @@ from moldiff.generation_utils import (
 from moldiff.hydrogenation import (
     hydrogenate_deterministically,
     hydrogenate_hydromace,
-    hydrogenate_stochastically,
 )
 
 

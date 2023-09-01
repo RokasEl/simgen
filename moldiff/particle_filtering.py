@@ -1,6 +1,6 @@
 import logging
 from functools import partial
-from typing import List, Literal
+from typing import List, Literal, Tuple
 
 import ase
 import numpy as np
@@ -187,7 +187,7 @@ class ParticleFilterGenerator:
         scaffold: ase.Atoms | None,
         num_particles: int,
         device: str = "cpu",
-    ):
+    ) -> Tuple[ase.Atoms, np.ndarray, torch.Tensor]:
         if scaffold is None:
             return (
                 molecule,
