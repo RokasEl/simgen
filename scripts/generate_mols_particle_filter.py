@@ -32,11 +32,11 @@ from moldiff.manifolds import (
     MultivariateGaussianPrior,
     PointCloudPrior,
 )
+from moldiff.utils import get_hydromace_calculator
 
 
 def main():
     setup_logger(level=logging.DEBUG, tag="particle_filter", directory="./logs")
-    pretrained_mace_path = "./models/SPICE_sm_inv_neut_E0_swa.model"
     rng = np.random.default_rng(0)
     model_repo_path = "/home/rokas/Programming/MACE-Models"
     score_model = get_mace_similarity_calculator(
@@ -45,11 +45,9 @@ def main():
         device=DEVICE,
         rng=rng,
     )
-    hydromace_model = torch.load(
-        "./models/qm9_and_spice_hydrogenation.model", map_location=DEVICE
+    hydromace_calc = get_hydromace_calculator(
+        model_repo_path=model_repo_path, device=DEVICE
     )
-    hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
-    destination = "./scripts/Generated_trajectories/hydromace_new_swaps/"
     noise_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
     destination = "./scripts/Generated_trajectories/size_one/"
 
@@ -75,8 +73,8 @@ def main():
             swapping_z_table,
             num_particles=10,
             particle_swap_frequency=2,
-            # hydrogenation_type="hydromace",
-            # hydrogenation_calc=hydromace_calc,
+            hydrogenation_type="hydromace",
+            hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
             f"{destination}/CHONF_{i}_{size}.xyz",

@@ -173,7 +173,6 @@ def get_hydromace_calculator(model_repo_path, device):
     try:
         model_loader = zntrack.from_rev("hydromace", remote=model_repo_path)
         model = model_loader.get_model(device=device)
-        model = model.to(torch.float)
         hydrogenation_model = HydroMaceCalculator(model, device=device)
         return hydrogenation_model
     except Exception as e:
