@@ -21,7 +21,9 @@ from mace.tools.scatter import scatter_sum
 from moldiff.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
+    batch_to_correct_dtype,
     convert_atoms_to_atomic_data,
+    get_model_dtype,
     remove_elements,
 )
 
@@ -59,13 +61,15 @@ class MaceSimilarityCalculator(Calculator):
             **kwargs,
         )
         self.model = model
+        self.dtype = get_model_dtype(model)
         self.repulsion_block = ExponentialRepulsionBlock(alpha=alpha).to(device)
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
         self.cutoff = model.r_max.item()  # type: ignore
-        self.batch_atoms = partial(
+        batch_func = partial(
             batch_atoms, z_table=self.z_table, cutoff=self.cutoff, device=self.device
         )
+        self.batch_atoms = lambda x: batch_to_correct_dtype(batch_func(x), self.dtype)
         self.convert_to_atomic_data = partial(
             convert_atoms_to_atomic_data,
             z_table=self.z_table,
@@ -207,7 +211,10 @@ class MaceSimilarityCalculator(Calculator):
         as_atomic_data = self.convert_to_atomic_data(training_data)
         dloader = get_data_loader(as_atomic_data, batch_size=128, shuffle=False)
         with torch.no_grad():
-            node_embeddings = [self._get_node_embeddings(data) for data in dloader]
+            node_embeddings = [
+                self._get_node_embeddings(batch_to_correct_dtype(data, self.dtype))
+                for data in dloader
+            ]
         return torch.concatenate(node_embeddings, dim=0)
 
     def _calculate_distance_matrix(self, embedding):

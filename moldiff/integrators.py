@@ -7,10 +7,10 @@ from mace.data import AtomicData
 from moldiff.manifolds import PriorManifold
 from moldiff.utils import get_system_torch_device_str
 
-if get_system_torch_device_str() == "mps":
-    torch.set_default_dtype(torch.float32)
-else:
-    torch.set_default_dtype(torch.float64)
+# if get_system_torch_device_str() == "mps":
+#     torch.set_default_dtype(torch.float32)
+# else:
+#     torch.set_default_dtype(torch.float64)
 
 
 @dataclass
@@ -101,5 +101,7 @@ class HeunIntegrator:
             self.integration_parameters.S_min,
             self.integration_parameters.S_max,
             self.integration_parameters.S_noise,
-            torch.tensor(self.integration_parameters.min_noise).to(self.device),
+            torch.tensor(self.integration_parameters.min_noise)
+            .to(self.device)
+            .to(self.similarity_calculator.dtype),
         )

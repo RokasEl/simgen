@@ -1,41 +1,40 @@
 import abc
+import json
+import logging
+import typing as t
 
 import ase
-import networkx as nx
 import numpy as np
-import torch
-from pydantic import BaseModel, Field, PrivateAttr
+import requests
+from pydantic import BaseModel, Field
+from zndraw.data import atoms_from_json
 
-from moldiff.atoms_cleanup import (
-    attach_calculator,
-    relax_hydrogens,
-    run_dynamics,
-)
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import (
-    calculate_path_length,
-    calculate_restorative_force_strength,
-    interpolate_points,
-)
-from moldiff.hydrogenation import (
-    NATURAL_VALENCES,
-    add_hydrogens_to_atoms,
-)
-from moldiff.integrators import IntegrationParameters
-from moldiff.manifolds import PointCloudPrior
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import (
-    get_hydromace_calculator,
-    get_mace_similarity_calculator,
-    get_system_torch_device_str,
-    time_function,
-)
+from .utils import calculate_path_length, setup_logger
 
-DEVICE = get_system_torch_device_str()
-if DEVICE == "mps":
-    torch.set_default_dtype(torch.float32)
-else:
-    torch.set_default_dtype(torch.float64)
+setup_logger()
+
+
+def _format_data_from_zndraw(atom_ids, **kwargs) -> dict:
+    points = kwargs["points"]
+    formatted_points = points if points is None else points.tolist()
+    data = {
+        "atom_ids": atom_ids,
+        "atoms": kwargs["json_data"],
+        "points": formatted_points,
+        "segments": kwargs["segments"].tolist(),
+    }
+    return data
+
+
+def _post_request(address: str, data: dict, name: str):
+    logging.info(f"Posted {name} request")
+    try:
+        response = requests.post(str(address), data=json.dumps(data))
+        logging.info(f"Received {name} response with code {response}")
+        return response
+    except Exception:
+        logging.error(f"Failed to get response with error: {Exception}")
+        raise Exception
 
 
 class UpdateScene(BaseModel, abc.ABC):
@@ -44,44 +43,8 @@ class UpdateScene(BaseModel, abc.ABC):
         pass
 
 
-def load_mace_calc(model_repo_path):
-    rng = np.random.default_rng(0)
-    mace_calc = get_mace_similarity_calculator(
-        model_repo_path,
-        num_reference_mols=-1,
-        device=DEVICE,
-        rng=rng,
-    )
-    return mace_calc
-
-
-INTEGRATION_PARAMS = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
-swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
-
-
-def hydrogenate_by_bond_lengths(atoms, graph_representation):
-    edge_array = nx.adjacency_matrix(graph_representation).todense()  # type: ignore
-    current_neighbours = edge_array.sum(axis=0)
-    max_valence = np.array(
-        [
-            NATURAL_VALENCES[atomic_number]
-            for atomic_number in atoms.get_atomic_numbers()
-        ]
-    )
-    num_hs_to_add_per_atom = max_valence - current_neighbours
-    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
-    return atoms_with_hs
-
-
-def hydrogenate_by_model(atoms, model):
-    num_hs_to_add_per_atom = model.predict_missing_hydrogens(atoms)
-    num_hs_to_add_per_atom = np.round(num_hs_to_add_per_atom).astype(int)
-    atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
-    return atoms_with_hs
-
-
-class MoldiffGeneration(UpdateScene):
-    run_type: str = Field("generate", description="Type of operation to do")
+class Generate(BaseModel):
+    method: t.Literal["Generate"] = Field("Generate")
     num_atoms_to_add: int = Field(
         5, ge=1, le=30, description="Number of atoms to generate"
     )
@@ -92,194 +55,121 @@ class MoldiffGeneration(UpdateScene):
         description="Will supersede num_atoms_to_add if positive",
     )
     guiding_force_multiplier: float = Field(
-        1.0, ge=1.0, le=10.0, description="Multiplier for guiding force"
+        1.0,
+        ge=1.0,
+        le=10.0,
+        description="Multiplier for guiding force. Default value should be enough for simple geometries.",
     )
-    relaxation_steps: int = Field(
-        50, ge=1, le=100, description="Number of relaxation steps"
-    )
-    model_repo_path: str = Field(
-        "/home/rokas/Programming/MACE-Models",
-    )
-    _calc = PrivateAttr(None)
-    _hydro_model = PrivateAttr(None)
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        if self._calc is None:
-            print("Initializing MACE calculator")
-            self._calc = load_mace_calc(kwargs["model_repo_path"])
-        else:
-            print("Using existing MACE calculator")
-
-        if "run_type" in kwargs:
-            run_type = kwargs["run_type"].strip().lower()
-        else:
-            run_type = self.run_type.strip().lower()
-        if run_type == "generate":
-            return self._generate(atom_ids, atoms, **kwargs)
-        elif run_type == "hydrogenate":
-            return self._hydrogenate(atom_ids, atoms, **kwargs)
-        elif run_type == "relax":
-            return self._relax(atom_ids, atoms, **kwargs)
-        else:
-            print(
-                f"Unrecognized `run_type`:f{run_type}\nShould be one of: `generate`, `hydrogenate`, `relax`"
-            )
-            return [atoms]
-
-    def _generate(
-        self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
-    ) -> list[ase.Atoms]:
-        calc = self._calc
-        if kwargs["points"] is not None and kwargs["points"].shape[0] > 1:
-            print("Interpolating points")
-            points = interpolate_points(kwargs["points"])
-        else:
-            points = kwargs["points"]
-        if points.size == 0:
-            print("No location provided, will generate at origin")
-            points = np.array([[0.0, 0.0, 0.0]])
-        prior = PointCloudPrior(points, beta=5.0)
+        points = self._handle_points(kwargs["points"], kwargs["segments"])
+        kwargs["points"] = points
         num_atoms_to_add = self._get_num_atoms_to_add(
-            points, kwargs, self.num_atoms_to_add
+            points, self.atoms_per_angstrom, self.num_atoms_to_add
         )
-        restorative_force_multiplier = (
-            kwargs["guiding_force_multiplier"]
-            if "guiding_force_multiplier" in kwargs
-            else self.guiding_force_multiplier
+        request = {
+            "run_type": "generate",
+            "run_specific_params": {
+                "num_atoms_to_add": int(num_atoms_to_add),
+                "restorative_force_multiplier": float(self.guiding_force_multiplier),
+            },
+            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+        }
+        response = _post_request(
+            kwargs["client_address"], data=request, name="generation"
         )
-        restorative_force_strength = calculate_restorative_force_strength(
-            num_atoms_to_add
-        ) * float(restorative_force_multiplier)
-        generator = ParticleFilterGenerator(
-            calc,
-            prior,
-            integration_parameters=INTEGRATION_PARAMS,
-            device=DEVICE,
-            restorative_force_strength=restorative_force_strength,
-        )
-        mol = ase.Atoms(f"C{num_atoms_to_add}")
-        mol = prior.initialise_positions(mol, scale=0.5)
-        molecule, mask, torch_mask = generator._merge_scaffold_and_create_mask(
-            mol, atoms, num_particles=10, device=DEVICE
-        )
-        print(f"Running main generation loop on device {DEVICE}")
-        with time_function("Main generation loop") as _:
-            trajectories = generator._maximise_log_similarity(
-                molecule,
-                particle_swap_frequency=4,
-                num_particles=10,
-                swapping_z_table=swapping_z_table,
-                mask=mask,
-                torch_mask=torch_mask,
-            )
-        print("You can now add hydrogens and relax the structure.")
-        return trajectories
+        return [atoms_from_json(x) for x in response.json()["atoms"]]
 
-    def _hydrogenate(
-        self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
-    ) -> list[ase.Atoms]:
-        calc = self._calc
-        relaxation_steps = (
-            kwargs["relaxation_steps"]
-            if "relaxation_steps" in kwargs
-            else self.relaxation_steps
-        )
-        relaxation_steps = int(relaxation_steps)
-        hydro_model = self._get_hydrogenation_model(kwargs["model_repo_path"])
-        if hydro_model is None:
-            print(
-                "Could not find hydrogenation model, defaulting to using bond lengths"
-            )
-            connectivity_graph, found, error = self._try_to_get_graph_representation(
-                atoms
-            )
-            if not found:
-                print(
-                    "No graph representation found, try resetting the scene or clicking `Save` in the `Bonds` tab"
-                )
-                print(f"Error: {error}")
-                return [atoms]
-            hydrogenated_atoms = hydrogenate_by_bond_lengths(atoms, connectivity_graph)
+    @staticmethod
+    def _handle_points(points, segments) -> np.ndarray:
+        if points.size == 0:
+            logging.info("No location provided, will generate at origin")
+            return np.array([[0.0, 0.0, 0.0]])
+        elif points.shape[0] == 1:
+            return points
         else:
-            print("Model loaded.")
-            hydrogenated_atoms = hydrogenate_by_model(atoms, hydro_model)
-        print("Relaxing hydrogenated structure")
-        relaxed_hydrogenated_atoms = hydrogenated_atoms.copy()
-        relaxed_hydrogenated_atoms = relax_hydrogens(
-            [relaxed_hydrogenated_atoms], calc, num_steps=relaxation_steps, max_step=0.1
-        )[0]
-        print("Finished hydrogenation and relaxation")
-        return [hydrogenated_atoms, relaxed_hydrogenated_atoms]
-
-    def _get_hydrogenation_model(self, model_repo_path: str):
-        if self._hydro_model is None:
-            print("Initializing hydrogenation model")
-            self._hydro_model = get_hydromace_calculator(model_repo_path, DEVICE)
-        else:
-            print("Using loaded hydrogenation model")
-        return self._hydro_model
+            return segments
 
     @staticmethod
     def _get_num_atoms_to_add(
-        points: np.ndarray, kwargs: dict, default_num_atoms_to_add: int
+        points: np.ndarray, atoms_per_angstrom: float, num_static: int
     ) -> int:
-        atoms_per_angstrom = (
-            float(kwargs["atoms_per_angstrom"])
-            if "atoms_per_angstrom" in kwargs
-            else -1
-        )
         if atoms_per_angstrom > 0 and points is not None and points.shape[0] > 0:
-            print(
+            logging.info(
                 "Calculating number of atoms to add based on curve length and density"
             )
             curve_length = calculate_path_length(points)
             num_atoms_to_add = np.ceil(curve_length * atoms_per_angstrom).astype(int)
-            print(
+            logging.info(
                 f"Path length defined by points: {curve_length:.1f} A; atoms to add: {num_atoms_to_add}"
             )
             return num_atoms_to_add
         else:
-            num_atoms_to_add = (
-                int(kwargs["num_atoms_to_add"])
-                if "num_atoms_to_add" in kwargs
-                else default_num_atoms_to_add
-            )
-            return num_atoms_to_add
+            return num_static
 
-    @staticmethod
-    def _try_to_get_graph_representation(atoms):
-        try:
-            connectivity_graph = atoms.info["graph_representation"]
-            found = True
-            error = None
-        except Exception as e:
-            connectivity_graph = None
-            found = False
-            error = e
-        return connectivity_graph, found, error
 
-    def _relax(
-        self, atom_ids: list[int], atoms: ase.Atoms, **kwargs
-    ) -> list[ase.Atoms]:
-        calc = self._calc
-        relaxation_steps = (
-            kwargs["relaxation_steps"]
-            if "relaxation_steps" in kwargs
-            else self.relaxation_steps
+class Relax(BaseModel):
+    method: t.Literal["Relax"] = Field("Relax")
+    max_steps: int = Field(100, ge=1)
+
+    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        request = {
+            "run_type": "relax",
+            "run_specific_params": {
+                "max_steps": int(self.max_steps),
+            },
+            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+        }
+        response = _post_request(
+            kwargs["client_address"], data=request, name="relaxation"
         )
-        relaxation_steps = int(relaxation_steps)
-        original_atoms = atoms.copy()
-        if len(atom_ids) != 0:
-            print("Will relax only the selected atoms")
-            mask = np.ones(len(atoms)).astype(bool)
-            mask[atom_ids] = False
-        else:
-            print("Will relax all atoms")
-            mask = np.zeros(len(atoms)).astype(bool)
-        print("Relaxing structure")
-        relaxed_atoms = attach_calculator(
-            [atoms], calc, calculation_type="mace", mask=mask
+        return [atoms_from_json(x) for x in response.json()["atoms"]]
+
+
+class Hydrogenate(BaseModel):
+    method: t.Literal["Hydrogenate"] = Field("Hydrogenate")
+    max_steps: int = Field(100, ge=1)
+
+    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        request = {
+            "run_type": "hydrogenate",
+            "run_specific_params": {
+                "max_steps": int(self.max_steps),
+            },
+            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+        }
+        response = _post_request(
+            kwargs["client_address"], data=request, name="hydrogenation"
         )
-        relaxed_atoms = run_dynamics(relaxed_atoms, num_steps=relaxation_steps)
-        print("Finished relaxation")
-        return [original_atoms, *relaxed_atoms]
+        return [atoms_from_json(x) for x in response.json()["atoms"]]
+
+
+run_types = t.Union[Generate, Relax, Hydrogenate]
+
+
+class DiffusionModelling(UpdateScene):
+    method: t.Literal["DiffusionModelling"] = "DiffusionModelling"
+    run_type: run_types = Field(discriminator="method")
+    path: str = Field(
+        "/home/rokas/Programming/MACE-Models",
+        description="Path to the repo holding the required models",
+    )
+    client_address: str = Field("http://127.0.0.1:8000")
+
+    @classmethod
+    def model_json_schema(cls, *args, **kwargs) -> dict[str, t.Any]:
+        schema = super().model_json_schema(*args, **kwargs)
+        for prop in [x.__name__ for x in t.get_args(run_types)]:
+            schema["$defs"][prop]["properties"]["method"]["options"] = {"hidden": True}
+            schema["$defs"][prop]["properties"]["method"]["type"] = "string"
+        return schema
+
+    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        modified_atoms = self.run_type.run(
+            atom_ids=atom_ids,
+            atoms=atoms,
+            client_address=self.client_address,
+            **kwargs,
+        )
+        print(modified_atoms)
+        return modified_atoms

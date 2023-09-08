@@ -329,4 +329,4 @@ def time_function(name: str):
     start = perf_counter()
     yield
     end = perf_counter()
-    print(f"{name} took {end-start:.2f} seconds")
+    logging.info(f"{name} took {end-start:.2f} seconds")

@@ -1,7 +1,10 @@
 import pathlib
+import time
 
 import typer
 from zndraw.settings import GlobalConfig
+
+from moldiff_zndraw.host_model import launch_local_cluster
 
 app = typer.Typer()
 
@@ -17,76 +20,21 @@ def init(path: str = typer.Argument(..., help="Path to clone of MACE-models repo
         config = GlobalConfig.from_file(config_path)  # type: ignore
     else:
         config = GlobalConfig()
-    pkg = "moldiff_zndraw.main.MoldiffGeneration"
+    pkg = "moldiff_zndraw.main.DiffusionModelling"
     config.modify_functions = list(
         filter(
-            lambda x: not "MoldiffGeneration".lower() in x.lower(),
+            lambda x: not "DiffusionModelling".lower() in x.lower(),
             config.modify_functions,
         )
     )
     config.modify_functions.append(pkg)
     path = pathlib.Path(path).expanduser().absolute()
     moldiff_settings = {
-        "model_repo_path": path.as_posix(),
+        "path": path.as_posix(),
     }
-    config.function_schema["moldiff_zndraw.main.MoldiffGeneration"] = moldiff_settings
+    config.function_schema["moldiff_zndraw.main.DiffusionModelling"] = moldiff_settings
     config.save()
     print(f"Saved configuration to {path}")
-
-
-@app.command()
-def readme():
-    print("This is a CLI for moldiff_zndraw")
-
-
-@app.command()
-def show_pytorch_bug():
-    import torch
-
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    print(device)
-    a = torch.ones([5, 3], device=device)
-    index = torch.tensor([[0, 0, 0, 1, 1]], dtype=torch.int64, device=device).T
-    index_ = index.repeat(1, 3)
-    out = torch.zeros([2, 3], device=device)
-    result = out.scatter_add_(0, index_, a)
-    expected_result = torch.tensor(
-        [[3, 3, 3], [2, 2, 2]], dtype=torch.float32, device=device
-    )
-    print((result == expected_result).all())
-
-    a = torch.ones(
-        [
-            5,
-        ],
-        device=device,
-    )
-    out = torch.zeros(
-        [
-            2,
-        ],
-        device=device,
-    )
-    result = out.scatter_add_(-1, index.squeeze(), a)
-    expected_result = torch.tensor([3, 2], dtype=torch.float32, device=device)
-    print((result == expected_result).all())
-
-    a = torch.ones([5, 1], device=device)
-    out = torch.zeros([2, 1], device=device)
-    result = out.scatter_add_(0, index, a)
-    expected_result = torch.tensor(
-        [
-            [
-                3,
-            ],
-            [
-                2,
-            ],
-        ],
-        dtype=torch.float32,
-        device=device,
-    )
-    print((result == expected_result).all())
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from moldiff.element_swapping import (
 )
 from moldiff.generation_utils import (
     batch_atoms,
+    batch_to_correct_dtype,
     duplicate_atoms,
     get_atoms_from_batch,
 )
@@ -24,10 +25,10 @@ from moldiff.manifolds import MultivariateGaussianPrior, PriorManifold
 from moldiff.temperature_annealing import ExponentialThermostat
 from moldiff.utils import get_system_torch_device_str
 
-if get_system_torch_device_str() == "mps":
-    torch.set_default_dtype(torch.float32)
-else:
-    torch.set_default_dtype(torch.float64)
+# if get_system_torch_device_str() == "mps":
+#     torch.set_default_dtype(torch.float32)
+# else:
+#     torch.set_default_dtype(torch.float64)
 
 
 class ParticleFilterGenerator:
@@ -42,17 +43,22 @@ class ParticleFilterGenerator:
         integration_parameters=IntegrationParameters(),
     ):
         self.similarity_calculator = similarity_calculator
+        self.dtype = self.similarity_calculator.dtype
         self.guiding_manifold = guiding_manifold
         self.z_table = AtomicNumberTable(
             [int(z) for z in similarity_calculator.model.atomic_numbers]  # type: ignore
         )
         self.device = device
-        self.sigmas = torch.concatenate(
-            [
-                torch.linspace(1, 0.05, 50),
-                torch.logspace(-1.31, -3, 50),
-            ]
-        ).to(device)
+        self.sigmas = (
+            torch.concatenate(
+                [
+                    torch.linspace(1, 0.05, 50),
+                    torch.logspace(-1.31, -3, 50),
+                ]
+            )
+            .to(device)
+            .to(self.dtype)
+        )
         self.integrator = HeunIntegrator(
             similarity_calculator=similarity_calculator,
             guiding_manifold=guiding_manifold,
@@ -62,12 +68,13 @@ class ParticleFilterGenerator:
         self.thermostat = ExponentialThermostat(
             initial_T_log_10=6, final_T_log_10=-1, sigma_max=self.sigmas[0]
         )
-        self.batch_atoms = partial(
+        batch_func = partial(
             batch_atoms,
             z_table=self.z_table,
             device=self.device,
             cutoff=self.similarity_calculator.cutoff,
         )
+        self.batch_atoms = lambda x: batch_to_correct_dtype(batch_func(x), self.dtype)
 
     def generate(
         self,

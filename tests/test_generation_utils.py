@@ -12,6 +12,7 @@ from moldiff.generation_utils import (
     calculate_path_length,
     duplicate_atoms,
     get_edge_array_and_neighbour_numbers,
+    get_model_dtype,
     interpolate_points,
     remove_elements,
 )
@@ -142,3 +143,12 @@ def test_get_edge_array_and_neighbour_numbers_gets_correct_number_of_neighbours(
     mol = initialize_mol("C20")
     _, neighbour_numbers = get_edge_array_and_neighbour_numbers(mol)
     np.testing.assert_array_equal(neighbour_numbers, np.array([19] * 20))
+
+
+def test_assigning_model_dtype():
+    model = torch.nn.Linear(5, 7)
+    model.to(torch.float64)
+    assert get_model_dtype(model) == torch.float64
+
+    model.to(torch.float32)
+    assert get_model_dtype(model) == torch.float32

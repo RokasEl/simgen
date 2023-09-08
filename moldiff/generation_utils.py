@@ -105,6 +105,17 @@ def batch_atoms(
     )
 
 
+def batch_to_correct_dtype(batch: AtomicData, dtype: torch.dtype):
+    if dtype != torch.get_default_dtype():
+        keys = filter(
+            lambda x: torch.is_floating_point(batch[x]), batch.keys
+        )  # type:ignore
+        batch = batch.to(dtype, *keys)
+        return batch
+    else:
+        return batch
+
+
 def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: List[int]) -> ase.Atoms:
     """
     Remove all hydrogens from the atoms object
@@ -169,3 +180,15 @@ class RadialDistanceTransformBlock(RadialEmbeddingBlock):
             torch.nn.functional.relu(edge_lengths - self.r_min) + self.r_min
         )
         return super().forward(transformed_edges)
+
+
+def get_model_dtype(model: torch.nn.Module) -> torch.dtype:
+    dtypes = set()
+    for p in model.parameters():
+        dtypes.add(p.dtype)
+    if torch.float32 in dtypes:
+        return torch.float32
+    elif torch.float64 in dtypes:
+        return torch.float64
+    else:
+        raise ValueError("Model neither float32 or float64")
