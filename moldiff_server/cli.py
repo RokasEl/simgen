@@ -1,12 +1,12 @@
+import logging
 from enum import Enum
 
-import ray
 import typer
-from ray import serve
+from zndraw.utils import get_port
 
-from .ray_app import GenerationServer
+from moldiff_server.main import app
 
-app = typer.Typer()
+cli = typer.Typer()
 
 
 class Device(str, Enum):
@@ -14,15 +14,15 @@ class Device(str, Enum):
     cuda = "cuda"
 
 
-@app.command()
-def launch_server(
+@cli.command()
+def launch(
     path: str = typer.Argument(..., help="Path to clone of MACE-models repo"),
     device: Device = typer.Option(Device.cpu),
+    port: int = 5000,
 ):
-    ray.init(
-        address="auto",
-        namespace="serve-example",
-        ignore_reinit_error=True,
-    )
-    serve.start(detached=True)
-    GenerationServer.deploy(path, device)
+    print(app)
+    app.config["device"] = device.value
+    app.config["mace_models_path"] = path
+    url = f"http://127.0.0.1:{port}"
+    logging.info(f"Starting generation server at {url}")
+    app.run(port=port, host="0.0.0.0")

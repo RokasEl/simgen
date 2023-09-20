@@ -21,3 +21,15 @@ def get_edge_array(atoms: ase.Atoms) -> np.ndarray:
         return edge_array
     except Exception:
         raise Exception
+
+
+def make_mace_config_jsonifiable(mace_config: dict) -> dict:
+    jsonifiable_mace = mace_config.copy()
+    for key, value in jsonifiable_mace.items():
+        if isinstance(value, np.ndarray):
+            jsonifiable_mace[key] = value.tolist()
+        elif isinstance(value, (int, float)):
+            pass
+        else:
+            jsonifiable_mace[key] = str(value)
+    return jsonifiable_mace

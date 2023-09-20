@@ -28,4 +28,4 @@ server = ["ray[serve]>=2.6.3"]
 
 [project.scripts]
 moldiff = "moldiff_zndraw.cli:app"
-moldiff_server = "moldiff_server.cli:app"
+moldiff_server = "moldiff_server.cli:cli"
