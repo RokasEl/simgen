@@ -56,7 +56,10 @@ def run():
     endpoint_name = formatted_request.run_type
     endpoint = getattr(endpoints, endpoint_name)
     moldiff_calc, hydromace_calc = get_models()
-    return endpoint(formatted_request, moldiff_calc, hydromace_calc)
+    logging.info(f"Received request: {formatted_request.run_type}.\nRunning...")
+    results = endpoint(formatted_request, moldiff_calc, hydromace_calc)
+    logging.info("Completed. Sending back the response.")
+    return results
 
 
 @app.route("/config", methods=["GET"])

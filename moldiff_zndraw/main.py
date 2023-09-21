@@ -165,11 +165,12 @@ class DiffusionModelling(UpdateScene):
         return schema
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+        logging.info("Sending request to inference server.")
         modified_atoms = self.run_type.run(
             atom_ids=atom_ids,
             atoms=atoms,
             client_address=self.client_address,
             **kwargs,
         )
-        print(modified_atoms)
+        logging.info(f"Received back {len(modified_atoms)} atoms.")
         return modified_atoms
