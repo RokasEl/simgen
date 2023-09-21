@@ -66,7 +66,6 @@ class HeunIntegrator:
         # Euler step.
         mol_increased.positions.grad = None
         forces = self.similarity_calculator(mol_increased, sigma_increased)
-        forces = torch.tensor(forces, device=self.device)
         restorative_forces = self.prior_manifold.calculate_resorative_forces(
             mol_increased.positions
         )
@@ -85,9 +84,9 @@ class HeunIntegrator:
         if sigma_next != 0:
             mol_next.positions.grad = None
 
-            forces_next = self.similarity_calculator(mol_next, sigma_next)
-            forces_next = torch.tensor(forces_next, device=self.device) * mask[:, None]
-
+            forces_next = (
+                self.similarity_calculator(mol_next, sigma_next) * mask[:, None]
+            )
             mol_next = mol_increased.clone()
             with torch.no_grad():
                 mol_next.positions += -1 * (

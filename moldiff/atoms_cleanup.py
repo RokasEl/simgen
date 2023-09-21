@@ -172,7 +172,7 @@ def cleanup_atoms(
     z_table: AtomicNumberTable,
     num_element_sweeps: int | Literal["all"] = "all",
     mask=None,
-) -> ase.Atoms:
+) -> list[ase.Atoms]:
     """
     Wrapper function to allow easy extension with other cleanup functions if needed.
     """

@@ -152,7 +152,7 @@ class MaceSimilarityCalculator(Calculator):
         molecule_energies = scatter_sum(node_energies, batched.batch, dim=0)
         node_energies = node_energies.detach().cpu().numpy()
         molecule_energies = molecule_energies.detach().cpu().numpy()
-        force = self._get_gradient(batched.positions, log_k)
+        force = self._get_gradient(batched.positions, log_k).detach().cpu().numpy()
         force = self._handle_grad_nans(force)
         return node_energies, force, molecule_energies
 
@@ -178,13 +178,19 @@ class MaceSimilarityCalculator(Calculator):
             only_inputs=True,
             retain_graph=True,
         )[0]
-        return grad.detach().cpu().numpy()
+        return grad
 
     @staticmethod
-    def _clip_grad_norm(grad, max_norm=1):
-        norm = np.linalg.norm(grad, axis=1)
-        mask = norm > max_norm
-        grad[mask] = grad[mask] / norm[mask, None] * max_norm
+    def _clip_grad_norm(
+        grad: np.ndarray | torch.Tensor, max_norm: float = 1
+    ) -> np.ndarray | torch.Tensor:
+        if isinstance(grad, np.ndarray):
+            norm = np.linalg.norm(grad, axis=1)
+        elif isinstance(grad, torch.Tensor):
+            norm = torch.norm(grad, dim=1)
+        norm[norm < max_norm] = max_norm
+        mult = max_norm / norm
+        grad = grad * mult[:, None]
         return grad
 
     @staticmethod
