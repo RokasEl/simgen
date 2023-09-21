@@ -12,12 +12,23 @@ from moldiff.utils import (
 
 from . import endpoints
 from .data import parse_request
-from .utils import make_mace_config_jsonifiable
+from .utils import (
+    get_zndraw_logging_handler,
+    make_mace_config_jsonifiable,
+)
 
 app = Flask(__name__)
 setup_logger()
 
 models = {}
+
+
+def _attach_zndraw_handler(url: str | None):
+    handler = get_zndraw_logging_handler(url)
+    logging.info(f"handler: {handler}")
+    if handler is not None:
+        log = logging.getLogger(__name__)
+        log.addHandler(handler)
 
 
 def _moldiff_factory():

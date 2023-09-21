@@ -21,6 +21,8 @@ class RequestAtoms:
     restorative_force_multiplier: float = 1
     # hydrogenate and relax params
     max_steps: int = 50
+    # experimental
+    url: str | None = None
 
 
 class RequestStructure(BaseModel):
@@ -45,6 +47,7 @@ def format_common_data(request: RequestStructure):
         atoms=atoms,
         points=points,
         segments=segments,
+        url=data["url"],
         **specific_params,
     )
     return formated_data

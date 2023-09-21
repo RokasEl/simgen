@@ -117,11 +117,12 @@ def initialize_mol(molecule_str="C6H6"):
 
 # Taken from MACE
 def setup_logger(
+    name: str | None = None,
     level: Union[int, str] = logging.INFO,
     tag: Optional[str] = None,
     directory: Optional[str] = None,
 ):
-    logger = logging.getLogger()
+    logger = logging.getLogger(name)
     logger.setLevel(level)
 
     formatter = logging.Formatter(

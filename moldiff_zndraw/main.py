@@ -22,6 +22,7 @@ def _format_data_from_zndraw(atom_ids, **kwargs) -> dict:
         "atoms": kwargs["json_data"],
         "points": formatted_points,
         "segments": kwargs["segments"].tolist(),
+        "url": kwargs["url"],
     }
     return data
 
@@ -32,9 +33,9 @@ def _post_request(address: str, data: dict, name: str):
         response = requests.post(str(address), data=json.dumps(data))
         logging.info(f"Received {name} response with code {response}")
         return response
-    except Exception:
-        logging.error(f"Failed to get response with error: {Exception}")
-        raise Exception
+    except Exception as e:
+        logging.error(f"Failed to get response with error: {e}")
+        raise e
 
 
 class UpdateScene(BaseModel, abc.ABC):

@@ -33,3 +33,19 @@ def make_mace_config_jsonifiable(mace_config: dict) -> dict:
         else:
             jsonifiable_mace[key] = str(value)
     return jsonifiable_mace
+
+
+def get_zndraw_logging_handler(url: str | None) -> None | logging.Handler:
+    logging.info(f"url: {url}")
+    if url is None:
+        return None
+    try:
+        import zndraw
+
+        vis = zndraw.ZnDraw(url)
+        return vis.get_logging_handler()
+    except ModuleNotFoundError:
+        logging.warning(
+            "Could not find a ZnDraw installation. Continuing without connecting to ZnDraw logs"
+        )
+        return None
