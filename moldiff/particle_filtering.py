@@ -90,7 +90,11 @@ class ParticleFilterGenerator:
         # initialise mol
         molecule = self.guiding_manifold.initialise_positions(molecule, scale=0.5)
         molecule, mask, torch_mask = self._merge_scaffold_and_create_mask(
-            molecule, scaffold, num_particles, self.device
+            molecule,
+            scaffold,
+            num_particles,
+            self.device,
+            self.similarity_calculator.dtype,
         )
         trajectories = [molecule]
 
@@ -145,7 +149,6 @@ class ParticleFilterGenerator:
                     mask=mask,
                 )
                 batched = self.batch_atoms(atoms)
-
             batched = self.integrator(batched, step, sigma_cur, sigma_next, torch_mask)
             atoms = get_atoms_from_batch(batched, self.z_table)
             intermediate_configs.extend(atoms)
@@ -194,16 +197,21 @@ class ParticleFilterGenerator:
         scaffold: ase.Atoms | None,
         num_particles: int,
         device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
     ) -> Tuple[ase.Atoms, np.ndarray, torch.Tensor]:
         if scaffold is None:
             return (
                 molecule,
                 np.ones(len(molecule)),
-                torch.ones(len(molecule), device=device).repeat(num_particles),
+                torch.ones(len(molecule), device=device, dtype=dtype).repeat(
+                    num_particles
+                ),
             )
         merged = molecule.copy() + scaffold.copy()
         mask = np.concatenate([np.ones(len(molecule)), np.zeros(len(scaffold))], axis=0)
         if device == "mps":
             mask = mask.astype(np.float32)
-        torch_mask = torch.tensor(mask, device=device).repeat(num_particles)
+        torch_mask = torch.tensor(mask, device=device, dtype=dtype).repeat(
+            num_particles
+        )
         return merged, mask, torch_mask

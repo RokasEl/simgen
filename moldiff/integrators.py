@@ -44,9 +44,11 @@ class HeunIntegrator:
         This does NOT update the neighbout list. DANGER!
         """
         S_churn, S_min, S_max, S_noise, min_noise = self._get_integrator_parameters()
-        mol_cur = x.clone()
+        mol_cur = x
         if mask is None:
-            mask = torch.ones(len(x), device=self.device)
+            mask = torch.ones(
+                len(mol_cur), device=self.device, dtype=mol_cur.positions.dtype
+            )
 
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
         gamma = S_churn if S_min <= sigma_cur <= S_max else 1
@@ -61,7 +63,7 @@ class HeunIntegrator:
             mol_cur.positions += (
                 torch.randn_like(mol_cur.positions) * noise_level * mask[:, None]
             )
-
+        noised_positions = mol_cur.positions.clone().detach()
         mol_increased = mol_cur
         # Euler step.
         mol_increased.positions.grad = None
@@ -75,11 +77,10 @@ class HeunIntegrator:
             * torch.tanh(20 * sigma_cur**2)
         )
         forces *= mask[:, None]
-        mol_next = mol_cur.clone()
+        mol_next = mol_cur
         logging.debug(f"Step size = {abs(sigma_next - sigma_increased):.2e}")
         with torch.no_grad():
             mol_next.positions += -1 * (sigma_next - sigma_increased) * forces
-
         # Apply 2nd order correction.
         if sigma_next != 0:
             mol_next.positions.grad = None
@@ -87,9 +88,8 @@ class HeunIntegrator:
             forces_next = (
                 self.similarity_calculator(mol_next, sigma_next) * mask[:, None]
             )
-            mol_next = mol_increased.clone()
             with torch.no_grad():
-                mol_next.positions += -1 * (
+                mol_next.positions = noised_positions - 1 * (
                     (sigma_next - sigma_increased) * (forces + forces_next) / 2
                 )
         return mol_next
