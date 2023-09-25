@@ -206,7 +206,7 @@ def get_loaded_mace_model(model_repo_path: str, device: str = "cuda") -> nn.Modu
 
 def get_reference_data(
     model_repo_path: str,
-    rng: np.random.Generator,
+    rng: np.random.Generator | None = None,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
     remove_halogenides: bool = True,
@@ -234,6 +234,8 @@ def get_reference_data(
         already_sampled = 0
 
     # now add further random molecules
+    if rng is None:
+        rng = np.random.default_rng(0)
     too_add = num_reference_mols - already_sampled
     if too_add <= 0:
         logging.info("After sampling uniformly, got more molecules than requested.")
