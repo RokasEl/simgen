@@ -41,6 +41,7 @@ class ParticleFilterGenerator:
         device=get_system_torch_device_str(),
         restorative_force_strength: float = 1.5,
         integration_parameters=IntegrationParameters(),
+        num_steps: int = 100,
     ):
         self.similarity_calculator = similarity_calculator
         self.dtype = self.similarity_calculator.dtype
@@ -52,8 +53,8 @@ class ParticleFilterGenerator:
         self.sigmas = (
             torch.concatenate(
                 [
-                    torch.linspace(1, 0.05, 50),
-                    torch.logspace(-1.31, -3, 50),
+                    torch.linspace(1, 0.05, num_steps // 2),
+                    torch.logspace(-1.31, -3, num_steps // 2),
                 ]
             )
             .to(device)

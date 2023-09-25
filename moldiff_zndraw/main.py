@@ -46,6 +46,9 @@ class UpdateScene(BaseModel, abc.ABC):
 
 class Generate(BaseModel):
     method: t.Literal["Generate"] = Field("Generate")
+    num_steps: int = Field(
+        50, le=100, ge=20, description="Number of steps in the generation."
+    )
     num_atoms_to_add: int = Field(
         5, ge=1, le=30, description="Number of atoms to generate"
     )
@@ -73,6 +76,7 @@ class Generate(BaseModel):
             "run_specific_params": {
                 "num_atoms_to_add": int(num_atoms_to_add),
                 "restorative_force_multiplier": float(self.guiding_force_multiplier),
+                "max_steps": int(self.num_steps),
             },
             "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
         }

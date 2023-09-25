@@ -40,6 +40,7 @@ def generate(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *arg
         integration_parameters=DEFAULT_INTEGRATION_PARAMS,
         device=moldiff_calc.device,
         restorative_force_strength=restorative_force,
+        num_steps=request.max_steps,
     )
     mol = ase.Atoms(f"C{request.num_atoms_to_add}")
     trajectory = generator.generate(
