@@ -27,23 +27,17 @@ def main(
     save_path: str = "./results/",
     trajectory_index: int = -1,
     do_calculator_analysis=False,
-    model_path: str | None = None,
-    reference_data_path: str | None = None,
+    mace_models_path: str | None = None,
     remove_halogenides: bool = False,
-    num_reference_mols: int = 32,
+    num_reference_mols: int = -1,
     num_to_sample_uniformly_per_size: int = 0,
 ):
     atoms_iterator = get_atoms_iterator(atoms_path, trajectory_index=trajectory_index)
 
     if do_calculator_analysis:
-        if model_path is None or reference_data_path is None:
-            raise ValueError(
-                "model_path and reference_data_path must be specified for calculator analysis"
-            )
         rng = np.random.default_rng(0)
         calc = get_mace_similarity_calculator(
-            model_path=model_path,
-            reference_data_path=reference_data_path,
+            model_repo_path=mace_models_path,
             remove_halogenides=remove_halogenides,
             num_reference_mols=num_reference_mols,
             num_to_sample_uniformly_per_size=num_to_sample_uniformly_per_size,

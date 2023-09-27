@@ -26,7 +26,7 @@ def get_composition_generator(
         yield rng.choice(compositions, p=probs)
 
 
-def main(qm9_path: str | None = None):
+def main(save_path: str, qm9_path: str | None = None):
     rng = np.random.default_rng(0)
     if qm9_path is not None:
         composition_counter = get_composition_counter(qm9_path)
@@ -39,7 +39,7 @@ def main(qm9_path: str | None = None):
         atoms = build_mol(composition, prior=prior)
         relaxed_atoms = do_mopac_relaxation(atoms)
         aio.write(
-            f"airss_initially_squashed.xyz",
+            save_path,
             relaxed_atoms,
             append=True,
             format="extxyz",
@@ -50,6 +50,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--save_path", type=str, default="./airss_generations.xyz")
     parser.add_argument("--qm9_path", type=str, default=None)
     args = parser.parse_args()
-    main(args.qm9_path)
+    main(args.save_path, args.qm9_path)
