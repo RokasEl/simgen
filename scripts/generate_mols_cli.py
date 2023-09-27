@@ -1,8 +1,9 @@
 import logging
-import os
+from pathlib import Path
 
 import ase.io as ase_io
 import numpy as np
+import typer
 
 from moldiff.element_swapping import SwappingAtomicNumberTable
 from moldiff.generation_utils import (
@@ -22,13 +23,32 @@ from moldiff.utils import (
 DEVICE = get_system_torch_device_str()
 
 
+app = typer.Typer()
+
+
+@app.command()
 def main(
-    model_repo_path,
-    save_path,
-    prior_gaussian_covariance,
-    num_molecules,
-    num_heavy_atoms,
-    num_integration_steps,
+    model_repo_path: str = typer.Option(..., help="Path to MACE model repository"),
+    save_path: str = typer.Option(
+        ..., help="Path to save generated molecules, can be file or directory"
+    ),
+    prior_gaussian_covariance: list[float] = typer.Option(
+        default=[1.0, 1.0, 2.0],
+        help="Covariance matrix for prior Gaussian distribution",
+    ),
+    num_molecules: int = typer.Option(
+        default=100, help="Number of molecules to generate"
+    ),
+    num_heavy_atoms: int = typer.Option(
+        default=4, help="Number of heavy atoms in generated molecules"
+    ),
+    num_integration_steps: int = typer.Option(
+        default=50, help="Number of integration steps for particle filter"
+    ),
+    track_trajectories: bool = typer.Option(
+        default=False,
+        help="If true, save all trajectory configurations instead of just the last",
+    ),
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
     rng = np.random.default_rng(0)
@@ -42,8 +62,13 @@ def main(
         model_repo_path=model_repo_path, device=DEVICE
     )
     integration_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
-    destination = save_path
-    os.makedirs(destination, exist_ok=True)
+
+    save_path = Path(save_path)
+    if save_path.is_dir():
+        save_path.mkdir(parents=True, exist_ok=True)
+
+    prior_gaussian_covariance = np.diag(prior_gaussian_covariance).astype(float)
+
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
@@ -65,58 +90,19 @@ def main(
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
         )
+
+        if save_path.is_dir():
+            outfile = save_path / f"{i}_{size}.xyz"
+        else:
+            outfile = save_path
+        to_write = trajectories[-1] if not track_trajectories else trajectories
         ase_io.write(
-            f"{destination}/qm9_like_{i}_{size}.xyz",
-            trajectories,
+            outfile,
+            to_write,
             format="extxyz",
             append=True,
         )
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_repo_path",
-        help="Path to MACE model repository",
-        type=str,
-    )
-    parser.add_argument(
-        "--save_path",
-        help="Path to save generated molecules",
-        type=str,
-        default="./scripts/Generated_trajectories/",
-    )
-    parser.add_argument(
-        "--prior_gaussian_covariance",
-        help="Covariance matrix for prior Gaussian",
-        type=float,
-        nargs="+",
-        default=[1.0, 1.0, 2.0],
-    )
-    parser.add_argument(
-        "--num_molecules", help="Number of molecules to generate", type=int, default=100
-    )
-    parser.add_argument(
-        "--num_heavy_atoms",
-        help="Number of heavy atoms in generated molecules",
-        type=int,
-        default=4,
-    )
-    parser.add_argument(
-        "--num_integration_steps",
-        help="Number of integration steps for particle filter",
-        type=int,
-        default=50,
-    )
-    args = parser.parse_args()
-    covariance_matrix = np.diag(args.prior_gaussian_covariance)
-    main(
-        args.model_repo_path,
-        args.save_path,
-        covariance_matrix,
-        args.num_molecules,
-        args.num_heavy_atoms,
-        args.num_integration_steps,
-    )
+    app()

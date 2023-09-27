@@ -36,14 +36,14 @@ def main(
         composition_generator = get_composition_generator(composition_counter, rng)
     else:
         composition_generator = get_composition_generator(None, rng)
-    prior = MultivariateGaussianPrior(np.diag([1, 1, 0.5]).astype(np.float32))
+    prior = MultivariateGaussianPrior(np.diag([1.0, 1.0, 2.0]).astype(np.float32))
     for _ in range(1000):
         composition = next(composition_generator)
         atoms = build_mol(composition, prior=prior)
-        relaxed_atoms = do_hot_airss_relaxation(atoms)[-1]
+        trajectory, energies = do_hot_airss_relaxation(atoms)
         aio.write(
             save_path,
-            relaxed_atoms,
+            trajectory[-1],
             append=True,
             format="extxyz",
         )

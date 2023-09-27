@@ -95,7 +95,7 @@ def get_composition(sybmol_list):
 
 
 def get_composition_counter(qm9_path):
-    all_atoms = aio.read(qm9_path, index=":")
+    all_atoms = aio.read(qm9_path, index=":", format="extxyz")
     compositions = [
         get_composition(atoms.get_chemical_symbols()) for atoms in all_atoms  # type: ignore
     ]
