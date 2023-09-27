@@ -1,14 +1,18 @@
+import logging
 import os
 
+import ase.io as ase_io
 import numpy as np
-import torch
 
+from moldiff.element_swapping import SwappingAtomicNumberTable
+from moldiff.generation_utils import (
+    calculate_restorative_force_strength,
+)
+from moldiff.integrators import IntegrationParameters
+from moldiff.manifolds import MultivariateGaussianPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
-
-torch.set_default_dtype(torch.float64)
-from ase import Atoms
-
 from moldiff.utils import (
+    get_hydromace_calculator,
     get_mace_similarity_calculator,
     get_system_torch_device_str,
     initialize_mol,
@@ -17,38 +21,25 @@ from moldiff.utils import (
 
 DEVICE = get_system_torch_device_str()
 
-import logging
-
-import ase.io as ase_io
-
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import (
-    calculate_restorative_force_strength,
-)
-from moldiff.integrators import IntegrationParameters
-from moldiff.manifolds import MultivariateGaussianPrior
-
 
 def main(
-    mace_model_path,
-    reference_data_path,
-    num_reference_mols,
+    model_repo_path,
     save_path,
     prior_gaussian_covariance,
     num_molecules,
     num_heavy_atoms,
+    num_integration_steps,
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
-    pretrained_mace_path = mace_model_path
     rng = np.random.default_rng(0)
-    data_path = reference_data_path
     score_model = get_mace_similarity_calculator(
-        pretrained_mace_path,
-        data_path,
-        num_reference_mols=num_reference_mols,
-        num_to_sample_uniformly_per_size=2,
+        model_repo_path,
+        num_reference_mols=-1,
         device=DEVICE,
         rng=rng,
+    )
+    hydromace_calc = get_hydromace_calculator(
+        model_repo_path=model_repo_path, device=DEVICE
     )
     integration_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
     destination = save_path
@@ -59,20 +50,20 @@ def main(
         size = num_heavy_atoms
         mol = initialize_mol(f"C{size}")
         restorative_force_strength = calculate_restorative_force_strength(size)
-        logging.debug(
-            f"Mol size {size}, restorative force strength {restorative_force_strength:.2f}"
-        )
         particle_filter = ParticleFilterGenerator(
             score_model,
             guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance),
             integration_parameters=integration_params,
             restorative_force_strength=restorative_force_strength,
+            num_steps=num_integration_steps,
         )
         trajectories = particle_filter.generate(
             mol,
             swapping_z_table,
             num_particles=10,
-            particle_swap_frequency=3,
+            particle_swap_frequency=2,
+            hydrogenation_type="hydromace",
+            hydrogenation_calc=hydromace_calc,
         )
         ase_io.write(
             f"{destination}/qm9_like_{i}_{size}.xyz",
@@ -87,22 +78,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--mace_model_path",
-        help="Path to MACE model",
+        "--model_repo_path",
+        help="Path to MACE model repository",
         type=str,
-        default="./models/SPICE_sm_inv_neut_E0_swa.model",
-    )
-    parser.add_argument(
-        "--reference_data_path",
-        help="Path to reference data",
-        type=str,
-        default="../data/qm9_full_data.xyz",
-    )
-    parser.add_argument(
-        "--num_reference_mols",
-        help="Number of reference molecules to use",
-        type=int,
-        default=256,
     )
     parser.add_argument(
         "--save_path",
@@ -126,14 +104,19 @@ if __name__ == "__main__":
         type=int,
         default=4,
     )
+    parser.add_argument(
+        "--num_integration_steps",
+        help="Number of integration steps for particle filter",
+        type=int,
+        default=50,
+    )
     args = parser.parse_args()
     covariance_matrix = np.diag(args.prior_gaussian_covariance)
     main(
-        args.mace_model_path,
-        args.reference_data_path,
-        args.num_reference_mols,
+        args.model_repo_path,
         args.save_path,
         covariance_matrix,
         args.num_molecules,
         args.num_heavy_atoms,
+        args.num_integration_steps,
     )
