@@ -1,17 +1,14 @@
 import pathlib
-import time
 
 import typer
 from zndraw.settings import GlobalConfig
-
-from moldiff_zndraw.host_model import launch_local_cluster
 
 app = typer.Typer()
 
 
 @app.command()
 def init(path: str = typer.Argument(..., help="Path to clone of MACE-models repo")):
-    print(f"Initializing moldiff_zndraw with the model path at {path}")
+    print(f"Initializing moldiff ZnDraw integration with the model path at {path}")
 
     config_path = "~/.zincware/zndraw/config.json"
     config_path = pathlib.Path(config_path).expanduser()

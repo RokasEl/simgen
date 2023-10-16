@@ -188,7 +188,7 @@ class DiffusionModelling(UpdateScene):
         "/home/rokas/Programming/MACE-Models",
         description="Path to the repo holding the required models",
     )
-    client_address: str = Field("http://127.0.0.1:8000")
+    client_address: str = Field("http://127.0.0.1:5000/run")
 
     @classmethod
     def model_json_schema(cls, *args, **kwargs) -> dict[str, t.Any]:
