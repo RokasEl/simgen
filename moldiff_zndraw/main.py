@@ -9,7 +9,11 @@ import requests
 from pydantic import BaseModel, Field
 from zndraw.data import atoms_from_json
 
-from .utils import calculate_path_length, setup_logger
+from .utils import (
+    calculate_path_length,
+    remove_isolated_atoms_using_covalent_radii,
+    setup_logger,
+)
 
 setup_logger()
 
@@ -22,7 +26,6 @@ def _format_data_from_zndraw(atom_ids, **kwargs) -> dict:
         "atoms": kwargs["json_data"],
         "points": formatted_points,
         "segments": kwargs["segments"].tolist(),
-        "url": kwargs["url"],
     }
     return data
 
@@ -176,6 +179,9 @@ class DiffusionModelling(UpdateScene):
             atoms=atoms,
             client_address=self.client_address,
             **kwargs,
+        )
+        modified_atoms[-1] = remove_isolated_atoms_using_covalent_radii(
+            modified_atoms[-1]
         )
         logging.info(f"Received back {len(modified_atoms)} atoms.")
         return modified_atoms

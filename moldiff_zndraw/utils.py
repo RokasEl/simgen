@@ -3,7 +3,9 @@ import os
 import sys
 from typing import Optional, Union
 
+import ase
 import numpy as np
+from ase.neighborlist import natural_cutoffs, neighbor_list
 
 """
 These functions are the same as in the main repo.
@@ -44,3 +46,17 @@ def setup_logger(
         fh.setFormatter(formatter)
 
         logger.addHandler(fh)
+
+
+def remove_isolated_atoms_using_covalent_radii(
+    atoms: ase.Atoms, multiplier: float = 1.2
+) -> ase.Atoms:
+    """
+    Remove unconnected atoms from the final atoms object.
+    """
+    cutoffs = natural_cutoffs(atoms, mult=multiplier)  # type: ignore
+    indices_of_connected_atoms = neighbor_list("i", atoms, cutoffs)
+    unique_indices = np.unique(indices_of_connected_atoms)
+    stripped_atoms = atoms.copy()
+    stripped_atoms = stripped_atoms[unique_indices]
+    return stripped_atoms  # type: ignore

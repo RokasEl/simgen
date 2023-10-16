@@ -47,7 +47,6 @@ def format_common_data(request: RequestStructure):
         atoms=atoms,
         points=points,
         segments=segments,
-        url=data["url"],
         **specific_params,
     )
     return formated_data
