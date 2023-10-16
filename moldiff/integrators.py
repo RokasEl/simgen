@@ -47,9 +47,10 @@ class HeunIntegrator:
         mol_cur = x
         if mask is None:
             mask = torch.ones(
-                len(mol_cur), device=self.device, dtype=mol_cur.positions.dtype
+                mol_cur.positions.shape[0],
+                device=self.device,
+                dtype=mol_cur.positions.dtype,
             )
-
         # If current sigma is between S_min and S_max, then we first temporarily increase the current noise leve.
         gamma = S_churn if S_min <= sigma_cur <= S_max else 1
         # Added noise depends on the current noise level. So, it decreases over the course of the integration.
