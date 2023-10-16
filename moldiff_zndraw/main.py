@@ -11,6 +11,7 @@ from zndraw.data import atoms_from_json
 
 from .utils import (
     calculate_path_length,
+    interpolate_points,
     remove_isolated_atoms_using_covalent_radii,
     setup_logger,
 )
@@ -70,6 +71,9 @@ class Generate(BaseModel):
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
         points = self._handle_points(kwargs["points"], kwargs["segments"])
+        points = self._remove_collisions_between_prior_and_atoms(
+            points, atoms.get_positions()
+        )
         kwargs["points"] = points
         num_atoms_to_add = self._get_num_atoms_to_add(
             points, self.atoms_per_angstrom, self.num_atoms_to_add
@@ -96,7 +100,29 @@ class Generate(BaseModel):
         elif points.shape[0] == 1:
             return points
         else:
+            """ZnDraw interpolates between each user placed point.
+            However, this means that the points are not spread evenly along the curve.
+            We will then do an interpolation between each point to get a more even spread.
+            """
+            segments = interpolate_points(segments, 100)
             return segments
+
+    @staticmethod
+    def _remove_collisions_between_prior_and_atoms(
+        points: np.ndarray, atoms_positions: np.ndarray, cutoff=0.8
+    ):
+        if points is None or points.shape[0] == 0:
+            return points
+        else:
+            distances = (
+                points[:, None, :] - atoms_positions[None, :, :]
+            )  # (points, atoms, 3)
+            distances = np.linalg.norm(distances, axis=-1)  # (points, atoms)
+            stripped_points = points[np.min(distances, axis=1) > cutoff]
+            assert (
+                stripped_points.shape[0] > 0
+            ), "No points left after removing collisions"
+            return stripped_points
 
     @staticmethod
     def _get_num_atoms_to_add(

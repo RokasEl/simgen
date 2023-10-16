@@ -6,6 +6,7 @@ from typing import Optional, Union
 import ase
 import numpy as np
 from ase.neighborlist import natural_cutoffs, neighbor_list
+from scipy.interpolate import splev, splprep
 
 """
 These functions are the same as in the main repo.
@@ -18,6 +19,14 @@ def calculate_path_length(points):
     for p1, p2 in zip(points[:-1], points[1:]):
         path_length += np.linalg.norm(p1 - p2)
     return path_length
+
+
+def interpolate_points(points, num_interpolated_points=100):
+    k = min(3, len(points) - 1)
+    tck, u = splprep(points.T, s=0, k=k)
+    u = np.linspace(0, 1, num_interpolated_points)
+    new_points = np.array(splev(u, tck)).T
+    return new_points
 
 
 # Taken from MACE
