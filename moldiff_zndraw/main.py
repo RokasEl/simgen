@@ -6,8 +6,9 @@ import typing as t
 import ase
 import numpy as np
 import requests
-from pydantic import BaseModel, Field
+from pydantic import Field
 from zndraw.data import atoms_from_json
+from zndraw.modify import UpdateScene
 
 from .utils import (
     calculate_path_length,
@@ -42,13 +43,7 @@ def _post_request(address: str, data: dict, name: str):
         raise e
 
 
-class UpdateScene(BaseModel, abc.ABC):
-    @abc.abstractmethod
-    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        pass
-
-
-class Generate(BaseModel):
+class Generate(UpdateScene):
     method: t.Literal["Generate"] = Field("Generate")
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
@@ -142,7 +137,7 @@ class Generate(BaseModel):
             return num_static
 
 
-class Relax(BaseModel):
+class Relax(UpdateScene):
     method: t.Literal["Relax"] = Field("Relax")
     max_steps: int = Field(100, ge=1)
 
@@ -160,7 +155,7 @@ class Relax(BaseModel):
         return [atoms_from_json(x) for x in response.json()["atoms"]]
 
 
-class Hydrogenate(BaseModel):
+class Hydrogenate(UpdateScene):
     method: t.Literal["Hydrogenate"] = Field("Hydrogenate")
     max_steps: int = Field(100, ge=1)
 
