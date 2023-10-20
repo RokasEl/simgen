@@ -66,9 +66,10 @@ class Generate(UpdateScene):
 
     def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
         points = self._handle_points(kwargs["points"], kwargs["segments"])
-        points = self._remove_collisions_between_prior_and_atoms(
-            points, atoms.get_positions()
-        )
+        if len(atoms):
+            points = self._remove_collisions_between_prior_and_atoms(
+                points, atoms.get_positions()
+            )
         kwargs["points"] = points
         num_atoms_to_add = self._get_num_atoms_to_add(
             points, self.atoms_per_angstrom, self.num_atoms_to_add
