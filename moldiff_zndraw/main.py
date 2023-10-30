@@ -7,7 +7,8 @@ import ase
 import numpy as np
 import requests
 from pydantic import Field
-from zndraw.data import atoms_from_json
+from zndraw.data import atoms_from_json, atoms_to_json
+from zndraw import ZnDraw
 from zndraw.modify import UpdateScene
 
 from .utils import (
@@ -20,14 +21,14 @@ from .utils import (
 setup_logger()
 
 
-def _format_data_from_zndraw(atom_ids, **kwargs) -> dict:
-    points = kwargs["points"]
+def _format_data_from_zndraw(vis: ZnDraw, **kwargs) -> dict:
+    points = kwargs.get("points", vis.points)
     formatted_points = points if points is None else points.tolist()
     data = {
-        "atom_ids": atom_ids,
-        "atoms": kwargs["json_data"],
+        "atom_ids": vis.selection,
+        "atoms": atoms_to_json(vis.atoms),
         "points": formatted_points,
-        "segments": kwargs["segments"].tolist(),
+        "segments": vis.segments.tolist(),
     }
     return data
 
@@ -44,7 +45,7 @@ def _post_request(address: str, data: dict, name: str):
 
 
 class Generate(UpdateScene):
-    method: t.Literal["Generate"] = Field("Generate")
+    discriminator: t.Literal["Generate"] = Field("Generate")
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
     )
@@ -64,13 +65,13 @@ class Generate(UpdateScene):
         description="Multiplier for guiding force. Default value should be enough for simple geometries.",
     )
 
-    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        points = self._handle_points(kwargs["points"], kwargs["segments"])
-        if len(atoms):
+    def run(self, vis: ZnDraw, client_address) -> list[ase.Atoms]:
+        vis.log("Running Generation")
+        points = self._handle_points(vis.points, vis.segments)
+        if len(vis.atoms):
             points = self._remove_collisions_between_prior_and_atoms(
-                points, atoms.get_positions()
+                points, vis.atoms.get_positions()
             )
-        kwargs["points"] = points
         num_atoms_to_add = self._get_num_atoms_to_add(
             points, self.atoms_per_angstrom, self.num_atoms_to_add
         )
@@ -81,12 +82,15 @@ class Generate(UpdateScene):
                 "restorative_force_multiplier": float(self.guiding_force_multiplier),
                 "max_steps": int(self.num_steps),
             },
-            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+            "common_data": _format_data_from_zndraw(vis, points=points),
         }
-        response = _post_request(
-            kwargs["client_address"], data=request, name="generation"
-        )
-        return [atoms_from_json(x) for x in response.json()["atoms"]]
+        response = _post_request(client_address, data=request, name="generation")
+        modified_atoms = [
+            atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
+        ]
+        vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.extend(modified_atoms)
+        vis.play()
 
     @staticmethod
     def _handle_points(points, segments) -> np.ndarray:
@@ -139,71 +143,69 @@ class Generate(UpdateScene):
 
 
 class Relax(UpdateScene):
-    method: t.Literal["Relax"] = Field("Relax")
+    discriminator: t.Literal["Relax"] = Field("Relax")
     max_steps: int = Field(100, ge=1)
 
-    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+    def run(self, vis: ZnDraw, client_address) -> list[ase.Atoms]:
+        vis.log("Running Relax")
         request = {
             "run_type": "relax",
             "run_specific_params": {
                 "max_steps": int(self.max_steps),
             },
-            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+            "common_data": _format_data_from_zndraw(vis),
         }
-        response = _post_request(
-            kwargs["client_address"], data=request, name="relaxation"
-        )
-        return [atoms_from_json(x) for x in response.json()["atoms"]]
+        response = _post_request(client_address, data=request, name="hydrogenation")
+        modified_atoms = [
+            atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
+        ]
+        vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.extend(modified_atoms)
+        vis.play()
 
 
 class Hydrogenate(UpdateScene):
-    method: t.Literal["Hydrogenate"] = Field("Hydrogenate")
+    discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
     max_steps: int = Field(100, ge=1)
 
-    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
+    def run(self, vis: ZnDraw, client_address) -> list[ase.Atoms]:
+        vis.log("Running Hydrogenate")
         request = {
             "run_type": "hydrogenate",
             "run_specific_params": {
                 "max_steps": int(self.max_steps),
             },
-            "common_data": _format_data_from_zndraw(atom_ids, **kwargs),
+            "common_data": _format_data_from_zndraw(vis),
         }
-        response = _post_request(
-            kwargs["client_address"], data=request, name="hydrogenation"
-        )
-        return [atoms_from_json(x) for x in response.json()["atoms"]]
+        response = _post_request(client_address, data=request, name="hydrogenation")
+
+        modified_atoms = [
+            atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
+        ]
+        vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.extend(modified_atoms)
+        vis.play()
 
 
 run_types = t.Union[Generate, Relax, Hydrogenate]
 
 
 class DiffusionModelling(UpdateScene):
-    method: t.Literal["DiffusionModelling"] = "DiffusionModelling"
-    run_type: run_types = Field(discriminator="method")
+    discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
+    run_type: run_types = Field(discriminator="discriminator")
     path: str = Field(
         "/home/rokas/Programming/MACE-Models",
         description="Path to the repo holding the required models",
     )
     client_address: str = Field("http://127.0.0.1:5000/run")
 
-    @classmethod
-    def model_json_schema(cls, *args, **kwargs) -> dict[str, t.Any]:
-        schema = super().model_json_schema(*args, **kwargs)
-        for prop in [x.__name__ for x in t.get_args(run_types)]:
-            schema["$defs"][prop]["properties"]["method"]["options"] = {"hidden": True}
-            schema["$defs"][prop]["properties"]["method"]["type"] = "string"
-        return schema
+    def run(self, vis: ZnDraw) -> list[ase.Atoms]:
+        vis.log("Sending request to inference server.")
+        if len(vis) > vis.step + 1:
+            del vis[vis.step + 1 :]
 
-    def run(self, atom_ids: list[int], atoms: ase.Atoms, **kwargs) -> list[ase.Atoms]:
-        logging.info("Sending request to inference server.")
-        modified_atoms = self.run_type.run(
-            atom_ids=atom_ids,
-            atoms=atoms,
+        self.run_type.run(
+            vis=vis,
             client_address=self.client_address,
-            **kwargs,
         )
-        modified_atoms[-1] = remove_isolated_atoms_using_covalent_radii(
-            modified_atoms[-1]
-        )
-        logging.info(f"Received back {len(modified_atoms)} atoms.")
-        return modified_atoms
+        vis.append(remove_isolated_atoms_using_covalent_radii(vis[vis.step]))
