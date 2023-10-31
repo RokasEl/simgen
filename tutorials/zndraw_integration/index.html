@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Using ZnDraw - MolDiff</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Using ZnDraw";
+        var mkdocs_page_input_path = "tutorials/zndraw_integration.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> MolDiff
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Tutorials</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="./">Using ZnDraw</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#web-app">Web app</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#generation-menu">Generation menu</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#guided-generation">Guided Generation</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">MolDiff</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Tutorials</li>
+      <li class="breadcrumb-item active">Using ZnDraw</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="using-moldiff-with-zndraw">Using <code>moldiff</code> with ZnDraw</h1>
+<h2 id="web-app">Web app</h2>
+<p>This section describes how to generate structures using the online web app, hosted <a href="https://zndraw.pythonf.de/">here</a>. If something breaks, clicking EXIT and reloading the page should fix it. See the in-app help (<code>i</code> button in the top bar) for general ZnDraw controls.</p>
+<h3 id="generation-menu">Generation menu</h3>
+<p>To access the generation menu, click 'Interaction' in the left sidebar and select 'DiffusionModelling' from the 'Method' dropdown menu.</p>
+<p>The modifier has three run types:</p>
+<ul>
+<li><strong>Generate</strong>: The primary function for structure generation using similarity kernels.</li>
+<li><strong>Hydrogenate</strong>: Adds hydrogen atoms to the active structure.</li>
+<li><strong>Relax</strong>: Uses a pretrained MACE force field to relax/optimize the active structure after hydrogenation.</li>
+</ul>
+<h4 id="generation-settings">Generation Settings</h4>
+<ul>
+<li><strong>Num Steps</strong>: Controls diffusive steps taken during generation. Higher values result in slower generation. 50 is a good starting point.</li>
+<li><strong>Atom Number</strong>: Can be static or determined dynamically based on the length of the guiding curve (see <a href="#guided-generation">Guided Generation</a>). Select 'PerAngstrom' for dynamic atom number.</li>
+<li><strong>Guiding Force Multiplier</strong>: Adjusts how strongly atoms are attracted to the guiding point cloud. Default of 1 works for simple tasks. Increase for more complicated guiding curves.</li>
+</ul>
+<h4 id="hydrogenate-and-relax-settings">Hydrogenate and Relax Settings</h4>
+<p>These modes have just one parameter controlling the number of relaxation steps. Defaults are suitable for most uses.</p>
+<h3 id="guided-generation">Guided Generation</h3>
+<p>We can create structures with arbitrary shapes by providing a point cloud prior. To draw a guiding curve:</p>
+<ol>
+<li>Press <code>x</code> or the 'Draw' button to enter drawing mode.</li>
+<li>Click atoms to place guiding points.</li>
+<li>Create a curve by adding multiple points.</li>
+<li>Press <code>x</code> or the 'Draw' button to exit drawing mode.</li>
+</ol>
+<p>To modify the guiding curve, click a point to select it. Then you can move it with the on-screen controls. When a point is selected:</p>
+<ul>
+<li><code>Backspace</code> deletes the point.</li>
+<li><code>d</code> duplicates the point, inserting it between current and previous.</li>
+</ul>
+<p>To place free points in 3D space:</p>
+<ol>
+<li>Create a canvas using the Drawing option in the left sidebar.</li>
+<li>Now in drawing mode, points will snap to the canvas.</li>
+</ol>
+<p>To modify the canvas:</p>
+<ul>
+<li>Press f to enter canvas mode, where the canvas stays fixed as you move atoms with the mouse.</li>
+<li>Hold shift and scroll to resize the canvas and access movement controls.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../.." class="btn btn-neutral float-left" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../.." style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
