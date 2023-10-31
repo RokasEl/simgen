@@ -21,6 +21,7 @@ from energy_model.diffusion_tools import (
     iDDPMModelWrapper,
     initialize_model,
 )
+from energy_model.training_tools import get_default_optimizer
 from moldiff.utils import get_system_torch_device_str, setup_logger
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
@@ -29,7 +30,7 @@ DEVICE = get_system_torch_device_str()
 atomic_energies = np.zeros_like(Z_TABLE.zs, dtype=np.float64)
 MACE_CONFIG = dict(
     r_max=10.0,
-    num_bessel=8,
+    num_bessel=16,
     num_polynomial_cutoff=6,
     max_ell=2,
     interaction_cls=modules.interaction_classes["RealAgnosticResidualInteractionBlock"],
@@ -38,8 +39,8 @@ MACE_CONFIG = dict(
     ],
     num_interactions=2,
     num_elements=len(Z_TABLE.zs),
-    hidden_irreps=o3.Irreps("64x0e + 64x1o"),
-    MLP_irreps=o3.Irreps("64x0e"),
+    hidden_irreps=o3.Irreps("32x0e + 32x1o"),
+    MLP_irreps=o3.Irreps("32x0e"),
     radial_MLP=[64] * 3,
     gate=torch.nn.functional.silu,
     atomic_energies=atomic_energies,
@@ -57,8 +58,8 @@ ENERGY_MODEL_CONFIG = dict(
 PARAMS = {
     "energy_model_config": ENERGY_MODEL_CONFIG,
     "model_params": MACE_CONFIG,
-    "lr": 2e-3,
-    "batch_size": 256,
+    "lr": 8e-3,
+    "batch_size": 64,
     "epochs": 300,
 }
 
@@ -84,7 +85,9 @@ def main(
         data.AtomicData.from_config, z_table=Z_TABLE, cutoff=cutoff
     )
 
-    training_data = [to_atomic_data(conf) for conf in collections.train]
+    training_data = [
+        to_atomic_data(conf) for conf in collections.train
+    ]  # connectivity graph built here. Means graphs are global due to the large cutoff
     data_loader = torch_geometric.dataloader.DataLoader(
         dataset=training_data,  # type: ignore
         batch_size=PARAMS["batch_size"],
@@ -123,7 +126,9 @@ def main(
         model.load_state_dict(save_dict["model_state_dict"])
         logging.info(f"Loaded model from {model_path}")
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=PARAMS["lr"])
+    optimizer = get_default_optimizer(
+        PARAMS["lr"], model, weight_decay=5e-7, amsgrad=True
+    )
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer=optimizer,
         max_lr=PARAMS["lr"],
@@ -137,7 +142,6 @@ def main(
             weight, pos_loss, elem_loss = loss_fn(batch_data, model, training=True)
             loss = (weight * (pos_loss + elem_loss)).mean()
             loss.backward()
-            clip_grad_norm_(model.parameters(), 250.0)
             optimizer.step()
             scheduler.step()
             wandb.log(

@@ -265,6 +265,7 @@ class HeunSampler:
         batch_data: AtomicData,
         num_steps=20,
         track_trajectory=False,
+        track_energies=False,
         **model_kwargs,
     ):
         sigmas = self._get_sigma_schedule(num_steps=num_steps)
@@ -273,8 +274,17 @@ class HeunSampler:
         # sigmas[0] is the initial and largest noise level.
         x_next: AtomicData = self._initialize_sample(batch_data, sigmas[0])
         trajectories = []
+        energies = []
         if track_trajectory:
             trajectories = [x_next.clone()]
+        if track_energies:
+            sigma = (torch.ones_like(x_next.batch) * sigmas[0]).view(-1, 1)
+            energies = [
+                self.model(x_next.to_dict(), sigma, **model_kwargs)["energy"]
+                .detach()
+                .cpu()
+                .numpy()
+            ]
         # Main sampling loop. A second order Heun integrator is used.
         # read the integrator parameters from the noise parameters.
         S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
@@ -308,7 +318,8 @@ class HeunSampler:
             D_x_increased = self.model(
                 x_increased.to_dict(), sigma_increased, **model_kwargs
             )
-
+            if track_energies:
+                energies.append(D_x_increased["energy"].detach().cpu().numpy())
             grad_log_P_noisy = GradLogP(
                 positions=(x_increased.positions - D_x_increased["positions"])
                 / sigma_increased,
@@ -353,8 +364,8 @@ class HeunSampler:
                 if track_trajectory:
                     trajectories.append(x_next.clone())
         if track_trajectory:
-            return x_next, trajectories
-        return x_next, []
+            return x_next, trajectories, energies
+        return x_next, [], energies
 
     def _get_integrator_parameters(self):
         return (
@@ -404,9 +415,10 @@ class ResidualReadoutBlock(torch.nn.Module):
         self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=MLP_irreps)
         self.non_linearity = nn.Activation(irreps_in=MLP_irreps, acts=[gate])
         if n_layers > 2:
-            middle_layers = [o3.Linear(irreps_in=MLP_irreps, irreps_out=MLP_irreps)] * (
-                n_layers - 2
-            )
+            middle_layers = [
+                o3.Linear(irreps_in=MLP_irreps, irreps_out=MLP_irreps)
+                for _ in range(n_layers - 2)
+            ]
             self.middle_layers = torch.nn.ModuleList(middle_layers)
         else:
             self.middle_layers = torch.nn.ModuleList([])
@@ -448,7 +460,7 @@ class EnergyMACEDiffusion(MACE):
         gate = kwargs["gate"]
         gate = gate if gate is not None else torch.nn.Identity()
         for i in range(kwargs["num_interactions"]):
-            if i == kwargs["num_interactions"] - 1:
+            if i == kwargs["num_interactions"] - 1 and kwargs["num_interactions"] > 1:
                 input_irreps = str(kwargs["hidden_irreps"][0])
             else:
                 input_irreps = kwargs["hidden_irreps"]

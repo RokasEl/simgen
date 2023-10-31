@@ -10,12 +10,8 @@ from ase import Atoms
 from fire import Fire
 
 from energy_model.diffusion_tools import (
-    EDMModelWrapper,
-    EnergyMACEDiffusion,
     HeunSampler,
     SamplerNoiseParameters,
-    iDDPMModelWrapper,
-    initialize_model,
 )
 from moldiff.utils import get_system_torch_device_str, initialize_mol
 
@@ -90,13 +86,8 @@ def main(
     batch_size=128,
     track_trajectory=False,
 ):
-    save_dict = torch.load(model_path, map_location=DEVICE)
-    cutoff = save_dict["model_params"]["r_max"]
-    model = initialize_model(
-        save_dict["energy_model_config"], save_dict["model_params"]
-    )
-    model = iDDPMModelWrapper(model).to(DEVICE)
-    model.load_state_dict(save_dict["model_state_dict"])
+    model = torch.load(model_path, map_location=DEVICE)
+    cutoff = model.model.radial_embedding.r_max.item()
     model.eval()
     for param in model.parameters():
         param.requires_grad = False
@@ -110,7 +101,7 @@ def main(
     )
     for batch in data_loader:
         batch_data = batch.to(DEVICE)
-        final, trajectory = sampler.generate_samples(
+        final, trajectory, _ = sampler.generate_samples(
             batch_data, num_steps=30, training=False, track_trajectory=track_trajectory
         )
         batch_data = None
