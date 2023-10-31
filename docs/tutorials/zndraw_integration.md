@@ -14,6 +14,8 @@ The modifier has three run types:
 - **Hydrogenate**: Adds hydrogen atoms to the active structure.
 - **Relax**: Uses a pretrained MACE force field to relax/optimize the active structure after hydrogenation.
 
+Clicking "Run modifier" will perform the selected action on the active structure.
+
 #### Generation Settings
 
 - **Num Steps**: Controls diffusive steps taken during generation. Higher values result in slower generation. 50 is a good starting point.
