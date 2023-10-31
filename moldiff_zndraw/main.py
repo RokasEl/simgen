@@ -6,9 +6,9 @@ import typing as t
 import ase
 import numpy as np
 import requests
-from pydantic import Field
-from zndraw.data import atoms_from_json, atoms_to_json
+from pydantic import BaseModel, Field
 from zndraw import ZnDraw
+from zndraw.data import atoms_from_json, atoms_to_json
 from zndraw.modify import UpdateScene
 
 from .utils import (
@@ -44,20 +44,37 @@ def _post_request(address: str, data: dict, name: str):
         raise e
 
 
+class PerAngstrom(BaseModel):
+    discriminator: t.Literal["PerAngstrom"] = "PerAngstrom"
+    atoms_per_angstrom: float = Field(
+        1.2,
+        ge=0,
+        le=3.0,
+        description="Num atoms added = atoms_per_angstrom * curve_length",
+    )
+
+    @property
+    def parameters(self):
+        return self.discriminator, self.atoms_per_angstrom
+
+
+class FixedNumber(BaseModel):
+    discriminator: t.Literal["FixedNumber"] = "FixedNumber"
+    number_of_atoms: int = Field(
+        5, ge=1, le=30, description="Number of atoms to generate"
+    )
+
+    @property
+    def parameters(self):
+        return self.discriminator, self.number_of_atoms
+
+
 class Generate(UpdateScene):
     discriminator: t.Literal["Generate"] = Field("Generate")
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
     )
-    num_atoms_to_add: int = Field(
-        5, ge=1, le=30, description="Number of atoms to generate"
-    )
-    atoms_per_angstrom: float = Field(
-        -1.0,
-        ge=-1.0,
-        le=3.0,
-        description="Will supersede num_atoms_to_add if positive",
-    )
+    atom_number: t.Union[FixedNumber, PerAngstrom]
     guiding_force_multiplier: float = Field(
         1.0,
         ge=1.0,
@@ -72,8 +89,9 @@ class Generate(UpdateScene):
             points = self._remove_collisions_between_prior_and_atoms(
                 points, vis.atoms.get_positions()
             )
+        atom_number_type, atom_number = self.atom_number.parameters
         num_atoms_to_add = self._get_num_atoms_to_add(
-            points, self.atoms_per_angstrom, self.num_atoms_to_add
+            points, atom_number_type, atom_number
         )
         request = {
             "run_type": "generate",
@@ -126,25 +144,34 @@ class Generate(UpdateScene):
 
     @staticmethod
     def _get_num_atoms_to_add(
-        points: np.ndarray, atoms_per_angstrom: float, num_static: int
+        points: np.ndarray,
+        atom_number_determination_type: str,
+        atom_parameter_value: int | float,
     ) -> int:
-        if atoms_per_angstrom > 0 and points is not None and points.shape[0] > 0:
+        if atom_number_determination_type == "FixedNumber":
+            return atom_parameter_value
+        elif atom_number_determination_type == "PerAngstrom":
             logging.info(
                 "Calculating number of atoms to add based on curve length and density"
             )
+            assert (
+                points.shape[0] > 1
+            ), "`PerAngstrom` requires at least 2 points drawn in the interface"
             curve_length = calculate_path_length(points)
-            num_atoms_to_add = np.ceil(curve_length * atoms_per_angstrom).astype(int)
+            num_atoms_to_add = np.ceil(curve_length * atom_parameter_value).astype(int)
             logging.info(
                 f"Path length defined by points: {curve_length:.1f} A; atoms to add: {num_atoms_to_add}"
             )
             return num_atoms_to_add
         else:
-            return num_static
+            raise ValueError(
+                f"Unknown atom number determination type: {atom_number_determination_type}"
+            )
 
 
 class Relax(UpdateScene):
     discriminator: t.Literal["Relax"] = Field("Relax")
-    max_steps: int = Field(100, ge=1)
+    max_steps: int = Field(50, ge=1)
 
     def run(self, vis: ZnDraw, client_address) -> list[ase.Atoms]:
         vis.log("Running Relax")
@@ -166,7 +193,7 @@ class Relax(UpdateScene):
 
 class Hydrogenate(UpdateScene):
     discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
-    max_steps: int = Field(100, ge=1)
+    max_steps: int = Field(30, ge=1)
 
     def run(self, vis: ZnDraw, client_address) -> list[ase.Atoms]:
         vis.log("Running Hydrogenate")
@@ -208,4 +235,4 @@ class DiffusionModelling(UpdateScene):
             vis=vis,
             client_address=self.client_address,
         )
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[vis.step]))
+        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
