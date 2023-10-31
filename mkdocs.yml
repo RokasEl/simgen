@@ -1,0 +1,10 @@
+site_name: MolDiff
+nav:
+  - Home: index.md
+  - Tutorials:
+    - "Using ZnDraw": tutorials/zndraw_integration.md
+theme: readthedocs
+
+markdown_extensions:
+  - toc:
+      toc_depth: 3
