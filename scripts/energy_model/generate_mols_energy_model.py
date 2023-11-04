@@ -87,7 +87,7 @@ def main(
     track_trajectory=False,
 ):
     model = torch.load(model_path, map_location=DEVICE)
-    cutoff = model.model.radial_embedding.r_max.item()
+    cutoff = model.model.r_max.item()
     model.eval()
     for param in model.parameters():
         param.requires_grad = False

@@ -39,8 +39,8 @@ MACE_CONFIG = dict(
     ],
     num_interactions=2,
     num_elements=len(Z_TABLE.zs),
-    hidden_irreps=o3.Irreps("32x0e + 32x1o"),
-    MLP_irreps=o3.Irreps("32x0e"),
+    hidden_irreps=o3.Irreps("64x0e + 64x1o"),
+    MLP_irreps=o3.Irreps("64x0e"),
     radial_MLP=[64] * 3,
     gate=torch.nn.functional.silu,
     atomic_energies=atomic_energies,
@@ -51,16 +51,16 @@ MACE_CONFIG = dict(
 
 ENERGY_MODEL_CONFIG = dict(
     noise_embed_dim=8,
-    noise_hidden_dim=16,
+    noise_hidden_dim=32,
     num_readout_layers=3,
 )
 
 PARAMS = {
     "energy_model_config": ENERGY_MODEL_CONFIG,
     "model_params": MACE_CONFIG,
-    "lr": 8e-3,
-    "batch_size": 64,
-    "epochs": 300,
+    "lr": 4.5e-3,
+    "batch_size": 256,
+    "epochs": 30,
 }
 
 

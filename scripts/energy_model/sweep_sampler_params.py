@@ -33,9 +33,9 @@ def main():
         params[i] = asdict(sampler_params)
         this_save_path = str(save_path / f"sampler_params_{i}.xyz")
         generate_mols_energy_model(
-            model_path="./trained_energy_mace_iddpm_deeper_readouts.pt",
+            model_path="./energy_model_november_2023.model",
             sampler_params=sampler_params,
-            num_samples_per_size=100,
+            num_samples_per_size=50,
             save_path=this_save_path,
             batch_size=256,
         )
