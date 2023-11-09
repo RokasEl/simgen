@@ -238,5 +238,5 @@ class DiffusionModelling(UpdateScene):
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
 
     @staticmethod
-    def _get_documentation_url() -> str:
+    def get_documentation_url() -> str:
         return "https://rokasel.github.io/EnergyMolecularDiffusion"
