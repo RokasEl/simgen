@@ -37,6 +37,7 @@ class MaceSimilarityCalculator(Calculator):
         reference_data: List[ase.Atoms],
         device: str = "cpu",
         alpha: float = 8.0,
+        element_sigma_array: np.ndarray | None = None,
         *args,
         restart=None,
         label=None,
@@ -65,7 +66,11 @@ class MaceSimilarityCalculator(Calculator):
         self.repulsion_block = ExponentialRepulsionBlock(alpha=alpha).to(device)
         self.device = device
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
+        self.element_kernel_sigmas = self._init_element_kernel_sigmas(
+            element_sigma_array
+        )
         self.cutoff = model.r_max.item()  # type: ignore
+
         batch_func = partial(
             batch_atoms, z_table=self.z_table, cutoff=self.cutoff, device=self.device
         )
@@ -76,6 +81,7 @@ class MaceSimilarityCalculator(Calculator):
             cutoff=self.cutoff,
             device=self.device,
         )
+
         self.reference_embeddings = self._calculate_reference_embeddings(reference_data)
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
@@ -88,7 +94,7 @@ class MaceSimilarityCalculator(Calculator):
     ):
         batch_index = atomic_data.batch
         emb = self._get_node_embeddings(atomic_data)
-        log_dens = self._calculate_log_k(emb, t)
+        log_dens = self._calculate_log_k(emb, atomic_data.node_attrs, t)
         log_dens = scatter_sum(log_dens, batch_index)
         grad = self._get_gradient(atomic_data.positions, log_dens)
         repulsive_energy = self.repulsion_block(atomic_data) / 3.0
@@ -147,7 +153,7 @@ class MaceSimilarityCalculator(Calculator):
 
         batched = self.batch_atoms(atoms)
         embedding = self._get_node_embeddings(batched)
-        log_k = self._calculate_log_k(embedding, time)
+        log_k = self._calculate_log_k(embedding, batched.node_attrs, time)
         node_energies = -1 * log_k
         molecule_energies = scatter_sum(node_energies, batched.batch, dim=0)
         node_energies = node_energies.detach().cpu().numpy()
@@ -223,7 +229,7 @@ class MaceSimilarityCalculator(Calculator):
             ]
         return torch.concatenate(node_embeddings, dim=0)
 
-    def _calculate_distance_matrix(self, embedding):
+    def _calculate_distance_matrix(self, embedding, node_attrs):
         embedding_deltas = embedding[:, None, :] - self.reference_embeddings[None, :, :]
         # embedding_deltas (embedding_nodes, reference_nodes, embed_dim)
         embedding_deltas = embedding_deltas**2
@@ -231,11 +237,14 @@ class MaceSimilarityCalculator(Calculator):
             embedding_deltas, dim=-1
         )  # (embedding_nodes, reference_nodes)
         squared_distance_matrix = squared_distance_matrix / self.typical_length_scale
+        element_specific_sigmas = self._scatter_element_sigmas(
+            node_attrs, self.element_kernel_sigmas
+        )
+        squared_distance_matrix = squared_distance_matrix / element_specific_sigmas
         return squared_distance_matrix
 
-    def _calculate_log_k(self, embedding, time):
-        squared_distance_matrix = self._calculate_distance_matrix(embedding)
-        # squared_distance_matrix = squared_distance_matrix / 1.5 ** (time)
+    def _calculate_log_k(self, embedding, node_attrs, time):
+        squared_distance_matrix = self._calculate_distance_matrix(embedding, node_attrs)
         additional_multiplier = 119 * (1 - (time / 10) ** 0.25) + 1 if time <= 10 else 1
         squared_distance_matrix = squared_distance_matrix * additional_multiplier
         log_k = torch.logsumexp(-squared_distance_matrix / 2, dim=1)
@@ -254,3 +263,49 @@ class MaceSimilarityCalculator(Calculator):
         # Prevent caching of properties
         self.reset()
         return super().get_property(*args, **kwargs)
+
+    def _init_element_kernel_sigmas(self, element_sigma_array: np.ndarray | None):
+        if element_sigma_array is not None and len(element_sigma_array) == len(
+            self.z_table
+        ):
+            element_kernel_sigmas = torch.tensor(
+                element_sigma_array, device=self.device, dtype=self.dtype
+            )
+        else:
+            if element_sigma_array is not None:
+                warnings.warn(
+                    f"element_sigma_array has length {len(element_sigma_array)}, but there are {len(self.z_table)} elements in the model. Using default values of 1.0 for all elements"
+                )
+            element_kernel_sigmas = torch.ones(
+                len(self.z_table), device=self.device, dtype=self.dtype
+            )
+            element_kernel_sigmas.requires_grad_(False)
+        return element_kernel_sigmas
+
+    def adjust_element_sigmas(self, new_sigma_dict: dict[str, float]) -> None:
+        """Adjust the element kernel sigmas inplace.
+
+        Parameters
+        ----------
+        new_sigma_dict
+            dictionary mapping element name to new sigma value
+        """
+        for element_name, new_sigma in new_sigma_dict.items():
+            z = ase.Atom(element_name).number
+            idx = self.z_table.z_to_index(z)
+            self.element_kernel_sigmas[idx] = new_sigma
+
+    @staticmethod
+    def _scatter_element_sigmas(
+        node_attrs: torch.Tensor, element_kernel_sigmas: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Scatters the element kernel sigmas.
+        Returns
+        -------
+        torch.Tensor
+            The tensor with scattered element kernel sigmas.
+        """
+        elements = node_attrs.detach().cpu().numpy()
+        element_index = np.argmax(elements, axis=1)
+        return element_kernel_sigmas[element_index, None]

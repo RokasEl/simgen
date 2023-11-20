@@ -43,7 +43,7 @@ def test_get_mace_config_of_remote_model():
     import zntrack
 
     model_loader = zntrack.from_rev(
-        "mace_model", remote="/home/rokas/Programming/MACE-Models"
+        "mace_model", remote="/home/rokas/Programming/MACE-Models", rev="main"
     )
     pretrained_model = model_loader.get_model()
 

@@ -60,8 +60,11 @@ def test_exponential_repulsive_block_returns_correct_forces():
         one_over_distances,
         "from to cartesian, from to, from to -> from cartesian",
     )
-    block_forces = MaceSimilarityCalculator._get_gradient(
-        batched.positions, -1 * block_energies
+    block_forces = (
+        MaceSimilarityCalculator._get_gradient(batched.positions, -1 * block_energies)
+        .detach()
+        .cpu()
+        .numpy()
     )
     np.testing.assert_allclose(forces, block_forces)
 
@@ -97,8 +100,11 @@ def test_exponential_repulsive_block_correct_for_batches_of_molecules():
         "from to cartesian, from to, from to -> from cartesian",
     )
     forces = np.concatenate([forces, forces], axis=0)
-    block_forces = MaceSimilarityCalculator._get_gradient(
-        batched.positions, -1 * block_energies
+    block_forces = (
+        MaceSimilarityCalculator._get_gradient(batched.positions, -1 * block_energies)
+        .detach()
+        .cpu()
+        .numpy()
     )
     np.testing.assert_allclose(forces, block_forces)
 
