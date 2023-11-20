@@ -182,7 +182,7 @@ class Relax(UpdateScene):
             },
             "common_data": _format_data_from_zndraw(vis),
         }
-        response = _post_request(client_address, data=request, name="hydrogenation")
+        response = _post_request(client_address, data=request, name="relaxation")
         modified_atoms = [
             atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
         ]

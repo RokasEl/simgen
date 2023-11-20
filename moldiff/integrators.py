@@ -86,9 +86,16 @@ class HeunIntegrator:
         if sigma_next != 0:
             mol_next.positions.grad = None
 
-            forces_next = (
-                self.similarity_calculator(mol_next, sigma_next) * mask[:, None]
+            forces_next = self.similarity_calculator(mol_next, sigma_next)
+            restorative_forces = self.prior_manifold.calculate_resorative_forces(
+                mol_next.positions
             )
+            forces_next += (
+                self.restorative_force_strength
+                * restorative_forces
+                * torch.tanh(20 * sigma_next**2)
+            )
+            forces_next *= mask[:, None]
             with torch.no_grad():
                 mol_next.positions = noised_positions - 1 * (
                     (sigma_next - sigma_increased) * (forces + forces_next) / 2

@@ -31,7 +31,7 @@ def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
     sqrt_prefactor = 1.5664519  # prefactor fit to qm9
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
-    force_strength = 1 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2
+    force_strength = 0.7 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2  # empirical
     return force_strength
 
 
