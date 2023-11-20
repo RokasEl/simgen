@@ -2,13 +2,10 @@ import logging
 
 import ase
 import numpy as np
+from ase.optimize import LBFGS
 from hydromace.interface import HydroMaceCalculator
 
-from moldiff.atoms_cleanup import (
-    attach_calculator,
-    relax_hydrogens,
-    run_dynamics,
-)
+from moldiff.atoms_cleanup import attach_calculator, relax_hydrogens
 from moldiff.calculators import MaceSimilarityCalculator
 from moldiff.generation_utils import (
     calculate_restorative_force_strength,
@@ -87,8 +84,11 @@ def relax(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
         mask = np.zeros(len(atoms)).astype(bool)
     relaxed_atoms = attach_calculator(
         [atoms], moldiff_calc, calculation_type="mace", mask=mask
-    )
+    )[0]
     logging.info("Relaxing structure")
-    relaxed_atoms = run_dynamics(relaxed_atoms, num_steps=request.max_steps)
+    relaxation_trajectory = [relaxed_atoms.copy()]
+    dyn = LBFGS(relaxed_atoms, maxstep=0.2)
+    for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
+        relaxation_trajectory.append(relaxed_atoms.copy())
     logging.info("Finished relaxation")
-    return jsonify_atoms(*relaxed_atoms)
+    return jsonify_atoms(*relaxation_trajectory)
