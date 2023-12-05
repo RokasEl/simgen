@@ -7,9 +7,10 @@ import numpy as np
 from ase.calculators.mixing import LinearCombinationCalculator
 from ase.calculators.morse import MorsePotential
 from ase.optimize import LBFGS
-from calculators import MopacCalculator, RestorativeCalculator
 
 from moldiff.manifolds import StandardGaussianPrior
+
+from .calculators import MopacCalculator, RestorativeCalculator
 
 
 def build_mol(composition: str, prior=None, max_steps=1000):
@@ -32,10 +33,19 @@ def build_mol(composition: str, prior=None, max_steps=1000):
     return atoms
 
 
-def do_mopac_relaxation(initialised_atoms):
+def do_mopac_relaxation(initialised_atoms, num_steps=100):
     calc = MopacCalculator()
     atoms = calc.do_full_relaxation(initialised_atoms.copy())
-    return atoms
+    mopac_calc = MopacCalculator(f_max=50.0)
+    atoms = initialised_atoms.copy()
+    atoms.calc = mopac_calc
+    dyn = LBFGS(atoms, memory=10, maxstep=0.2)
+    traj = []
+    energies = []
+    for i, _ in enumerate(dyn.irun(fmax=0.01, steps=num_steps)):
+        traj.append(atoms.copy())
+        energies.append(mopac_calc.results["energy"])
+    return traj, energies
 
 
 def do_hot_airss_relaxation(
@@ -43,35 +53,34 @@ def do_hot_airss_relaxation(
     prior=None,
     num_steps=100,
     step_size=0.2,
-    rattle_sigma: float = 1,
 ) -> Tuple[List[ase.Atoms], Dict[str, List[float]]]:
-    restorative_calc = RestorativeCalculator(
-        prior_manifold=prior, zero_energy_radius=1.5
-    )
-    mopac_calc = MopacCalculator(f_max=1.0)
-    calc = LinearCombinationCalculator([mopac_calc, restorative_calc], [1.0, 1.0])
-    cosine_schedule = np.linspace(0, np.pi / 2, num_steps)
-    cosine_schedule = np.cos(cosine_schedule) ** 2
+    restorative_calc = RestorativeCalculator(prior_manifold=prior, zero_energy_radius=0)
+    mopac_calc = MopacCalculator(f_max=50.0)
+    calc = LinearCombinationCalculator([mopac_calc, restorative_calc], [1.0, 0.0])
+    schedule = np.linspace(0, 1, num_steps)
 
     atoms = initialised_atoms.copy()
     atoms.calc = calc
 
     traj = [atoms.copy()]
     energies_dict = {"mopac": [], "restorative": [], "total": []}
-    for weight in cosine_schedule:
-        mopac_weight = 1 - weight
-        restorative_weight = weight
+    dyn = LBFGS(atoms, memory=10, maxstep=step_size)
+
+    for i, _ in enumerate(dyn.irun(fmax=0.01, steps=num_steps)):
+        weight = schedule[i]
+        mopac_weight = weight
+        restorative_weight = 1 - weight
+        print(f"Step {i} of {num_steps}, weight {weight}")
+        print(f"Restorative weight: {restorative_weight}")
+        print(f"Mopac weight: {mopac_weight}")
         atoms.calc.weights = [mopac_weight, restorative_weight]
-        forces = atoms.get_forces()
-        noise = np.random.normal(size=atoms.positions.shape) * rattle_sigma * weight
-        total_force = forces + noise
-        atoms.set_positions(atoms.get_positions() + total_force * step_size)
         traj.append(atoms.copy())
         _update_energy_dict(
             energies_dict, mopac_calc, restorative_calc, restorative_weight
         )
-    final_atoms = mopac_calc.do_full_relaxation(atoms.copy())
-    traj.append(final_atoms)
+        if i == num_steps - 1:  # ase does one extra step
+            break
+
     return traj, energies_dict
 
 

@@ -19,7 +19,7 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moldiff", "energy_model", "moldiff_zndraw", "moldiff_server"]
+include = ["moldiff", "energy_model", "moldiff_zndraw", "moldiff_server", "airss_baseline"]
 namespaces = false
 
 [project.optional-dependencies]
