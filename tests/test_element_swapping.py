@@ -3,10 +3,12 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from mace.tools import AtomicNumberTable
+from scipy.special import softmax  # type: ignore
 
 from moldiff.element_swapping import (
     SwappingAtomicNumberTable,
     catch_diverged_energies,
+    choose_indices_to_change,
     create_element_swapped_particles,
     get_element_and_swap_frequency_dictionary,
     get_new_element_from_swapping_dictionary,
@@ -82,9 +84,8 @@ def test_replace_array_elements_at_indices_with_other_elements_in_z_table():
 
 def test_swap_single_particle_gives_rise_to_correct_distribution():
     mol = initialize_mol("H2O")
-    ps = np.array([1, 1, 1]) / 3
-    num_change = 3
-    mols = [swap_single_particle(mol, ps, num_change, z_table) for _ in range(1000)]
+    changed_indices = [0, 1, 2]
+    mols = [swap_single_particle(mol, changed_indices, z_table) for _ in range(1000)]
     expected_element_distribution = (
         np.array([1 / 4, 1 / 4, 1 / 4, 0, 1 / 4]) / 3
         + np.array([0, 1 / 4, 1 / 4, 1 / 4, 1 / 4]) * 2 / 3
@@ -99,16 +100,15 @@ def test_swap_single_particle_gives_rise_to_correct_distribution():
 
 def test_swap_single_particle_swaps_correct_index_when_probability_is_peaked():
     mol = initialize_mol("H2O")
-    ps = np.array([0, 0.5, 0.5])
-    num_change = 1
-    mols = [swap_single_particle(mol, ps, num_change, z_table) for _ in range(10)]
+    to_change = [1, 2]
+    mols = [swap_single_particle(mol, to_change, z_table) for _ in range(10)]
     for mol in mols:
         assert mol.get_atomic_numbers()[1] != 1 or mol.get_atomic_numbers()[2] != 1
         assert mol.get_atomic_numbers()[0] == 8
 
     mol = initialize_mol("H2O")
-    ps = np.array([1.0, 0, 0])
-    mols = [swap_single_particle(mol, ps, num_change, z_table) for _ in range(10)]
+    to_change = [0]
+    mols = [swap_single_particle(mol, to_change, z_table) for _ in range(10)]
     for mol in mols:
         assert mol.get_atomic_numbers()[0] != 8
         assert mol.get_atomic_numbers()[1] == 1 or mol.get_atomic_numbers()[2] == 1
@@ -222,3 +222,69 @@ def test_get_new_element_from_swapping_dictionary(current_element, swap_dictiona
     assert actual_element_frequency == pytest.approx(
         expected_element_frequency, abs=0.1
     )
+
+
+def get_expected_ratio_for_selecting_two_atoms(energies, beta):
+    full_p_matrix = np.zeros((len(energies), len(energies)))
+    probabilities = softmax(energies * beta)
+    for i in range(len(energies)):
+        for j in range(len(energies)):
+            if i == j:
+                continue
+            remaining_prob = probabilities.copy()
+            remaining_prob[i] = 0
+            remaining_prob /= remaining_prob.sum()
+            full_p_matrix[i, j] = probabilities[i] * remaining_prob[j]
+    ratios = np.zeros(len(energies))
+    for i in range(len(energies)):
+        ratios[i] = full_p_matrix[:, i].sum()
+        ratios[i] += full_p_matrix[i, :].sum()
+    return ratios / sum(ratios)
+
+
+@pytest.mark.parametrize(
+    "energies, beta, num_change, expected_ratio",
+    [
+        (np.ones(7), 1, 1, np.ones(7) / 7),
+        (np.ones(7), 1, 5, np.ones(7) / 7),  # ratio should not depend on num_change
+        (
+            np.array([999999, 1, 1, 1], dtype=float),
+            1,
+            1,
+            np.array([1, 0, 0, 0], dtype=float),
+        ),  # peaked around one atom
+        (
+            np.array([999999, 1, 1, 1], dtype=float),
+            1,
+            2,
+            np.array([1 / 2, 1 / 6, 1 / 6, 1 / 6], dtype=float),
+        ),  # peaked atom is always selected, the rest split the remaining probability
+        (
+            np.array([999999, 1, 9999, 1], dtype=float),
+            1,
+            2,
+            np.array([1 / 2, 0, 1 / 2, 0], dtype=float),
+        ),  # two peaked atoms
+        (
+            np.array([999999, 1, 9999, 1], dtype=float),
+            1e-10,
+            2,
+            np.ones(4) / 4,
+        ),  # large T -> uniform
+        (np.array([1, 2, 5, 0.8]), 1, 1, softmax(np.array([1, 2, 5, 0.8]))),
+        (
+            np.array([1, 2, 5, 0.8]),
+            1,
+            2,
+            get_expected_ratio_for_selecting_two_atoms(np.array([1, 2, 5, 0.8]), 1),
+        ),
+    ],
+)
+def test_choose_indices_to_change(energies, beta, num_change, expected_ratio):
+    counts = np.zeros_like(energies)
+    for _ in range(1000):
+        indices = choose_indices_to_change(energies, beta, num_change)
+        assert len(indices) == num_change
+        counts[indices] += 1
+    actual_ratio = counts / counts.sum()
+    assert actual_ratio == pytest.approx(expected_ratio, abs=0.1)

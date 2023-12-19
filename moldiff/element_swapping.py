@@ -25,7 +25,7 @@ class SwappingAtomicNumberTable(AtomicNumberTable):
 
 def replace_array_elements_at_indices_with_other_elements_in_z_table(
     atomic_numbers: np.ndarray,
-    indices_to_replace: np.ndarray,
+    indices_to_replace: np.ndarray | list[int],
     z_table: AtomicNumberTable,
 ) -> np.ndarray:
     x = atomic_numbers.copy()
@@ -53,12 +53,9 @@ def get_new_element_from_swapping_dictionary(current_element, swap_dictionary):
 
 
 def swap_single_particle(
-    mol: Atoms, probabilities: np.ndarray, num_change: int, z_table: AtomicNumberTable
+    mol: Atoms, to_change: list[int], z_table: AtomicNumberTable
 ) -> Atoms:
     swapped_mol = duplicate_atoms(mol)
-    to_change = np.random.choice(
-        len(mol), size=num_change, replace=False, p=probabilities
-    )
     new_zs = replace_array_elements_at_indices_with_other_elements_in_z_table(
         mol.get_atomic_numbers(), to_change, z_table
     )
@@ -81,8 +78,33 @@ def sweep_all_elements(mol: Atoms, idx: int, z_table: AtomicNumberTable) -> list
 
 
 def get_how_many_to_change(num_particles: int, beta: float) -> int:
-    num_change = np.ceil(0.1 * num_particles).astype(int)
+    num_change = np.ceil(0.2 * num_particles).astype(int)
     return num_change
+
+
+def choose_indices_to_change(energies: np.ndarray, beta: float, num_change: int):
+    probabilities = softmax(energies * beta)
+    energies_copy = energies.copy()
+    remaining_to_change = num_change
+    indices_to_change = []
+    while remaining_to_change > 0:
+        if np.count_nonzero(probabilities) < remaining_to_change:
+            highest_e_index = np.argsort(energies_copy)[-1]
+            energies_copy[highest_e_index] = -np.inf
+            probabilities = softmax(energies_copy * beta)
+            indices_to_change.append(highest_e_index)
+            remaining_to_change -= 1
+        else:
+            indices_to_change += list(
+                np.random.choice(
+                    len(energies),
+                    size=remaining_to_change,
+                    replace=False,
+                    p=probabilities,
+                )
+            )
+            remaining_to_change = 0
+    return indices_to_change
 
 
 def create_element_swapped_particles(
@@ -91,32 +113,20 @@ def create_element_swapped_particles(
     assert atoms.calc is not None
     if mask is None:
         mask = np.ones(len(atoms))
+
     energies = (
         atoms.get_potential_energies() * beta
     )  # no minus sign since we want to swap the highest energy atom
     energies[mask == 0] = -np.inf
     probabilities = apply_mask_to_probabilities(softmax(energies), mask)
     logging.debug(f"Probabilities: {probabilities}, beta: {beta}")
+    num_change = get_how_many_to_change(sum(mask), beta)
     ensemble = [duplicate_atoms(atoms)]
     to_generate = num_particles - 1
-    if np.count_nonzero(probabilities) == 1:
-        idx = np.argmax(probabilities).astype(int)
-        sweep_over_max_energy_atom = sweep_all_elements(atoms, idx, z_table)
-        ensemble.extend(sweep_over_max_energy_atom)
-        already_generated_num = len(ensemble)
-        to_generate = num_particles - already_generated_num
-        logging.debug(f"Sweeping particle {idx} with {to_generate} particles")
-        logging.debug(f"Generating additional {to_generate} particles")
-        probabilities = apply_mask_to_probabilities(np.ones(len(atoms)), mask)
 
-    if to_generate > 0:
-        non_zero_ps = np.count_nonzero(probabilities)
-        for _ in range(to_generate):
-            num_change = min(get_how_many_to_change(sum(mask), beta), non_zero_ps)
-            logging.debug(f"Num change: {num_change}")
-            ensemble.append(
-                swap_single_particle(atoms, probabilities, num_change, z_table)
-            )
+    for _ in range(to_generate):
+        to_change = choose_indices_to_change(energies, beta, num_change)
+        ensemble.append(swap_single_particle(atoms, to_change, z_table))
     return ensemble
 
 
