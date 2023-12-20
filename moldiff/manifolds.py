@@ -161,6 +161,34 @@ class PointCloudPrior(PriorManifold):
         )  # (n_atoms, 3)
         return -forces
 
+    def calculate_energy(self, positions: np.ndarray | torch.Tensor) -> npt.ArrayLike:
+        """
+        Calculate the energy of the current positions
+        """
+        points, precision_matrix = self.points, self.point_shape.precision_matrix
+        if isinstance(positions, torch.Tensor):
+            dtype, device = positions.dtype, positions.device
+            points = torch.tensor(points, dtype=dtype, device=device)
+            precision_matrix = torch.tensor(
+                precision_matrix, dtype=dtype, device=device
+            )
+
+        differences = (
+            positions[:, None, :] - points[None, :, :]
+        )  # (n_atoms, n_points, 3)
+        distances = (
+            differences @ precision_matrix * differences
+        )  # (n_atoms, n_points, 3)
+        distances = reduce(distances, "i j k -> i j", "sum")  # (n_atoms, n_points)
+        exp_argument = distances * -0.5
+
+        if isinstance(exp_argument, torch.Tensor):
+            energy = exp_argument.exp().sum(dim=-1)
+            return -torch.log(energy)
+        else:
+            energy = np.exp(exp_argument).sum(axis=-1)
+            return -np.log(energy)
+
     @staticmethod
     def get_weights(distance_matrix):
         if isinstance(distance_matrix, torch.Tensor):
