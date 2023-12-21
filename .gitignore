@@ -164,3 +164,4 @@ launch_*
 slurm*
 
 git-credentials
+dvc-credentials
