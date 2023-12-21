@@ -1,5 +1,5 @@
 FROM pytorch/pytorch
-EXPOSE 5000
+# EXPOSE 5000
 
 RUN conda install -c anaconda git
 

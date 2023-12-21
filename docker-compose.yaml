@@ -1,0 +1,11 @@
+services:
+  moldiff:
+    image: moldiff
+    restart: always
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
