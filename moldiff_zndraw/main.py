@@ -8,7 +8,7 @@ import numpy as np
 import requests
 from pydantic import BaseModel, Field
 from zndraw import ZnDraw
-from zndraw.data import atoms_from_json, atoms_to_json
+from zndraw.frame import Frame
 from zndraw.modify import UpdateScene
 
 from .utils import (
@@ -19,6 +19,12 @@ from .utils import (
 )
 
 setup_logger()
+
+def atoms_from_json(atoms_json: dict) -> ase.Atoms:
+    return Frame.from_dict(atoms_json).to_atoms()
+
+def atoms_to_json(atoms: ase.Atoms) -> dict:
+    return Frame.from_atoms(atoms).to_dict()
 
 
 def _format_data_from_zndraw(vis: ZnDraw, **kwargs) -> dict:

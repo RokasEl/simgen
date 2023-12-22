@@ -5,7 +5,14 @@ from typing import Any, Dict
 import ase
 import numpy as np
 from pydantic import BaseModel
-from zndraw.data import atoms_from_json, atoms_to_json
+from zndraw.frame import Frame
+
+
+def atoms_from_json(atoms_json: dict) -> ase.Atoms:
+    return Frame.from_dict(atoms_json).to_atoms()
+
+def atoms_to_json(atoms: ase.Atoms) -> dict:
+    return Frame.from_atoms(atoms).to_dict()
 
 
 @dataclass
