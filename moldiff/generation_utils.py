@@ -134,7 +134,7 @@ def get_edge_array_and_neighbour_numbers(atoms: ase.Atoms, mult: float = 1.2):
     cutoffs = natural_cutoffs(atoms, mult=mult)  # type: ignore
     edge_array = neighbor_list("ij", atoms, cutoffs)
     edge_array = np.stack(edge_array, axis=1)
-    neighbour_numbers = np.bincount(edge_array[:, 0])
+    neighbour_numbers = np.bincount(edge_array[:, 0], minlength=len(atoms))
     return edge_array, neighbour_numbers
 
 
