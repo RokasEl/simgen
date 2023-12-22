@@ -21,10 +21,16 @@ from .utils import (
 setup_logger()
 
 def atoms_from_json(atoms_json: dict) -> ase.Atoms:
-    return Frame.from_dict(atoms_json).to_atoms()
+    try:
+        return Frame.from_dict(atoms_json).to_atoms()
+    except:
+        return ase.Atoms()
 
 def atoms_to_json(atoms: ase.Atoms) -> dict:
-    return Frame.from_atoms(atoms).to_dict()
+    try:
+        return Frame.from_atoms(atoms).to_dict()
+    except:
+        return {}
 
 
 def _format_data_from_zndraw(vis: ZnDraw, **kwargs) -> dict:

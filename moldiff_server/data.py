@@ -9,10 +9,16 @@ from zndraw.frame import Frame
 
 
 def atoms_from_json(atoms_json: dict) -> ase.Atoms:
-    return Frame.from_dict(atoms_json).to_atoms()
+    try:
+        return Frame.from_dict(atoms_json).to_atoms()
+    except:
+        return ase.Atoms()
 
 def atoms_to_json(atoms: ase.Atoms) -> dict:
-    return Frame.from_atoms(atoms).to_dict()
+    try:
+        return Frame.from_atoms(atoms).to_dict()
+    except:
+        return {}
 
 
 @dataclass
