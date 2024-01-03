@@ -1,4 +1,3 @@
-import json
 import logging
 
 from flask import Flask, Response, jsonify, request
@@ -11,7 +10,7 @@ from moldiff.utils import (
 )
 
 from . import endpoints
-from .data import parse_request
+from .data import jsonify_atoms, settings_from_json
 from .utils import make_mace_config_jsonifiable
 
 app = Flask(__name__)
@@ -51,13 +50,14 @@ def get_models():
 
 @app.route("/run", methods=["POST"])
 def run():
-    raw_data = json.loads(request.data)
-    formatted_request = parse_request(raw_data)
+    raw_data = request.data
+    formatted_request = settings_from_json(raw_data)
     endpoint_name = formatted_request.run_type
     endpoint = getattr(endpoints, endpoint_name)
     moldiff_calc, hydromace_calc = get_models()
     logging.info(f"Received request: {formatted_request.run_type}.\nRunning...")
     results = endpoint(formatted_request, moldiff_calc, hydromace_calc)
+    results = jsonify_atoms(*results)
     logging.info("Completed. Sending back the response.")
     return results
 

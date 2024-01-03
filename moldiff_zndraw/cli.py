@@ -1,12 +1,18 @@
+import logging
 import pathlib
+from enum import Enum
+from typing import Optional
 
 import typer
 from zndraw.settings import GlobalConfig
 
-app = typer.Typer()
+from .local_server import app
+from .utils import get_default_mace_models_path
+
+cli = typer.Typer()
 
 
-@app.command()
+@cli.command()
 def init(path: str = typer.Argument(..., help="Path to clone of MACE-models repo")):
     print(f"Initializing moldiff ZnDraw integration with the model path at {path}")
 
@@ -34,5 +40,27 @@ def init(path: str = typer.Argument(..., help="Path to clone of MACE-models repo
     print(f"Saved configuration to {path}")
 
 
+class Device(str, Enum):
+    cpu = "cpu"
+    cuda = "cuda"
+
+
+@cli.command()
+def launch(
+    path: Optional[str] = typer.Option(
+        None, "--path", help="Path to clone of MACE-models repo"
+    ),
+    device: Device = typer.Option(Device.cpu),
+    port: int = 5000,
+):
+    if path is None:
+        path = get_default_mace_models_path()
+    app.config["device"] = device.value
+    app.config["mace_models_path"] = path
+    url = f"http://127.0.0.1:{port}"
+    logging.info(f"Starting generation server at {url}")
+    app.run(port=port, host="0.0.0.0")
+
+
 if __name__ == "__main__":
-    app()
+    cli()

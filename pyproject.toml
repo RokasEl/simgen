@@ -27,5 +27,4 @@ server = ["ray[serve]>=2.6.3"]
 
 
 [project.scripts]
-moldiff_init = "moldiff_zndraw.cli:app"
-moldiff_server = "moldiff_server.cli:cli"
+simgen = "moldiff_zndraw.cli:cli"
