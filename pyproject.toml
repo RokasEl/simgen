@@ -19,12 +19,10 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moldiff", "energy_model", "moldiff_zndraw", "moldiff_server", "airss_baseline"]
+include = ["moldiff", "energy_model", "moldiff_zndraw", "airss_baseline"]
 namespaces = false
 
-[project.optional-dependencies]
-server = ["ray[serve]>=2.6.3"]
 
 
 [project.scripts]
-simgen = "moldiff_zndraw.cli:cli"
+simgen = "moldiff_zndraw.cli:cli_app"

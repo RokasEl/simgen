@@ -1,11 +1,8 @@
 import json
-import logging
 from dataclasses import dataclass
-from typing import Any, Dict
 
 import ase
 import numpy as np
-from pydantic import BaseModel
 from zndraw.frame import Frame
 
 

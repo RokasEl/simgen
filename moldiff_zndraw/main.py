@@ -1,4 +1,3 @@
-import json
 import logging
 import typing as t
 
@@ -10,14 +9,17 @@ from zndraw import ZnDraw
 from zndraw.frame import Frame
 from zndraw.modify import UpdateScene
 
-from .data import format_run_settings, settings_to_json
-from .endpoints import generate, hydrogenate, relax
-from .utils import (
+from moldiff.atoms_cleanup import (
+    remove_isolated_atoms_using_covalent_radii,
+)
+from moldiff.generation_utils import (
     calculate_path_length,
     interpolate_points,
-    remove_isolated_atoms_using_covalent_radii,
-    setup_logger,
 )
+from moldiff.utils import setup_logger
+
+from .data import format_run_settings, settings_to_json
+from .endpoints import generate, hydrogenate, relax
 
 setup_logger()
 
@@ -27,13 +29,6 @@ def atoms_from_json(atoms_json: dict) -> ase.Atoms:
         return Frame.from_dict(atoms_json).to_atoms()
     except:
         return ase.Atoms()
-
-
-def atoms_to_json(atoms: ase.Atoms) -> dict:
-    try:
-        return Frame.from_atoms(atoms).to_dict()
-    except:
-        return {}
 
 
 def _post_request(address: str, json_data_str: str, name: str):
@@ -77,7 +72,7 @@ class Generate(UpdateScene):
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
     )
-    atom_number: t.Union[FixedNumber, PerAngstrom] = FixedNumber(number_of_atoms=5)
+    atom_number: t.Union[FixedNumber, PerAngstrom]
     guiding_force_multiplier: float = Field(
         1.0,
         ge=1.0,
@@ -99,17 +94,10 @@ class Generate(UpdateScene):
             modified_atoms = [
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
-            vis.log(f"Received back {len(modified_atoms)} atoms.")
-            vis.extend(modified_atoms)
-            vis.play()
-
         else:
-            self._run_generation(vis, generation_calc, run_settings)
-
-    def _run_generation(self, vis: ZnDraw, generation_calc, run_settings):
-        modified_atoms = generate(run_settings, generation_calc)
-        vis.extend(modified_atoms)
+            modified_atoms = generate(run_settings, generation_calc)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.extend(modified_atoms)
         vis.play()
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
@@ -208,14 +196,11 @@ class Relax(UpdateScene):
             modified_atoms = [
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
-            vis.log(f"Received back {len(modified_atoms)} atoms.")
-            vis.extend(modified_atoms)
-            vis.play()
         else:
             modified_atoms = relax(run_settings, generation_calc)
-            vis.extend(modified_atoms)
-            vis.log(f"Received back {len(modified_atoms)} atoms.")
-            vis.play()
+        vis.extend(modified_atoms)
+        vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.play()
 
 
 class Hydrogenate(UpdateScene):
@@ -239,16 +224,13 @@ class Hydrogenate(UpdateScene):
             modified_atoms = [
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
-            vis.log(f"Received back {len(modified_atoms)} atoms.")
-            vis.extend(modified_atoms)
-            vis.play()
         else:
             modified_atoms = hydrogenate(
                 run_settings, generation_calc, hydrogenation_calc
             )
-            vis.extend(modified_atoms)
-            vis.log(f"Received back {len(modified_atoms)} atoms.")
-            vis.play()
+        vis.extend(modified_atoms)
+        vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.play()
 
 
 run_types = t.Union[Generate, Relax, Hydrogenate]
@@ -258,10 +240,6 @@ class DiffusionModelling(UpdateScene):
     discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
-    path: str = Field(
-        "/home/rokas/Programming/MACE-Models",
-        description="Path to the repo holding the required models",
-    )
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
         vis.log("Sending request to inference server.")
@@ -269,9 +247,37 @@ class DiffusionModelling(UpdateScene):
             del vis[vis.step + 1 :]
         if calculators is None:
             calculators = dict()
+        vis.bookmarks = vis.bookmarks | {
+            vis.step: f"Running {self.run_type.discriminator}"
+        }
         self.run_type.run(
             vis=vis,
             client_address=self.client_address,
+            calculators=calculators,
+        )
+        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+
+    @staticmethod
+    def get_documentation_url() -> str:
+        return "https://rokasel.github.io/EnergyMolecularDiffusion"
+
+
+class DiffusionModellingNoPort(UpdateScene):
+    discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
+    run_type: run_types = Field(discriminator="discriminator")
+
+    def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+        vis.log("Sending request to inference server.")
+        if len(vis) > vis.step + 1:
+            del vis[vis.step + 1 :]
+        if calculators is None:
+            raise ValueError("No calculators provided")
+        vis.bookmarks = vis.bookmarks | {
+            vis.step: f"Running {self.run_type.discriminator}"
+        }
+        self.run_type.run(
+            vis=vis,
+            client_address=None,
             calculators=calculators,
         )
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
