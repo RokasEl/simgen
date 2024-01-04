@@ -1,6 +1,6 @@
 services:
-  moldiff:
-    image: moldiff
+  simgen:
+    image: simgen
     restart: always
     deploy:
       resources:
