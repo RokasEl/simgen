@@ -25,7 +25,8 @@ RUN pip install --upgrade dvc-s3 dvc
 RUN dvc remote modify origin --local access_key_id 04278cea04be32b7479600c1d5d76b2d61d1a2a7
 RUN dvc remote modify origin --local secret_access_key 04278cea04be32b7479600c1d5d76b2d61d1a2a7
 RUN dvc pull
-RUN simgen init . --add-to-zndraw False
 
 RUN pip install --upgrade git+https://github.com/zincware/zndraw@main
-CMD simgen connect --url "https://zndraw.icp.uni-stuttgart.de/" --device "gpu"
+RUN simgen init . --no-add-to-zndraw
+
+CMD simgen connect --url "https://zndraw.icp.uni-stuttgart.de/" --device "cuda"
