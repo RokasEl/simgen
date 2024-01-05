@@ -15,6 +15,8 @@ dependencies = [
     "fire>=0.5.0",
     "frozendict>=2.3.7",
     "typer[all]>=0.7.0",
+    "mace-models>=0.1.1",
+    "hydromace @ git+https://github.com/RokasEl/hydromace/",
 ]
 
 [tool.setuptools.packages.find]
