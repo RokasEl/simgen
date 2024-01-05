@@ -4,16 +4,16 @@ FROM pytorch/pytorch
 RUN conda install -c anaconda git
 
 RUN pip install git+https://github.com/ACEsuit/mace.git
-RUN git clone https://github.com/RokasEl/MACE-Models
-WORKDIR /workspace/MACE-Models
-RUN dvc pull
 
 COPY ./ /workspace/simgen
 WORKDIR /workspace/simgen
 RUN pip install .
 RUN pip install --upgrade git+https://github.com/zincware/zndraw@main
 
+
+RUN git clone https://github.com/RokasEl/MACE-Models /workspace/MACE-Models
 WORKDIR /workspace/MACE-Models
+RUN dvc pull
 RUN simgen init . --no-add-to-zndraw
 
 CMD simgen connect --url "https://zndraw.icp.uni-stuttgart.de/" \
