@@ -22,6 +22,8 @@ models = {}
 def _moldiff_factory():
     return get_mace_similarity_calculator(
         app.config["mace_models_path"],
+        app.config["mace_model_name"],
+        app.config["reference_data_name"],
         num_reference_mols=-1,
         device=app.config["device"],
     )

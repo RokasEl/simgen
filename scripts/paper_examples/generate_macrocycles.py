@@ -9,6 +9,7 @@ torch.set_default_dtype(torch.float64)
 from ase import Atoms
 
 from moldiff.utils import (
+    get_hydromace_calculator,
     get_mace_similarity_calculator,
     get_system_torch_device_str,
     initialize_mol,
@@ -31,10 +32,8 @@ from moldiff.manifolds import CirclePrior, MultivariateGaussianPrior
 
 
 def main(
-    mace_model_path,
-    reference_data_path,
+    model_repo_path,
     num_reference_mols,
-    hydromace_model_path,
     save_path,
     prior_gaussian_covariance,
     num_molecules,
@@ -43,19 +42,19 @@ def main(
     restorative_force_multiplier,
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
-    pretrained_mace_path = mace_model_path
     rng = np.random.default_rng(0)
-    data_path = reference_data_path
     score_model = get_mace_similarity_calculator(
-        pretrained_mace_path,
-        data_path,
+        model_repo_path,
+        model_name="medium_spice",
+        data_name="simgen_reference_data_medium",
         num_reference_mols=num_reference_mols,
         num_to_sample_uniformly_per_size=2,
         device=DEVICE,
         rng=rng,
     )
-    hydromace_model = torch.load(hydromace_model_path, map_location=DEVICE)
-    hydromace_calc = HydroMaceCalculator(hydromace_model, device=DEVICE)
+    hydromace_calc = get_hydromace_calculator(
+        model_repo_path=model_repo_path, device=DEVICE
+    )
     integration_parameters = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
     destination = save_path
     os.makedirs(destination, exist_ok=True)
@@ -103,28 +102,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--mace_model_path",
-        help="Path to MACE model",
+        "--model_repo_path",
+        help="Path to MACE-models repo",
         type=str,
-        default="./models/SPICE_sm_inv_neut_E0_swa.model",
-    )
-    parser.add_argument(
-        "--reference_data_path",
-        help="Path to reference data",
-        type=str,
-        default="../data/qm9_full_data.xyz",
+        required=True,
     )
     parser.add_argument(
         "--num_reference_mols",
         help="Number of reference molecules to use",
         type=int,
         default=256,
-    )
-    parser.add_argument(
-        "--hydromace_path",
-        help="Path to hydrogenation model",
-        type=str,
-        default="./models/qm9_and_spice_hydrogenation.model",
     )
     parser.add_argument(
         "--save_path",
@@ -163,10 +150,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     covariance_matrix = np.diag(args.prior_gaussian_covariance).astype(np.float64)
     main(
-        mace_model_path=args.mace_model_path,
-        reference_data_path=args.reference_data_path,
+        model_repo_path=args.model_repo_path,
         num_reference_mols=args.num_reference_mols,
-        hydromace_model_path=args.hydromace_path,
         save_path=args.save_path,
         prior_gaussian_covariance=covariance_matrix,
         num_molecules=args.num_molecules,

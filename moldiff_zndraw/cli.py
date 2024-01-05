@@ -81,6 +81,12 @@ def launch(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
+    mace_model_name: str = typer.Option(
+        "small_spice", help="Name of MACE model to use"
+    ),
+    reference_data_name: str = typer.Option(
+        "similarity_reference_data_small", help="Name of reference data to use"
+    ),
     device: Device = typer.Option(Device.cpu),
     port: int = 5000,
 ):
@@ -88,6 +94,8 @@ def launch(
         path = get_default_mace_models_path()
     app.config["device"] = device.value
     app.config["mace_models_path"] = path
+    app.config["mace_model_name"] = mace_model_name
+    app.config["reference_data_name"] = reference_data_name
     url = f"http://127.0.0.1:{port}"
     logging.info(f"Starting generation server at {url}")
     app.run(port=port, host="0.0.0.0")
@@ -101,6 +109,12 @@ def connect(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
+    mace_model_name: str = typer.Option(
+        "small_spice", help="Name of MACE model to use"
+    ),
+    reference_data_name: str = typer.Option(
+        "simgen_reference_data_small", help="Name of reference data to use"
+    ),
     device: Device = typer.Option(Device.cpu),
 ):
     print("Loading models...")
@@ -109,7 +123,11 @@ def connect(
 
     models = {
         "generation": get_mace_similarity_calculator(
-            path, num_reference_mols=-1, device=device.value
+            path,
+            mace_model_name,
+            reference_data_name,
+            num_reference_mols=-1,
+            device=device.value,
         ),
         "hydrogenation": get_hydromace_calculator(path, device=device.value),
     }

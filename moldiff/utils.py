@@ -145,6 +145,8 @@ def setup_logger(
 
 def get_mace_similarity_calculator(
     model_repo_path: str,
+    model_name: str = "small_spice",
+    data_name: str = "simgen_reference_data_small",
     remove_halogenides: bool = True,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
@@ -152,13 +154,16 @@ def get_mace_similarity_calculator(
     rng: np.random.Generator | None = None,
 ) -> MaceSimilarityCalculator:
     """
+    model_name: name of the model to load from the model_repo_path. Either small_spice, medium_spice
+    data_name: name of the reference data to load from the model_repo_path. Either simgen_reference_data_small or simgen_reference_data_medium
     remove_halogenides: whether to remove Hydrogen and Fluorine from the reference data, this is only for evaluation purposes. Should be True for all other purposes.
     """
-    mace_model = get_loaded_mace_model(model_repo_path, device)
+    mace_model = get_loaded_mace_model(model_repo_path, model_name, device)
     if rng is None:
         rng = np.random.default_rng(0)
     reference_data = get_reference_data(
         model_repo_path,
+        data_name,
         rng,
         num_reference_mols,
         num_to_sample_uniformly_per_size,
@@ -181,8 +186,16 @@ def get_hydromace_calculator(model_repo_path, device):
         return None
 
 
-def get_loaded_mace_model(model_repo_path: str, device: str = "cuda") -> nn.Module:
-    model_loader = zntrack.from_rev("mace_model", remote=model_repo_path)
+def get_loaded_mace_model(
+    model_repo_path: str = "https://github.com/RokasEl/MACE-Models",
+    model_name="medium_spice",
+    device: str = "cuda",
+) -> nn.Module:
+    if model_repo_path.startswith("https://github.com"):
+        logging.info(
+            "Loading model from github. Consider cloning the repo locally for faster loading."
+        )
+    model_loader = zntrack.from_rev(model_name, remote=model_repo_path)
     pretrained_model = model_loader.get_model()
     model_config = get_mace_config(pretrained_model)
     model = ScaleShiftMACE(
@@ -206,6 +219,7 @@ def get_loaded_mace_model(model_repo_path: str, device: str = "cuda") -> nn.Modu
 
 def get_reference_data(
     model_repo_path: str,
+    data_name: str = "simgen_reference_data_small",
     rng: np.random.Generator | None = None,
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
@@ -214,7 +228,7 @@ def get_reference_data(
     """
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
-    data_loader = zntrack.from_rev("reference_data", remote=model_repo_path)
+    data_loader = zntrack.from_rev(data_name, remote=model_repo_path)
     all_data = data_loader.get_atoms()
     if remove_halogenides:
         all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
