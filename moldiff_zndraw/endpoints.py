@@ -16,12 +16,12 @@ from moldiff.hydrogenation import (
 )
 from moldiff.manifolds import PointCloudPrior
 from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff_server import (
+from moldiff_zndraw import (
     DEFAULT_GENERATION_PARAMS,
     DEFAULT_INTEGRATION_PARAMS,
 )
 
-from .data import RequestAtoms, jsonify_atoms
+from .data import RequestAtoms
 from .utils import get_edge_array
 
 
@@ -48,7 +48,7 @@ def generate(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *arg
         do_final_cleanup=False,
         scaffold=request.atoms,
     )
-    return jsonify_atoms(*trajectory)
+    return trajectory
 
 
 def hydrogenate(
@@ -69,7 +69,7 @@ def hydrogenate(
     relaxed_atoms_with_h = relax_hydrogens(
         [to_relax], moldiff_calc, num_steps=request.max_steps, max_step=0.1
     )[0]
-    return jsonify_atoms(hydrogenated, relaxed_atoms_with_h)
+    return [hydrogenated, relaxed_atoms_with_h]
 
 
 def relax(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
@@ -91,4 +91,4 @@ def relax(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
     for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
         relaxation_trajectory.append(relaxed_atoms.copy())
     logging.info("Finished relaxation")
-    return jsonify_atoms(*relaxation_trajectory)
+    return relaxation_trajectory

@@ -29,6 +29,10 @@ app = typer.Typer()
 @app.command()
 def main(
     model_repo_path: str = typer.Option(..., help="Path to MACE model repository"),
+    model_name: str = typer.Option("medium_spice", help="Name of MACE model to use"),
+    reference_data_name: str = typer.Option(
+        "simgen_reference_data_medium", help="Name of reference data to use"
+    ),
     save_path: str = typer.Option(
         ..., help="Path to save generated molecules, can be file or directory"
     ),
@@ -54,6 +58,8 @@ def main(
     rng = np.random.default_rng(0)
     score_model = get_mace_similarity_calculator(
         model_repo_path,
+        model_name=model_name,
+        data_name=reference_data_name,
         num_reference_mols=-1,
         device=DEVICE,
         rng=rng,
@@ -63,11 +69,13 @@ def main(
     )
     integration_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
 
-    save_path = Path(save_path)
+    save_path: Path = Path(save_path)
     if save_path.is_dir():
         save_path.mkdir(parents=True, exist_ok=True)
 
-    prior_gaussian_covariance = np.diag(prior_gaussian_covariance).astype(float)
+    prior_gaussian_covariance: np.ndarray = np.diag(prior_gaussian_covariance).astype(
+        float
+    )
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):

@@ -162,3 +162,6 @@ results
 # slurm launch files
 launch_*
 slurm*
+
+git-credentials
+dvc-credentials
