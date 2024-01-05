@@ -18,17 +18,10 @@ from moldiff.generation_utils import (
 )
 from moldiff.utils import setup_logger
 
-from .data import format_run_settings, settings_to_json
+from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
 
 setup_logger()
-
-
-def atoms_from_json(atoms_json: dict) -> ase.Atoms:
-    try:
-        return Frame.from_dict(atoms_json).to_atoms()
-    except:
-        return ase.Atoms()
 
 
 def _post_request(address: str, json_data_str: str, name: str):

@@ -17,6 +17,7 @@ dependencies = [
     "typer[all]>=0.7.0",
     "mace-models>=0.1.2",
     "hydromace @ git+https://github.com/RokasEl/hydromace/",
+    "znframe",
 ]
 
 [tool.setuptools.packages.find]

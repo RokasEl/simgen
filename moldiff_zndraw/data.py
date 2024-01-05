@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import ase
 import numpy as np
-from zndraw.frame import Frame
+from znframe import Frame
 
 
 def atoms_from_json(atoms_json: dict) -> ase.Atoms:
