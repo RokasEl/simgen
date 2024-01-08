@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Optional
 
 import typer
+import zntrack
 from zndraw import ZnDraw
 from zndraw.settings import GlobalConfig
 
@@ -115,6 +116,7 @@ def connect(
     reference_data_name: str = typer.Option(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
+    add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
     device: Device = typer.Option(Device.cpu),
 ):
     print("Loading models...")
@@ -132,8 +134,13 @@ def connect(
         "hydrogenation": get_hydromace_calculator(path, device=device.value),
     }
     print("Connecting to ZnDraw...")
+    linkers_added = False
     while True:
         vis = ZnDraw(url=url)
+        if add_linkers and not linkers_added:
+            linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+            vis.extend(linkers)
+            linkers_added = True
         vis.register_modifier(
             DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
         )

@@ -44,12 +44,10 @@ def get_default_mace_models_path() -> str:
         config = DefaultGenerationParams.from_file(config_path)  # type: ignore
         path = config.default_model_path
         if path is None:
-            raise ValueError(
-                "No default model path set, specify the path to the MACE-models repo with --path"
-            )
+            print("No default model path found, will use remote models")
+            return "https://github.com/RokasEl/MACE-Models"
         else:
             return path
     else:
-        raise ValueError(
-            "Could not find a config file at ~/.zincware/zndraw/config.json, specify the path to the MACE-models repo with --path"
-        )
+        print("No config file found, will use remote models")
+        return "https://github.com/RokasEl/MACE-Models"

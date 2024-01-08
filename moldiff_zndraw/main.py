@@ -230,11 +230,12 @@ run_types = t.Union[Generate, Relax, Hydrogenate]
 
 
 class DiffusionModelling(UpdateScene):
-    # """
-    # Click on `run type` to select the type of run to perform.\n
-    # The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.\n
-    # Default values should be fine for most cases, however,\nincrease guiding force multiplier if the structure is not being generated correctly.
-    # """
+    """
+    Click on `run type` to select the type of run to perform.
+    The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
+    Default values should be fine for most cases, however, increase guiding force multiplier if the structure is not being generated correctly.
+    """
+
     discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
@@ -261,6 +262,12 @@ class DiffusionModelling(UpdateScene):
 
 
 class DiffusionModellingNoPort(UpdateScene):
+    """
+    Click on `run type` to select the type of run to perform.
+    The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
+    Default values should be fine for most cases, however, increase guiding force multiplier if the structure is not being generated correctly.
+    """
+
     discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
     run_type: run_types = Field(discriminator="discriminator")
 

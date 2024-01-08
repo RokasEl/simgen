@@ -332,9 +332,9 @@ def get_mace_config(model) -> dict:
 
 def get_system_torch_device_str() -> str:
     # the hierarchy is: MPS > CUDA > CPU
-    if torch.backends.mps.is_available():
+    if torch.backends.mps.is_built():
         return "mps"
-    elif torch.cuda.is_available():
+    elif torch.backends.cuda.is_built():
         return "cuda"
     else:
         print("No GPU acceleration available, using CPU")
