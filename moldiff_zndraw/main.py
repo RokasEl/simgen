@@ -70,7 +70,7 @@ class Generate(UpdateScene):
         1.0,
         ge=1.0,
         le=10.0,
-        description="Multiplier for guiding force. Default value should be enough for simple geometries.",
+        description="Multiplier for guiding force. Increase if molecule falls apart.",
     )
 
     def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:
@@ -231,9 +231,8 @@ run_types = t.Union[Generate, Relax, Hydrogenate]
 
 class DiffusionModelling(UpdateScene):
     """
-    Click on `run type` to select the type of run to perform.
+    Click on `run type` to select the type of run to perform.\n
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
-    Default values should be fine for most cases, however, increase guiding force multiplier if the structure is not being generated correctly.
     """
 
     discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
@@ -263,9 +262,8 @@ class DiffusionModelling(UpdateScene):
 
 class DiffusionModellingNoPort(UpdateScene):
     """
-    Click on `run type` to select the type of run to perform.
+    Click on `run type` to select the type of run to perform.\n
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
-    Default values should be fine for most cases, however, increase guiding force multiplier if the structure is not being generated correctly.
     """
 
     discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
