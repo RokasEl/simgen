@@ -82,23 +82,23 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="using-moldiff-with-zndraw">Using <code>moldiff</code> with ZnDraw</h1>
+                <h1 id="using-simgen-with-zndraw">Using <code>simgen</code> with ZnDraw</h1>
 <h2 id="web-app">Web app</h2>
-<p>This section describes how to generate structures using the online web app, hosted <a href="https://zndraw.pythonf.de/">here</a>. If something breaks, clicking EXIT and reloading the page should fix it. See the in-app help (<code>i</code> button in the top bar) for general ZnDraw controls.</p>
+<p>This section describes how to generate structures using the online web app, hosted <a href="https://zndraw.icp.uni-stuttgart.de/">here</a>. If something breaks, clicking EXIT and reloading the page should fix it. See the in-app help (<code>i</code> button in the top bar) for general ZnDraw controls.</p>
 <h3 id="generation-menu">Generation menu</h3>
 <p>To access the generation menu, click 'Interaction' in the left sidebar and select 'DiffusionModelling' from the 'Method' dropdown menu.</p>
 <p>The modifier has three run types:</p>
 <ul>
-<li><strong>Generate</strong>: The primary function for structure generation using similarity kernels.</li>
+<li><strong>Generate</strong>: Generates structures using similarity kernels.</li>
 <li><strong>Hydrogenate</strong>: Adds hydrogen atoms to the active structure.</li>
 <li><strong>Relax</strong>: Uses a pretrained MACE force field to relax/optimize the active structure after hydrogenation.</li>
 </ul>
-<p>Clicking "Run modifier" will perform the selected action on the active structure.</p>
+<p>Clicking "Run modifier" will perform the selected action on the active structure. In addition, a clickable bookmark is created at the start of each run, allowing you to easily revert to the original structure.</p>
 <h4 id="generation-settings">Generation Settings</h4>
 <ul>
-<li><strong>Num Steps</strong>: Controls diffusive steps taken during generation. Higher values result in slower generation. 50 is a good starting point.</li>
+<li><strong>Num Steps</strong>: Controls the number of integrator steps during generation. 50 is a good starting point.</li>
 <li><strong>Atom Number</strong>: Can be static or determined dynamically based on the length of the guiding curve (see <a href="#guided-generation">Guided Generation</a>). Select 'PerAngstrom' for dynamic atom number.</li>
-<li><strong>Guiding Force Multiplier</strong>: Adjusts how strongly atoms are attracted to the guiding point cloud. Default of 1 works for simple tasks. Increase for more complicated guiding curves.</li>
+<li><strong>Guiding Force Multiplier</strong>: Adjusts how strongly atoms are attracted to the guiding point cloud. Default of 1 works for simple tasks. Increase if the generated structure is fragmented.</li>
 </ul>
 <h4 id="hydrogenate-and-relax-settings">Hydrogenate and Relax Settings</h4>
 <p>These modes have just one parameter controlling the number of relaxation steps. Defaults are suitable for most uses.</p>
@@ -106,24 +106,26 @@
 <p>We can create structures with arbitrary shapes by providing a point cloud prior. To draw a guiding curve:</p>
 <ol>
 <li>Press <code>x</code> or the 'Draw' button to enter drawing mode.</li>
-<li>Click atoms to place guiding points.</li>
-<li>Create a curve by adding multiple points.</li>
+<li><strong>Click on atoms</strong> to place guiding points.</li>
 <li>Press <code>x</code> or the 'Draw' button to exit drawing mode.</li>
 </ol>
-<p>To modify the guiding curve, click a point to select it. Then you can move it with the on-screen controls. When a point is selected:</p>
+<p>A smooth curve that passes through all the guiding points is automatically generated.</p>
+<p>The guiding curve is easy to modify:</p>
 <ul>
-<li><code>Backspace</code> deletes the point.</li>
-<li><code>d</code> duplicates the point, inserting it between current and previous.</li>
+<li>Clicking a point selects it:</li>
+<li>Move the selected point with the on-screen controls.</li>
+<li>Delete the selected point by clicking <code>Backspace</code>.</li>
+<li>Clicking the blue midpoint of a segment inserts a new point.</li>
 </ul>
-<p>To place free points in 3D space:</p>
+<p>To place points in free 3D space:</p>
 <ol>
 <li>Create a canvas using the Drawing option in the left sidebar.</li>
 <li>Now in drawing mode, points will snap to the canvas.</li>
 </ol>
 <p>To modify the canvas:</p>
 <ul>
-<li>Press f to enter canvas mode, where the canvas stays fixed as you move atoms with the mouse.</li>
-<li>Hold shift and scroll to resize the canvas and access movement controls.</li>
+<li>Press f to enter canvas mode. Now you can rotate and translate the atoms while the canvas stays fixed.</li>
+<li>Hold shift and scroll to resize the canvas and access on-screen controls.</li>
 </ul>
               
             </div>
