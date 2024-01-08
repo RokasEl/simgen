@@ -4,8 +4,8 @@ import pathlib
 import ase
 import numpy as np
 
-from moldiff.hydrogenation import get_edge_array_from_atoms
-from moldiff_zndraw import DefaultGenerationParams
+from simgen.hydrogenation import get_edge_array_from_atoms
+from simgen_zndraw import DefaultGenerationParams
 
 
 def get_edge_array(atoms: ase.Atoms) -> np.ndarray:

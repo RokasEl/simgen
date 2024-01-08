@@ -16,8 +16,8 @@ from mace.modules import interaction_classes
 from mace.modules.models import ScaleShiftMACE
 from torch import nn
 
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.generation_utils import (
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.generation_utils import (
     RadialDistanceTransformBlock,
     remove_elements,
 )

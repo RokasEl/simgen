@@ -13,7 +13,7 @@ from energy_model.diffusion_tools import (
     HeunSampler,
     SamplerNoiseParameters,
 )
-from moldiff.utils import get_system_torch_device_str, initialize_mol
+from simgen.utils import get_system_torch_device_str, initialize_mol
 
 DEVICE = get_system_torch_device_str()
 

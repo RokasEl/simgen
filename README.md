@@ -26,7 +26,7 @@ There are two main ways to use the package: via a command line interface or inte
 
 ### Interactive use
 
-We host an online gpu-powered web-tool at [https://zndraw.icp.uni-stuttgart.de/](https://zndraw.icp.uni-stuttgart.de/). The documentation for the web-tool is available [here](LINK).
+We host an online gpu-powered web-tool at [https://zndraw.icp.uni-stuttgart.de/](https://zndraw.icp.uni-stuttgart.de/). The documentation for the web-tool is available [here](https://RokasEl.github.io/simgen/).
 
 However, you can also run ZnDraw locally. After installing the package, you can run the following command to start the web-tool:
 

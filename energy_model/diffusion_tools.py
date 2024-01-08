@@ -17,7 +17,7 @@ from mace.modules.utils import (
 )
 from mace.tools.scatter import scatter_mean, scatter_sum
 
-from moldiff.utils import get_system_torch_device_str
+from simgen.utils import get_system_torch_device_str
 
 # Many ideas from https://github.com/NVlabs/edm/
 

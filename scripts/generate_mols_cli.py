@@ -5,14 +5,12 @@ import ase.io as ase_io
 import numpy as np
 import typer
 
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import (
-    calculate_restorative_force_strength,
-)
-from moldiff.integrators import IntegrationParameters
-from moldiff.manifolds import MultivariateGaussianPrior
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import (
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.integrators import IntegrationParameters
+from simgen.manifolds import MultivariateGaussianPrior
+from simgen.particle_filtering import ParticleFilterGenerator
+from simgen.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
     get_system_torch_device_str,

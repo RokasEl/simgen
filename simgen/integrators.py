@@ -4,8 +4,8 @@ from dataclasses import dataclass
 import torch
 from mace.data import AtomicData
 
-from moldiff.manifolds import PriorManifold
-from moldiff.utils import get_system_torch_device_str
+from simgen.manifolds import PriorManifold
+from simgen.utils import get_system_torch_device_str
 
 # if get_system_torch_device_str() == "mps":
 #     torch.set_default_dtype(torch.float32)

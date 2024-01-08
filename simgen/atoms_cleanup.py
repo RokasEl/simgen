@@ -7,15 +7,15 @@ from ase.neighborlist import natural_cutoffs, neighbor_list
 from ase.optimize import LBFGS
 from mace.tools import AtomicNumberTable
 
-from moldiff.element_swapping import (
+from simgen.element_swapping import (
     collect_particles,
     sweep_all_elements,
 )
-from moldiff.generation_utils import (
+from simgen.generation_utils import (
     duplicate_atoms,
     get_edge_array_and_neighbour_numbers,
 )
-from moldiff.hydrogenation import (
+from simgen.hydrogenation import (
     hydrogenate_deterministically,
     hydrogenate_hydromace,
 )

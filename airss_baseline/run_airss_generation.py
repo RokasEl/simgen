@@ -8,7 +8,7 @@ from utils import (
     get_composition_counter,
 )
 
-from moldiff.manifolds import MultivariateGaussianPrior
+from simgen.manifolds import MultivariateGaussianPrior
 
 most_common_qm9_composition = "C7H10O2"
 

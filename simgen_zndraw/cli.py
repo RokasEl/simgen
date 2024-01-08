@@ -9,12 +9,12 @@ import zntrack
 from zndraw import ZnDraw
 from zndraw.settings import GlobalConfig
 
-from moldiff.utils import (
+from simgen.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
 )
-from moldiff_zndraw import DefaultGenerationParams
-from moldiff_zndraw.main import DiffusionModellingNoPort
+from simgen_zndraw import DefaultGenerationParams
+from simgen_zndraw.main import DiffusionModellingNoPort
 
 from .local_server import app
 from .utils import get_default_mace_models_path
@@ -35,7 +35,7 @@ def init(
         True, help="Add the DiffusionModelling class to the list of ZnDraw modifiers"
     ),
 ):
-    print(f"Initializing moldiff ZnDraw integration with the model path at {path}")
+    print(f"Initializing SiMGen ZnDraw integration with the model path at {path}")
 
     config_path = "~/.simgen/config.json"
     config_path = pathlib.Path(config_path).expanduser()
@@ -66,7 +66,7 @@ def init(
         else:
             config = GlobalConfig()
 
-        pkg = "moldiff_zndraw.main.DiffusionModelling"
+        pkg = "simgen_zndraw.main.DiffusionModelling"
         config.modify_functions = list(
             filter(
                 lambda x: not "DiffusionModelling".lower() in x.lower(),

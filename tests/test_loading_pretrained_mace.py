@@ -2,9 +2,9 @@ import numpy as np
 import torch
 from e3nn import o3
 
-from moldiff.generation_utils import batch_atoms
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import get_system_torch_device_str
+from simgen.generation_utils import batch_atoms
+from simgen.particle_filtering import ParticleFilterGenerator
+from simgen.utils import get_system_torch_device_str
 
 from .fixtures import (
     loaded_model,

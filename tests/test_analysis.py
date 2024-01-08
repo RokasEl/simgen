@@ -5,13 +5,13 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 
-from moldiff.analysis import (
+from simgen.analysis import (
     BaseReport,
     RDKitReport,
     analyse_base,
     analyse_rdkit,
 )
-from moldiff.utils import initialize_mol
+from simgen.utils import initialize_mol
 
 
 def test_analyse_base():

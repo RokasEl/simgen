@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import initialize_mol
+from simgen.particle_filtering import ParticleFilterGenerator
+from simgen.utils import initialize_mol
 
 
 def test_merge_scaffold_and_create_mask():

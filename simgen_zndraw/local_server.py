@@ -2,7 +2,7 @@ import logging
 
 from flask import Flask, Response, jsonify, request
 
-from moldiff.utils import (
+from simgen.utils import (
     get_hydromace_calculator,
     get_mace_config,
     get_mace_similarity_calculator,
@@ -19,7 +19,7 @@ setup_logger()
 models = {}
 
 
-def _moldiff_factory():
+def _simgen_factory():
     return get_mace_similarity_calculator(
         app.config["mace_models_path"],
         app.config["mace_model_name"],
@@ -37,11 +37,11 @@ def _hydromace_factory():
 
 def get_models():
     try:
-        moldiff_calc = models.get("moldiff_calc", _moldiff_factory())
+        simgen_calc = models.get("simgen_calc", _simgen_factory())
         hydromace_calc = models.get("hydromace_calc", _hydromace_factory())
-        models["moldiff_calc"] = moldiff_calc
+        models["simgen_calc"] = simgen_calc
         models["hydromace_calc"] = hydromace_calc
-        return moldiff_calc, hydromace_calc
+        return simgen_calc, hydromace_calc
     except KeyError as e:
         logging.error("Could not get the model due to missing app config")
         raise e
@@ -56,9 +56,9 @@ def run():
     formatted_request = settings_from_json(raw_data)
     endpoint_name = formatted_request.run_type
     endpoint = getattr(endpoints, endpoint_name)
-    moldiff_calc, hydromace_calc = get_models()
+    simgen_calc, hydromace_calc = get_models()
     logging.info(f"Received request: {formatted_request.run_type}.\nRunning...")
-    results = endpoint(formatted_request, moldiff_calc, hydromace_calc)
+    results = endpoint(formatted_request, simgen_calc, hydromace_calc)
     results = jsonify_atoms(*results)
     logging.info("Completed. Sending back the response.")
     return results
@@ -66,6 +66,6 @@ def run():
 
 @app.route("/config", methods=["GET"])
 def get_config() -> Response:
-    moldiff_calc, _ = get_models()
-    mace_config = get_mace_config(moldiff_calc.model)
+    simgen_calc, _ = get_models()
+    mace_config = get_mace_config(simgen_calc.model)
     return jsonify(make_mace_config_jsonifiable(mace_config))

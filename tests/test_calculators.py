@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from moldiff.calculators import MaceSimilarityCalculator
+from simgen.calculators import MaceSimilarityCalculator
 
 
 @pytest.mark.parametrize(

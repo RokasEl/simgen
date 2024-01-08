@@ -6,7 +6,7 @@ from ase import Atoms
 from mace.tools import AtomicNumberTable
 from scipy.special import softmax  # type: ignore
 
-from moldiff.generation_utils import duplicate_atoms
+from simgen.generation_utils import duplicate_atoms
 
 
 class SwappingAtomicNumberTable(AtomicNumberTable):

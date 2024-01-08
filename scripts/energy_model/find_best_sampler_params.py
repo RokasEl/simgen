@@ -5,7 +5,7 @@ import ase.io as aio
 import pandas as pd
 from rdkit import Chem
 
-from moldiff.analysis import RDKitReport, analyse_base, get_rdkit_mol
+from simgen.analysis import RDKitReport, analyse_base, get_rdkit_mol
 
 
 def main(size_sweep_path="./results/energy_model/sweep_sampler_params/"):

@@ -9,14 +9,14 @@ from zndraw import ZnDraw
 from zndraw.frame import Frame
 from zndraw.modify import UpdateScene
 
-from moldiff.atoms_cleanup import (
+from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
 )
-from moldiff.generation_utils import (
+from simgen.generation_utils import (
     calculate_path_length,
     interpolate_points,
 )
-from moldiff.utils import setup_logger
+from simgen.utils import setup_logger
 
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
@@ -70,7 +70,7 @@ class Generate(UpdateScene):
         1.0,
         ge=1.0,
         le=10.0,
-        description="Multiplier for guiding force. Increase if molecule falls apart.",
+        description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
     def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:

@@ -5,18 +5,16 @@ import numpy as np
 from ase.optimize import LBFGS
 from hydromace.interface import HydroMaceCalculator
 
-from moldiff.atoms_cleanup import attach_calculator, relax_hydrogens
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.generation_utils import (
-    calculate_restorative_force_strength,
-)
-from moldiff.hydrogenation import (
+from simgen.atoms_cleanup import attach_calculator, relax_hydrogens
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.hydrogenation import (
     hydrogenate_deterministically,
     hydrogenate_hydromace,
 )
-from moldiff.manifolds import PointCloudPrior
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff_zndraw import (
+from simgen.manifolds import PointCloudPrior
+from simgen.particle_filtering import ParticleFilterGenerator
+from simgen_zndraw import (
     DEFAULT_GENERATION_PARAMS,
     DEFAULT_INTEGRATION_PARAMS,
 )
@@ -25,17 +23,17 @@ from .data import RequestAtoms
 from .utils import get_edge_array
 
 
-def generate(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
+def generate(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args):
     prior = PointCloudPrior(request.points, beta=DEFAULT_GENERATION_PARAMS.prior_beta)
     restorative_force = (
         calculate_restorative_force_strength(request.num_atoms_to_add)
         * request.restorative_force_multiplier
     )
     generator = ParticleFilterGenerator(
-        moldiff_calc,
+        simgen_calc,
         prior,
         integration_parameters=DEFAULT_INTEGRATION_PARAMS,
-        device=moldiff_calc.device,
+        device=simgen_calc.device,
         restorative_force_strength=restorative_force,
         num_steps=request.max_steps,
     )
@@ -53,7 +51,7 @@ def generate(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *arg
 
 def hydrogenate(
     request: RequestAtoms,
-    moldiff_calc: MaceSimilarityCalculator,
+    simgen_calc: MaceSimilarityCalculator,
     hydromace_calc: HydroMaceCalculator | None,
 ):
     if hydromace_calc is not None:
@@ -67,12 +65,12 @@ def hydrogenate(
         )
     to_relax = hydrogenated.copy()
     relaxed_atoms_with_h = relax_hydrogens(
-        [to_relax], moldiff_calc, num_steps=request.max_steps, max_step=0.1
+        [to_relax], simgen_calc, num_steps=request.max_steps, max_step=0.1
     )[0]
     return [hydrogenated, relaxed_atoms_with_h]
 
 
-def relax(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
+def relax(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args):
     atoms = request.atoms
     atom_ids = request.atom_ids
     if len(atom_ids) != 0:
@@ -83,7 +81,7 @@ def relax(request: RequestAtoms, moldiff_calc: MaceSimilarityCalculator, *args):
         logging.info("Will relax all atoms")
         mask = np.zeros(len(atoms)).astype(bool)
     relaxed_atoms = attach_calculator(
-        [atoms], moldiff_calc, calculation_type="mace", mask=mask
+        [atoms], simgen_calc, calculation_type="mace", mask=mask
     )[0]
     logging.info("Relaxing structure")
     relaxation_trajectory = [relaxed_atoms.copy()]

@@ -3,8 +3,8 @@ import pathlib
 import typing as t
 from dataclasses import dataclass
 
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.integrators import IntegrationParameters
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.integrators import IntegrationParameters
 
 
 @dataclass()

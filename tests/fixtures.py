@@ -11,8 +11,8 @@ from mace.modules.models import MACE, ScaleShiftMACE
 from mace.tools import AtomicNumberTable
 from mace.tools.utils import get_atomic_number_table_from_zs
 
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.utils import get_system_torch_device_str, initialize_mol
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.utils import get_system_torch_device_str, initialize_mol
 
 DEVICE = get_system_torch_device_str()
 torch.set_default_dtype(torch.float64)

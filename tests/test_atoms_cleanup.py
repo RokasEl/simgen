@@ -4,7 +4,7 @@ import pytest
 import torch
 from mace.tools import AtomicNumberTable
 
-from moldiff.atoms_cleanup import (
+from simgen.atoms_cleanup import (
     get_higest_energy_unswapped_idx,
     get_swapping_candidates,
     relax_elements,
@@ -12,8 +12,8 @@ from moldiff.atoms_cleanup import (
     remove_isolated_atoms_fixed_cutoff,
     remove_isolated_atoms_using_covalent_radii,
 )
-from moldiff.generation_utils import batch_atoms
-from moldiff.utils import get_system_torch_device_str, initialize_mol
+from simgen.generation_utils import batch_atoms
+from simgen.utils import get_system_torch_device_str, initialize_mol
 
 from .fixtures import (
     loaded_mace_similarity_calculator,

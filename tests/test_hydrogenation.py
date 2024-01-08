@@ -3,12 +3,12 @@ import pytest
 from ase import Atoms
 from ase.data import covalent_radii
 
-from moldiff.hydrogenation import (
+from simgen.hydrogenation import (
     add_hydrogens_to_atoms,
     check_hydrogen_position_is_valid,
     get_exclusion_radii,
 )
-from moldiff.utils import initialize_mol
+from simgen.utils import initialize_mol
 
 
 @pytest.mark.parametrize(
