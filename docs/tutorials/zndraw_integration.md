@@ -41,6 +41,7 @@ The guiding curve is easy to modify:
  - Clicking a point selects it:
      - Move the selected point with the on-screen controls.
      - Delete the selected point by clicking `Backspace`.
+     - Deselect a point by clicking `Esc` on your keyboard.
  - Clicking the blue midpoint of a segment inserts a new point.
 
 To place points in free 3D space:
