@@ -43,11 +43,6 @@ def get_default_mace_models_path() -> str:
         print(f"Found an existing configuration at {config_path}")
         config = DefaultGenerationParams.from_file(config_path)  # type: ignore
         path = config.default_model_path
-        if path is None:
-            print("No default model path found, will use remote models")
-            return "https://github.com/RokasEl/MACE-Models"
-        else:
-            return path
+        return path
     else:
-        print("No config file found, will use remote models")
-        return "https://github.com/RokasEl/MACE-Models"
+        return DefaultGenerationParams.default_model_path

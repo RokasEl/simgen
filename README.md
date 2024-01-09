@@ -12,13 +12,11 @@ The package can be installed using `pip`:
 pip install simgen
 ```
 
-In addition, you need to install [MACE](https://github.com/ACEsuit/mace) and PyTorch packages.
+Note that the analysis code requires the [rdkit](https://github.com/rdkit/rdkit) package, which is not installed by default. To install it, run
 
 ```sh
-pip install --upgrade torch
-pip install git+https://github.com/ACEsuit/mace.git
+pip install simgen[all]
 ```
-
 
 ## Usage
 
@@ -31,12 +29,12 @@ We host an online gpu-powered web-tool at [https://zndraw.icp.uni-stuttgart.de/]
 However, you can also run ZnDraw locally. After installing the package, you can run the following command to start the web-tool:
 
 ```sh
-zndraw --port 1234 --no-browser PATH_TO_XYZ_FILE # Path is optional
+zndraw --port 1234 PATH_TO_XYZ_FILE # Path is optional; Use --no-browser for remote servers
 # Do the next command in a separate terminal
 simgen connect --device cuda # default port is 1234
 ```
 
-If you want to try out linker generation, you add the `--add-linkers` flag to the `simgen connect` command.
+If you want to try out linker generation, add the `--add-linkers` flag to the `simgen connect` command.
 
 Run `simgen connect --help` for more information.
 

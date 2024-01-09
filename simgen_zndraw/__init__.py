@@ -14,7 +14,7 @@ class DefaultGenerationParams:
     swapping_table_freqs: t.Tuple[int, ...] = (1, 1, 1)
     num_particles: int = 10
     particle_swap_frequency: int = 4
-    default_model_path: str | None = None
+    default_model_path: str = "https://github.com/RokasEl/MACE-Models"
 
     @property
     def swapping_table(self):

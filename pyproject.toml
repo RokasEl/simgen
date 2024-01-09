@@ -26,7 +26,10 @@ where = ["."]
 include = ["simgen", "energy_model", "simgen_zndraw", "airss_baseline"]
 namespaces = false
 
-
-
 [project.scripts]
 simgen = "simgen_zndraw.cli:cli_app"
+
+[project.optional-dependencies]
+all = [
+    "rdkit>=2023.9.4"
+]
