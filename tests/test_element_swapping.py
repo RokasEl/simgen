@@ -5,18 +5,19 @@ import pytest
 from mace.tools import AtomicNumberTable
 from scipy.special import softmax  # type: ignore
 
-from moldiff.element_swapping import (
+from simgen.element_swapping import (
     SwappingAtomicNumberTable,
     catch_diverged_energies,
     choose_indices_to_change,
     create_element_swapped_particles,
     get_element_and_swap_frequency_dictionary,
+    get_how_many_to_change,
     get_new_element_from_swapping_dictionary,
     replace_array_elements_at_indices_with_other_elements_in_z_table,
     swap_single_particle,
     sweep_all_elements,
 )
-from moldiff.utils import initialize_mol
+from simgen.utils import initialize_mol
 
 z_table = AtomicNumberTable([1, 6, 7, 8, 9])
 
@@ -166,7 +167,8 @@ def test_create_element_swapped_particles_doesnt_swap_masked_particles():
     swaps = [x.numbers == atoms.numbers for x in ensemble]
     swaps = ~np.stack(swaps, axis=0)
     assert swaps[:, 6:].sum() == 0
-    assert np.allclose(swaps[:, :6].sum(axis=0), 99 / 6, rtol=0.5)
+    num_changed = get_how_many_to_change(6, 1)
+    assert np.allclose(swaps[:, :6].sum(axis=0), num_changed * 99 / 6, rtol=0.5)
 
 
 @pytest.mark.parametrize(

@@ -4,8 +4,8 @@ import pathlib
 import ase
 import numpy as np
 
-from moldiff.hydrogenation import get_edge_array_from_atoms
-from moldiff_zndraw import DefaultGenerationParams
+from simgen.hydrogenation import get_edge_array_from_atoms
+from simgen_zndraw import DefaultGenerationParams
 
 
 def get_edge_array(atoms: ase.Atoms) -> np.ndarray:
@@ -43,13 +43,6 @@ def get_default_mace_models_path() -> str:
         print(f"Found an existing configuration at {config_path}")
         config = DefaultGenerationParams.from_file(config_path)  # type: ignore
         path = config.default_model_path
-        if path is None:
-            raise ValueError(
-                "No default model path set, specify the path to the MACE-models repo with --path"
-            )
-        else:
-            return path
+        return path
     else:
-        raise ValueError(
-            "Could not find a config file at ~/.zincware/zndraw/config.json, specify the path to the MACE-models repo with --path"
-        )
+        return DefaultGenerationParams.default_model_path

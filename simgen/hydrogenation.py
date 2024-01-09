@@ -7,7 +7,7 @@ from frozendict import frozendict
 from hydromace.interface import HydroMaceCalculator
 from scipy.stats import binom
 
-from moldiff.hydrogenation_deterministic import build_xae_molecule
+from simgen.hydrogenation_deterministic import build_xae_molecule
 
 NATURAL_VALENCES = frozendict(
     {1: 1, 6: 4, 7: 3, 8: 2, 9: 1, 15: 3, 16: 2, 17: 1, 35: 1, 53: 1}

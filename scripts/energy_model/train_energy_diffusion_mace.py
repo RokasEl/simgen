@@ -22,7 +22,7 @@ from energy_model.diffusion_tools import (
     initialize_model,
 )
 from energy_model.training_tools import get_default_optimizer
-from moldiff.utils import get_system_torch_device_str, setup_logger
+from simgen.utils import get_system_torch_device_str, setup_logger
 
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
 DEVICE = get_system_torch_device_str()

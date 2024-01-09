@@ -9,14 +9,14 @@ from zndraw import ZnDraw
 from zndraw.frame import Frame
 from zndraw.modify import UpdateScene
 
-from moldiff.atoms_cleanup import (
+from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
 )
-from moldiff.generation_utils import (
+from simgen.generation_utils import (
     calculate_path_length,
     interpolate_points,
 )
-from moldiff.utils import setup_logger
+from simgen.utils import setup_logger
 
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
@@ -70,7 +70,7 @@ class Generate(UpdateScene):
         1.0,
         ge=1.0,
         le=10.0,
-        description="Multiplier for guiding force. Default value should be enough for simple geometries.",
+        description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
     def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:
@@ -230,11 +230,11 @@ run_types = t.Union[Generate, Relax, Hydrogenate]
 
 
 class DiffusionModelling(UpdateScene):
-    # """
-    # Click on `run type` to select the type of run to perform.\n
-    # The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.\n
-    # Default values should be fine for most cases, however,\nincrease guiding force multiplier if the structure is not being generated correctly.
-    # """
+    """
+    Click on `run type` to select the type of run to perform.\n
+    The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
+    """
+
     discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
@@ -261,6 +261,11 @@ class DiffusionModelling(UpdateScene):
 
 
 class DiffusionModellingNoPort(UpdateScene):
+    """
+    Click on `run type` to select the type of run to perform.\n
+    The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
+    """
+
     discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
     run_type: run_types = Field(discriminator="discriminator")
 

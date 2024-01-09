@@ -16,8 +16,8 @@ from mace.modules import interaction_classes
 from mace.modules.models import ScaleShiftMACE
 from torch import nn
 
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.generation_utils import (
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.generation_utils import (
     RadialDistanceTransformBlock,
     remove_elements,
 )
@@ -332,9 +332,9 @@ def get_mace_config(model) -> dict:
 
 def get_system_torch_device_str() -> str:
     # the hierarchy is: MPS > CUDA > CPU
-    if torch.backends.mps.is_available():
+    if torch.backends.mps.is_built():
         return "mps"
-    elif torch.cuda.is_available():
+    elif torch.backends.cuda.is_built():
         return "cuda"
     else:
         print("No GPU acceleration available, using CPU")

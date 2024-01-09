@@ -1,6 +1,6 @@
 import pytest
 
-from moldiff.temperature_annealing import ExponentialThermostat
+from simgen.temperature_annealing import ExponentialThermostat
 
 
 def test_expontial_thermostat():

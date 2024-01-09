@@ -3,8 +3,8 @@ import pytest
 import torch
 from mace.tools.scatter import scatter_sum
 
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.utils import get_system_torch_device_str, initialize_mol
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.utils import get_system_torch_device_str, initialize_mol
 
 from .fixtures import (
     loaded_mace_similarity_calculator,
@@ -211,6 +211,7 @@ def test_adjust_element_sigmas(loaded_mace_similarity_calculator):
 
 def test_scatter_element_sigmas(loaded_mace_similarity_calculator):
     mol = initialize_mol("HCCNONFH")
+    loaded_mace_similarity_calculator.adjust_element_sigmas({"H": 1.0, "C": 1.0})
     batched = loaded_mace_similarity_calculator.batch_atoms(mol)
     element_sigmas = loaded_mace_similarity_calculator.element_kernel_sigmas
     scatter_element_sigmas = loaded_mace_similarity_calculator._scatter_element_sigmas(
@@ -235,6 +236,7 @@ def test_element_sigmas_adjusts_the_distance_matrix(
     loaded_mace_similarity_calculator, training_molecules
 ):
     # first, get original distance matrix
+    loaded_mace_similarity_calculator.adjust_element_sigmas({"H": 1.0, "C": 1.0})
     embeddings = [
         get_embedding(loaded_mace_similarity_calculator, mol)
         for mol in training_molecules

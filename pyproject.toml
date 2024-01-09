@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "moldiff"
+name = "simgen"
 version = "0.1"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,14 +18,18 @@ dependencies = [
     "mace-models>=0.1.2",
     "hydromace @ git+https://github.com/RokasEl/hydromace/",
     "znframe",
+    "zndraw",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moldiff", "energy_model", "moldiff_zndraw", "airss_baseline"]
+include = ["simgen", "energy_model", "simgen_zndraw", "airss_baseline"]
 namespaces = false
 
-
-
 [project.scripts]
-simgen = "moldiff_zndraw.cli:cli_app"
+simgen = "simgen_zndraw.cli:cli_app"
+
+[project.optional-dependencies]
+all = [
+    "rdkit>=2023.9.4"
+]

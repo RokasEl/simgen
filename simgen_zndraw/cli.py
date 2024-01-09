@@ -5,15 +5,16 @@ from enum import Enum
 from typing import Optional
 
 import typer
+import zntrack
 from zndraw import ZnDraw
 from zndraw.settings import GlobalConfig
 
-from moldiff.utils import (
+from simgen.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
 )
-from moldiff_zndraw import DefaultGenerationParams
-from moldiff_zndraw.main import DiffusionModellingNoPort
+from simgen_zndraw import DefaultGenerationParams
+from simgen_zndraw.main import DiffusionModellingNoPort
 
 from .local_server import app
 from .utils import get_default_mace_models_path
@@ -34,7 +35,7 @@ def init(
         True, help="Add the DiffusionModelling class to the list of ZnDraw modifiers"
     ),
 ):
-    print(f"Initializing moldiff ZnDraw integration with the model path at {path}")
+    print(f"Initializing SiMGen ZnDraw integration with the model path at {path}")
 
     config_path = "~/.simgen/config.json"
     config_path = pathlib.Path(config_path).expanduser()
@@ -65,7 +66,7 @@ def init(
         else:
             config = GlobalConfig()
 
-        pkg = "moldiff_zndraw.main.DiffusionModelling"
+        pkg = "simgen_zndraw.main.DiffusionModelling"
         config.modify_functions = list(
             filter(
                 lambda x: not "DiffusionModelling".lower() in x.lower(),
@@ -115,6 +116,7 @@ def connect(
     reference_data_name: str = typer.Option(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
+    add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
     device: Device = typer.Option(Device.cpu),
 ):
     print("Loading models...")
@@ -132,8 +134,13 @@ def connect(
         "hydrogenation": get_hydromace_calculator(path, device=device.value),
     }
     print("Connecting to ZnDraw...")
+    linkers_added = False
     while True:
         vis = ZnDraw(url=url)
+        if add_linkers and not linkers_added:
+            linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+            vis.extend(linkers)
+            linkers_added = True
         vis.register_modifier(
             DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
         )

@@ -3,13 +3,13 @@ import os
 import numpy as np
 import torch
 
-from moldiff.particle_filtering import ParticleFilterGenerator
+from simgen.particle_filtering import ParticleFilterGenerator
 
 torch.set_default_dtype(torch.float64)
 from ase import Atoms
 
-from moldiff.atoms_cleanup import cleanup_atoms
-from moldiff.utils import (
+from simgen.atoms_cleanup import cleanup_atoms
+from simgen.utils import (
     get_loaded_mace_model,
     get_mace_similarity_calculator,
     get_system_torch_device_str,
@@ -24,12 +24,10 @@ import logging
 import ase.io as ase_io
 from hydromace.interface import HydroMaceCalculator
 
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import (
-    calculate_restorative_force_strength,
-)
-from moldiff.integrators import IntegrationParameters
-from moldiff.manifolds import CirclePrior, MultivariateGaussianPrior
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.integrators import IntegrationParameters
+from simgen.manifolds import CirclePrior, MultivariateGaussianPrior
 
 """
 To generate with an untrained model, we'll have to hack into the ParticleFilterGenerator class and do the

@@ -5,14 +5,12 @@ import ase.io as ase_io
 import numpy as np
 import typer
 
-from moldiff.element_swapping import SwappingAtomicNumberTable
-from moldiff.generation_utils import (
-    calculate_restorative_force_strength,
-)
-from moldiff.integrators import IntegrationParameters
-from moldiff.manifolds import MultivariateGaussianPrior
-from moldiff.particle_filtering import ParticleFilterGenerator
-from moldiff.utils import (
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.integrators import IntegrationParameters
+from simgen.manifolds import MultivariateGaussianPrior
+from simgen.particle_filtering import ParticleFilterGenerator
+from simgen.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
     get_system_torch_device_str,
@@ -28,7 +26,9 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    model_repo_path: str = typer.Option(..., help="Path to MACE model repository"),
+    model_repo_path: str = typer.Option(
+        "https://github.com/RokasEl/MACE-Models", help="Path to MACE model repository"
+    ),
     model_name: str = typer.Option("medium_spice", help="Name of MACE model to use"),
     reference_data_name: str = typer.Option(
         "simgen_reference_data_medium", help="Name of reference data to use"
@@ -36,8 +36,8 @@ def main(
     save_path: str = typer.Option(
         ..., help="Path to save generated molecules, can be file or directory"
     ),
-    prior_gaussian_covariance: list[float] = typer.Option(
-        default=[1.0, 1.0, 2.0],
+    prior_gaussian_covariance: tuple[float, float, float] = typer.Option(
+        default=(1.0, 1.0, 2.0),
         help="Covariance matrix for prior Gaussian distribution",
     ),
     num_molecules: int = typer.Option(
@@ -73,9 +73,7 @@ def main(
     if save_path.is_dir():
         save_path.mkdir(parents=True, exist_ok=True)
 
-    prior_gaussian_covariance: np.ndarray = np.diag(prior_gaussian_covariance).astype(
-        float
-    )
+    prior_gaussian_covariance_arr = np.diag(prior_gaussian_covariance).astype(float)
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
@@ -85,7 +83,7 @@ def main(
         restorative_force_strength = calculate_restorative_force_strength(size)
         particle_filter = ParticleFilterGenerator(
             score_model,
-            guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance),
+            guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance_arr),
             integration_parameters=integration_params,
             restorative_force_strength=restorative_force_strength,
             num_steps=num_integration_steps,

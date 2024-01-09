@@ -8,22 +8,22 @@ import torch
 from hydromace.interface import HydroMaceCalculator
 from mace.tools import AtomicNumberTable
 
-from moldiff.atoms_cleanup import cleanup_atoms
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.element_swapping import (
+from simgen.atoms_cleanup import cleanup_atoms
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.element_swapping import (
     collect_particles,
     create_element_swapped_particles,
 )
-from moldiff.generation_utils import (
+from simgen.generation_utils import (
     batch_atoms,
     batch_to_correct_dtype,
     duplicate_atoms,
     get_atoms_from_batch,
 )
-from moldiff.integrators import HeunIntegrator, IntegrationParameters
-from moldiff.manifolds import MultivariateGaussianPrior, PriorManifold
-from moldiff.temperature_annealing import ExponentialThermostat
-from moldiff.utils import get_system_torch_device_str
+from simgen.integrators import HeunIntegrator, IntegrationParameters
+from simgen.manifolds import MultivariateGaussianPrior, PriorManifold
+from simgen.temperature_annealing import ExponentialThermostat
+from simgen.utils import get_system_torch_device_str
 
 # if get_system_torch_device_str() == "mps":
 #     torch.set_default_dtype(torch.float32)

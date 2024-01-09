@@ -5,8 +5,8 @@ import torch
 from ase import Atoms
 from mace.tools import AtomicNumberTable
 
-from moldiff.calculators import MaceSimilarityCalculator
-from moldiff.generation_utils import (
+from simgen.calculators import MaceSimilarityCalculator
+from simgen.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     calculate_path_length,
@@ -16,7 +16,7 @@ from moldiff.generation_utils import (
     interpolate_points,
     remove_elements,
 )
-from moldiff.utils import get_system_torch_device_str, initialize_mol
+from simgen.utils import get_system_torch_device_str, initialize_mol
 
 
 def test_calculate_path_length():

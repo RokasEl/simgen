@@ -8,7 +8,7 @@ from ase.calculators.mixing import LinearCombinationCalculator
 from ase.calculators.morse import MorsePotential
 from ase.optimize import LBFGS
 
-from moldiff.manifolds import StandardGaussianPrior
+from simgen.manifolds import StandardGaussianPrior
 
 from .calculators import MopacCalculator, RestorativeCalculator
 

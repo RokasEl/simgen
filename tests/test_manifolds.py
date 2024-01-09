@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from moldiff.manifolds import (
+from simgen.manifolds import (
     MultivariateGaussianPrior,
     PointCloudPrior,
     StandardGaussianPrior,

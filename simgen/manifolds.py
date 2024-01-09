@@ -120,8 +120,6 @@ class PointCloudPrior(PriorManifold):
         """
         Initialise the atom positions randomly around the point cloud
         """
-        if len(molecule) < len(self.points):
-            warnings.warn("More points than atoms, some points will be unused")
         mol = molecule.copy()
         replace = len(mol) > len(self.points)
         atom_centres = np.random.choice(len(self.points), len(mol), replace=replace)

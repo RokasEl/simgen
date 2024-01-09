@@ -8,12 +8,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from moldiff.analysis import (
+from simgen.analysis import (
     analyse_base,
     analyse_calculator,
     analyse_rdkit,
 )
-from moldiff.utils import (
+from simgen.utils import (
     get_mace_similarity_calculator,
     get_system_torch_device_str,
 )

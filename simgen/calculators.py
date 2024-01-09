@@ -18,7 +18,7 @@ from mace.modules.models import MACE
 from mace.tools import AtomicNumberTable
 from mace.tools.scatter import scatter_sum
 
-from moldiff.generation_utils import (
+from simgen.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     batch_to_correct_dtype,

@@ -4,7 +4,7 @@ import torch
 from e3nn import o3
 from mace.modules import interaction_classes
 
-from moldiff.utils import get_mace_config
+from simgen.utils import get_mace_config
 
 from .fixtures import mace_model, training_molecules, z_table
 
@@ -43,7 +43,7 @@ def test_get_mace_config_of_remote_model():
     import zntrack
 
     model_loader = zntrack.from_rev(
-        "mace_model", remote="/home/rokas/Programming/MACE-Models", rev="main"
+        "ani500k_small", remote="/home/rokas/Programming/MACE-Models", rev="main"
     )
     pretrained_model = model_loader.get_model()
 
