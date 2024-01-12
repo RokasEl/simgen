@@ -8,7 +8,8 @@ RUN pip install git+https://github.com/ACEsuit/mace.git
 COPY ./ /workspace/simgen
 WORKDIR /workspace/simgen
 RUN pip install .
-RUN pip install --upgrade git+https://github.com/zincware/zndraw@main
+RUN pip install --upgrade git+https://github.com/zincware/zndraw@fix-last-frame
+
 
 
 RUN git clone https://github.com/RokasEl/MACE-Models /workspace/MACE-Models
