@@ -152,6 +152,9 @@ class Generate(UpdateScene):
         atom_number_determination_type: str,
         atom_parameter_value: int | float,
     ) -> int:
+        logging.debug(
+            f"Getting how many atoms to add {atom_number_determination_type}, {atom_parameter_value}"
+        )
         if atom_number_determination_type == "FixedNumber":
             return int(atom_parameter_value)
         elif atom_number_determination_type == "PerAngstrom":
