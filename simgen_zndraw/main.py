@@ -282,6 +282,7 @@ class DiffusionModellingNoPort(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+        logging.info("-" * 72)
         vis.log("Sending request to inference server.")
         logging.info(f"Vis token: {vis.token}")
         logging.info("Accessing vis and vis.step for the first time")
@@ -300,6 +301,7 @@ class DiffusionModellingNoPort(UpdateScene):
         )
         logging.info("Accessing vis.append when removing isolated atoms")
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+        logging.info("-" * 72)
 
     @staticmethod
     def get_documentation_url() -> str:
