@@ -91,7 +91,6 @@ class Generate(UpdateScene):
             modified_atoms = generate(run_settings, generation_calc)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         vis.extend(modified_atoms)
-        vis.play()
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
         points = self._handle_points(vis.points, vis.segments)
@@ -193,7 +192,6 @@ class Relax(UpdateScene):
             modified_atoms = relax(run_settings, generation_calc)
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
-        vis.play()
 
 
 class Hydrogenate(UpdateScene):
@@ -223,7 +221,6 @@ class Hydrogenate(UpdateScene):
             )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
-        vis.play()
 
 
 run_types = t.Union[Generate, Relax, Hydrogenate]
