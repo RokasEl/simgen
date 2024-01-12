@@ -283,6 +283,7 @@ class DiffusionModellingNoPort(UpdateScene):
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
         vis.log("Sending request to inference server.")
+        logging.info(f"Vis token: {vis.token}")
         logging.info("Accessing vis and vis.step for the first time")
         if len(vis) > vis.step + 1:
             del vis[vis.step + 1 :]
