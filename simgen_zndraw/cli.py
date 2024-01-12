@@ -135,7 +135,7 @@ def connect(
     }
     print("Connecting to ZnDraw...")
     linkers_added = False
-    vis = ZnDraw(url=url)
+    vis = ZnDraw(url=url, token="SIMGenModifier")
     if add_linkers and not linkers_added:
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
         vis.extend(linkers)
