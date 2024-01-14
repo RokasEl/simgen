@@ -11,7 +11,6 @@ RUN pip install .
 RUN pip install --upgrade git+https://github.com/zincware/zndraw@fix-last-frame
 
 
-
 RUN git clone https://github.com/RokasEl/MACE-Models /workspace/MACE-Models
 WORKDIR /workspace/MACE-Models
 RUN dvc pull
