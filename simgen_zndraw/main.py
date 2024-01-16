@@ -21,7 +21,9 @@ from simgen.utils import setup_logger
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
 
-setup_logger(name="simgen", directory="./logs", level=logging.DEBUG)
+setup_logger(
+    name="simgen", directory="./logs", tag="simgen_zndraw", level=logging.DEBUG
+)
 
 
 def _post_request(address: str, json_data_str: str, name: str):
@@ -75,10 +77,10 @@ class Generate(UpdateScene):
 
     def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:
         vis.log("Running Generation")
-        logging.info("Reached Generate run method")
+        logging.debug("Reached Generate run method")
         run_specific_settings = self._get_run_specific_settings(vis)
         run_settings = format_run_settings(vis, **run_specific_settings)
-        logging.info("Formated run settings; vis.atoms was accessed")
+        logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         if generation_calc is None:
             vis.log("No loaded generation model, will try posting remote request")
@@ -90,9 +92,9 @@ class Generate(UpdateScene):
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
         else:
-            logging.info("Calling generate function")
+            logging.debug("Calling generate function")
             modified_atoms = generate(run_settings, generation_calc)
-        logging.info("Generate function returned, adding atoms to vis")
+        logging.debug("Generate function returned, adding atoms to vis")
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         vis.extend(modified_atoms)
 
@@ -152,7 +154,7 @@ class Generate(UpdateScene):
         atom_number_determination_type: str,
         atom_parameter_value: int | float,
     ) -> int:
-        logging.info(
+        logging.debug(
             f"Getting how many atoms to add {atom_number_determination_type}, {atom_parameter_value}"
         )
         if atom_number_determination_type == "FixedNumber":
@@ -182,11 +184,11 @@ class Relax(UpdateScene):
 
     def run(self, vis: ZnDraw, client_address, calculators) -> None:
         vis.log("Running Relax")
-        logging.info("Reached Relax run method")
+        logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
             vis, run_type="relax", max_steps=self.max_steps
         )
-        logging.info("Formated run settings; vis.atoms was accessed")
+        logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         if generation_calc is None:
             vis.log("No loaded generation model, will try posting remote request")
@@ -198,9 +200,9 @@ class Relax(UpdateScene):
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
         else:
-            logging.info("Calling relax function")
+            logging.debug("Calling relax function")
             modified_atoms = relax(run_settings, generation_calc)
-        logging.info("Relax function returned, adding atoms to vis")
+        logging.debug("Relax function returned, adding atoms to vis")
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -210,12 +212,12 @@ class Hydrogenate(UpdateScene):
     max_steps: int = Field(30, ge=1)
 
     def run(self, vis: ZnDraw, client_address, calculators) -> None:
-        logging.info("Reached Hydrogenate run method")
+        logging.debug("Reached Hydrogenate run method")
         vis.log("Running Hydrogenate")
         run_settings = format_run_settings(
             vis, run_type="hydrogenate", max_steps=self.max_steps
         )
-        logging.info("Formated run settings; vis.atoms was accessed")
+        logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         hydrogenation_calc = calculators.get("hydrogenation", None)
 
@@ -229,11 +231,11 @@ class Hydrogenate(UpdateScene):
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
         else:
-            logging.info("Calling hydrogenate function")
+            logging.debug("Calling hydrogenate function")
             modified_atoms = hydrogenate(
                 run_settings, generation_calc, hydrogenation_calc
             )
-        logging.info("Hydrogenate function returned, adding atoms to vis")
+        logging.debug("Hydrogenate function returned, adding atoms to vis")
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -269,7 +271,7 @@ class DiffusionModelling(UpdateScene):
 
     @staticmethod
     def get_documentation_url() -> str:
-        return "https://rokasel.github.io/EnergyMolecularDiffusion"
+        return "https://rokasel.github.io/simgen"
 
 
 class DiffusionModellingNoPort(UpdateScene):
@@ -282,15 +284,15 @@ class DiffusionModellingNoPort(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-        logging.info("-" * 72)
+        logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
-        logging.info(f"Vis token: {vis.token}")
-        logging.info("Accessing vis and vis.step for the first time")
+        logging.debug(f"Vis token: {vis.token}")
+        logging.debug("Accessing vis and vis.step for the first time")
         if len(vis) > vis.step + 1:
             del vis[vis.step + 1 :]
         if calculators is None:
             raise ValueError("No calculators provided")
-        logging.info("Accessing vis.bookmarks")
+        logging.debug("Accessing vis.bookmarks")
         vis.bookmarks = vis.bookmarks | {
             vis.step: f"Running {self.run_type.discriminator}"
         }
@@ -299,10 +301,10 @@ class DiffusionModellingNoPort(UpdateScene):
             client_address=None,
             calculators=calculators,
         )
-        logging.info("Accessing vis.append when removing isolated atoms")
+        logging.debug("Accessing vis.append when removing isolated atoms")
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
-        logging.info("-" * 72)
+        logging.debug("-" * 72)
 
     @staticmethod
     def get_documentation_url() -> str:
-        return "https://rokasel.github.io/EnergyMolecularDiffusion"
+        return "https://rokasel.github.io/simgen"
