@@ -2,13 +2,12 @@ import logging
 import typing as t
 from functools import wraps
 
-import ase
 import numpy as np
 import requests
 import socketio.exceptions as socketio_exceptions
+from decorator import decorator
 from pydantic import BaseModel, Field
 from zndraw import ZnDraw
-from zndraw.frame import Frame
 from zndraw.modify import UpdateScene
 
 from simgen.atoms_cleanup import (
@@ -265,6 +264,24 @@ def run_with_reconnect(vis: ZnDraw, num_trials: int = 10):
 run_types = t.Union[Generate, Hydrogenate, Relax]
 
 
+@decorator
+def _run_with_recovery(func, num_retries=10, *args, **kwargs):
+    for i in range(num_retries):
+        try:
+            print("Trying to run")
+            print(args, kwargs)
+            return func(*args, **kwargs)
+        except (
+            socketio_exceptions.ConnectionError
+            or socketio_exceptions.BadNamespaceError
+            or socketio_exceptions.TimeoutError
+        ):
+            vis = args[1]
+            vis.log(f"Failed to connect to server, trying again ({i+1}/{num_retries})")
+            vis.reconnect()
+    raise requests.exceptions.ConnectionError("Failed to connect to server")
+
+
 class DiffusionModelling(UpdateScene):
     """
     Click on `run type` to select the type of run to perform.\n
@@ -275,35 +292,28 @@ class DiffusionModelling(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
 
+    @_run_with_recovery
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-        @run_with_reconnect(vis)
-        def _run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-            logging.debug("-" * 72)
-            vis.log("Sending request to inference server.")
-            logging.debug(f"Vis token: {vis.token}")
-            logging.debug("Accessing vis and vis.step for the first time")
-            if len(vis) > vis.step + 1:
-                del vis[vis.step + 1 :]
-            if calculators is None:
-                raise ValueError("No calculators provided")
-            logging.debug("Accessing vis.bookmarks")
-            vis.bookmarks = vis.bookmarks | {
-                vis.step: f"Running {self.run_type.discriminator}"
-            }
-            self.run_type.run(
-                vis=vis,
-                client_address=None,
-                calculators=calculators,
-            )
-            logging.debug("Accessing vis.append when removing isolated atoms")
-            vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
-            logging.debug("-" * 72)
-
-        _run(self, vis, calculators)
-
-    @staticmethod
-    def get_documentation_url() -> str:
-        return "https://rokasel.github.io/simgen"
+        logging.debug("-" * 72)
+        vis.log("Sending request to inference server.")
+        logging.debug(f"Vis token: {vis.token}")
+        logging.debug("Accessing vis and vis.step for the first time")
+        if len(vis) > vis.step + 1:
+            del vis[vis.step + 1 :]
+        if calculators is None:
+            raise ValueError("No calculators provided")
+        logging.debug("Accessing vis.bookmarks")
+        vis.bookmarks = vis.bookmarks | {
+            vis.step: f"Running {self.run_type.discriminator}"
+        }
+        self.run_type.run(
+            vis=vis,
+            client_address=None,
+            calculators=calculators,
+        )
+        logging.debug("Accessing vis.append when removing isolated atoms")
+        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+        logging.debug("-" * 72)
 
 
 class DiffusionModellingNoPort(UpdateScene):
@@ -315,32 +325,25 @@ class DiffusionModellingNoPort(UpdateScene):
     discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
     run_type: run_types = Field(discriminator="discriminator")
 
+    @_run_with_recovery
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-        @run_with_reconnect(vis)
-        def _run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-            logging.debug("-" * 72)
-            vis.log("Sending request to inference server.")
-            logging.debug(f"Vis token: {vis.token}")
-            logging.debug("Accessing vis and vis.step for the first time")
-            if len(vis) > vis.step + 1:
-                del vis[vis.step + 1 :]
-            if calculators is None:
-                raise ValueError("No calculators provided")
-            logging.debug("Accessing vis.bookmarks")
-            vis.bookmarks = vis.bookmarks | {
-                vis.step: f"Running {self.run_type.discriminator}"
-            }
-            self.run_type.run(
-                vis=vis,
-                client_address=None,
-                calculators=calculators,
-            )
-            logging.debug("Accessing vis.append when removing isolated atoms")
-            vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
-            logging.debug("-" * 72)
-
-        _run(self, vis, calculators)
-
-    @staticmethod
-    def get_documentation_url() -> str:
-        return "https://rokasel.github.io/simgen"
+        logging.debug("-" * 72)
+        vis.log("Sending request to inference server.")
+        logging.debug(f"Vis token: {vis.token}")
+        logging.debug("Accessing vis and vis.step for the first time")
+        if len(vis) > vis.step + 1:
+            del vis[vis.step + 1 :]
+        if calculators is None:
+            raise ValueError("No calculators provided")
+        logging.debug("Accessing vis.bookmarks")
+        vis.bookmarks = vis.bookmarks | {
+            vis.step: f"Running {self.run_type.discriminator}"
+        }
+        self.run_type.run(
+            vis=vis,
+            client_address=None,
+            calculators=calculators,
+        )
+        logging.debug("Accessing vis.append when removing isolated atoms")
+        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+        logging.debug("-" * 72)
