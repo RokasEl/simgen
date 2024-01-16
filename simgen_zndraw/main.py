@@ -1,9 +1,11 @@
 import logging
 import typing as t
+from functools import wraps
 
 import ase
 import numpy as np
 import requests
+import socketio.exceptions as socketio_exceptions
 from pydantic import BaseModel, Field
 from zndraw import ZnDraw
 from zndraw.frame import Frame
@@ -21,9 +23,7 @@ from simgen.utils import setup_logger
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
 
-setup_logger(
-    name="simgen", directory="./logs", tag="simgen_zndraw", level=logging.DEBUG
-)
+setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
 
 
 def _post_request(address: str, json_data_str: str, name: str):
@@ -240,7 +240,29 @@ class Hydrogenate(UpdateScene):
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
 
-run_types = t.Union[Generate, Relax, Hydrogenate]
+def run_with_reconnect(vis: ZnDraw, num_trials: int = 10):
+    def try_run(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for i in range(num_trials):
+                try:
+                    return func(*args, **kwargs)
+                except (
+                    socketio_exceptions.ConnectionError
+                    or socketio_exceptions.BadNamespaceError
+                ):
+                    vis.log(
+                        f"Failed to connect to server, trying again ({i+1}/{num_trials})"
+                    )
+                    vis.reconnect()
+            raise requests.exceptions.ConnectionError("Failed to connect to server")
+
+        return wrapper
+
+    return try_run
+
+
+run_types = t.Union[Generate, Hydrogenate, Relax]
 
 
 class DiffusionModelling(UpdateScene):
@@ -254,20 +276,30 @@ class DiffusionModelling(UpdateScene):
     client_address: str = Field("http://127.0.0.1:5000/run")
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-        vis.log("Sending request to inference server.")
-        if len(vis) > vis.step + 1:
-            del vis[vis.step + 1 :]
-        if calculators is None:
-            calculators = dict()
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
-        self.run_type.run(
-            vis=vis,
-            client_address=self.client_address,
-            calculators=calculators,
-        )
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+        @run_with_reconnect(vis)
+        def _run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+            logging.debug("-" * 72)
+            vis.log("Sending request to inference server.")
+            logging.debug(f"Vis token: {vis.token}")
+            logging.debug("Accessing vis and vis.step for the first time")
+            if len(vis) > vis.step + 1:
+                del vis[vis.step + 1 :]
+            if calculators is None:
+                raise ValueError("No calculators provided")
+            logging.debug("Accessing vis.bookmarks")
+            vis.bookmarks = vis.bookmarks | {
+                vis.step: f"Running {self.run_type.discriminator}"
+            }
+            self.run_type.run(
+                vis=vis,
+                client_address=None,
+                calculators=calculators,
+            )
+            logging.debug("Accessing vis.append when removing isolated atoms")
+            vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+            logging.debug("-" * 72)
+
+        _run(self, vis, calculators)
 
     @staticmethod
     def get_documentation_url() -> str:
@@ -284,26 +316,30 @@ class DiffusionModellingNoPort(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
 
     def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
-        logging.debug("-" * 72)
-        vis.log("Sending request to inference server.")
-        logging.debug(f"Vis token: {vis.token}")
-        logging.debug("Accessing vis and vis.step for the first time")
-        if len(vis) > vis.step + 1:
-            del vis[vis.step + 1 :]
-        if calculators is None:
-            raise ValueError("No calculators provided")
-        logging.debug("Accessing vis.bookmarks")
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
-        self.run_type.run(
-            vis=vis,
-            client_address=None,
-            calculators=calculators,
-        )
-        logging.debug("Accessing vis.append when removing isolated atoms")
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
-        logging.debug("-" * 72)
+        @run_with_reconnect(vis)
+        def _run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+            logging.debug("-" * 72)
+            vis.log("Sending request to inference server.")
+            logging.debug(f"Vis token: {vis.token}")
+            logging.debug("Accessing vis and vis.step for the first time")
+            if len(vis) > vis.step + 1:
+                del vis[vis.step + 1 :]
+            if calculators is None:
+                raise ValueError("No calculators provided")
+            logging.debug("Accessing vis.bookmarks")
+            vis.bookmarks = vis.bookmarks | {
+                vis.step: f"Running {self.run_type.discriminator}"
+            }
+            self.run_type.run(
+                vis=vis,
+                client_address=None,
+                calculators=calculators,
+            )
+            logging.debug("Accessing vis.append when removing isolated atoms")
+            vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
+            logging.debug("-" * 72)
+
+        _run(self, vis, calculators)
 
     @staticmethod
     def get_documentation_url() -> str:
