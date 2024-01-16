@@ -2,6 +2,7 @@ import logging
 import pathlib
 
 import ase
+import networkx as nx
 import numpy as np
 
 from simgen.hydrogenation import get_edge_array_from_atoms

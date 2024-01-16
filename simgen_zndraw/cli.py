@@ -1,6 +1,5 @@
 import logging
 import pathlib
-import time
 from enum import Enum
 from typing import Optional
 
@@ -117,6 +116,7 @@ def connect(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
     add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
+    auth_token: Optional[str] = typer.Option(None, help="Authentication token"),
     device: Device = typer.Option(Device.cpu),
 ):
     print("Loading models...")
@@ -134,18 +134,19 @@ def connect(
         "hydrogenation": get_hydromace_calculator(path, device=device.value),
     }
     print("Connecting to ZnDraw...")
-    linkers_added = False
+    if add_linkers:
+        linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+    else:
+        linkers = []
     while True:
-        vis = ZnDraw(url=url)
-        if add_linkers and not linkers_added:
-            linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+        vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
+        if add_linkers:
             vis.extend(linkers)
-            linkers_added = True
         vis.register_modifier(
             DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
         )
         while vis.socket.connected:
-            time.sleep(5)
+            vis.socket.sleep(5)
         print("Connection lost, stopping...")
 
 
