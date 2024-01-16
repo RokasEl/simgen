@@ -1,4 +1,5 @@
 import logging
+import traceback
 import typing as t
 from functools import wraps
 
@@ -266,18 +267,22 @@ run_types = t.Union[Generate, Hydrogenate, Relax]
 
 @decorator
 def _run_with_recovery(func, num_retries=10, *args, **kwargs):
+    vis = args[1]
     for i in range(num_retries):
         try:
-            print("Trying to run")
-            print(args, kwargs)
+            if i > 0:
+                vis.log(
+                    f"Failed to connect to server, trying again ({i+1}/{num_retries})"
+                )
             return func(*args, **kwargs)
         except (
-            socketio_exceptions.ConnectionError
-            or socketio_exceptions.BadNamespaceError
-            or socketio_exceptions.TimeoutError
+            socketio_exceptions.ConnectionError,
+            socketio_exceptions.BadNamespaceError,
+            socketio_exceptions.TimeoutError,
         ):
-            vis = args[1]
-            vis.log(f"Failed to connect to server, trying again ({i+1}/{num_retries})")
+            traceback.print_exc()
+            print("Failed to connect to server, trying again")
+
             vis.reconnect()
     raise requests.exceptions.ConnectionError("Failed to connect to server")
 

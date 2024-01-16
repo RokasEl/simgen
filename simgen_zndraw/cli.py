@@ -138,16 +138,14 @@ def connect(
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
         linkers = []
-    while True:
-        vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
-        if add_linkers:
-            vis.extend(linkers)
-        vis.register_modifier(
-            DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
-        )
-        while vis.socket.connected:
-            vis.socket.sleep(5)
-        print("Connection lost, stopping...")
+    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
+    if add_linkers:
+        vis.extend(linkers)
+    vis.register_modifier(
+        DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
+    )
+    vis.socket.sleep(1e9)
+    print("Connection lost, stopping...")
 
 
 if __name__ == "__main__":
