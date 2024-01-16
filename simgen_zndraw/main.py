@@ -282,8 +282,9 @@ def _run_with_recovery(func, num_retries=10, *args, **kwargs):
         ):
             traceback.print_exc()
             print("Failed to connect to server, trying again")
-
             vis.reconnect()
+        except Exception:
+            traceback.print_exc()
     raise requests.exceptions.ConnectionError("Failed to connect to server")
 
 
