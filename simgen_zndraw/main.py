@@ -1,8 +1,8 @@
 import logging
 import traceback
 import typing as t
-from functools import wraps
 
+import ase
 import numpy as np
 import requests
 import socketio.exceptions as socketio_exceptions
@@ -41,7 +41,7 @@ class PerAngstrom(BaseModel):
     discriminator: t.Literal["PerAngstrom"] = "PerAngstrom"
     atoms_per_angstrom: float = Field(
         1.2,
-        ge=0,
+        ge=0.5,
         le=3.0,
         description="Num atoms added = atoms_per_angstrom * curve_length",
     )
@@ -143,10 +143,13 @@ class Generate(UpdateScene):
             )  # (points, atoms, 3)
             distances = np.linalg.norm(distances, axis=-1)  # (points, atoms)
             stripped_points = points[np.min(distances, axis=1) > cutoff]
-            assert (
-                stripped_points.shape[0] > 0
-            ), "No points left after removing collisions"
-            return stripped_points
+            if stripped_points.shape[0] == 0:
+                logging.info(
+                    "All guiding points are close to existing atoms. Consider drawing a different path."
+                )
+                return points
+            else:
+                return stripped_points
 
     @staticmethod
     def _get_num_atoms_to_add(
@@ -217,6 +220,9 @@ class Hydrogenate(UpdateScene):
         run_settings = format_run_settings(
             vis, run_type="hydrogenate", max_steps=self.max_steps
         )
+        run_settings.atoms = self._check_and_remove_existing_hydrogen_atoms(
+            vis, run_settings.atoms
+        )
         logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         hydrogenation_calc = calculators.get("hydrogenation", None)
@@ -239,27 +245,18 @@ class Hydrogenate(UpdateScene):
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
-
-def run_with_reconnect(vis: ZnDraw, num_trials: int = 10):
-    def try_run(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            for i in range(num_trials):
-                try:
-                    return func(*args, **kwargs)
-                except (
-                    socketio_exceptions.ConnectionError
-                    or socketio_exceptions.BadNamespaceError
-                ):
-                    vis.log(
-                        f"Failed to connect to server, trying again ({i+1}/{num_trials})"
-                    )
-                    vis.reconnect()
-            raise requests.exceptions.ConnectionError("Failed to connect to server")
-
-        return wrapper
-
-    return try_run
+    @staticmethod
+    def _check_and_remove_existing_hydrogen_atoms(
+        vis: ZnDraw, atoms: ase.Atoms
+    ) -> ase.Atoms:
+        numbers = atoms.get_atomic_numbers()
+        atoms_are_hydrogen = numbers == 1
+        if any(atoms_are_hydrogen):
+            vis.log(
+                "Removing existing hydrogen atoms. Currently partial hydrogenation is not supported."
+            )
+            del atoms[atoms_are_hydrogen]
+        return atoms
 
 
 run_types = t.Union[Generate, Hydrogenate, Relax]
