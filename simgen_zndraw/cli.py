@@ -26,6 +26,11 @@ class Device(str, Enum):
     cuda = "cuda"
 
 
+class SupportedModels(str, Enum):
+    small = "small"
+    medium = "medium"
+
+
 @cli_app.command(help="Set the default path to the MACE-models repo")
 def init(
     path: str = typer.Argument(..., help="Path to clone of MACE-models repo"),
@@ -81,8 +86,8 @@ def launch(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
-    mace_model_name: str = typer.Option(
-        "small_spice", help="Name of MACE model to use"
+    mace_model_name: SupportedModels = typer.Option(
+        SupportedModels.medium, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "similarity_reference_data_small", help="Name of reference data to use"
@@ -109,8 +114,8 @@ def connect(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
-    mace_model_name: str = typer.Option(
-        "small_spice", help="Name of MACE model to use"
+    mace_model_name: SupportedModels = typer.Option(
+        SupportedModels.medium, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "simgen_reference_data_small", help="Name of reference data to use"
@@ -126,7 +131,7 @@ def connect(
     models = {
         "generation": get_mace_similarity_calculator(
             path,
-            mace_model_name,
+            mace_model_name.value,
             reference_data_name,
             num_reference_mols=-1,
             device=device.value,

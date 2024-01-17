@@ -12,6 +12,7 @@ from ase import Atoms
 from ase.build import molecule
 from e3nn import o3
 from hydromace.interface import HydroMaceCalculator
+from mace.calculators.foundations_models import mace_off
 from mace.modules import interaction_classes
 from mace.modules.models import ScaleShiftMACE
 from torch import nn
@@ -145,7 +146,7 @@ def setup_logger(
 
 def get_mace_similarity_calculator(
     model_repo_path: str,
-    model_name: str = "small_spice",
+    model_name: str = "small",
     data_name: str = "simgen_reference_data_small",
     remove_halogenides: bool = True,
     num_reference_mols: int = 256,
@@ -158,7 +159,7 @@ def get_mace_similarity_calculator(
     data_name: name of the reference data to load from the model_repo_path. Either simgen_reference_data_small or simgen_reference_data_medium
     remove_halogenides: whether to remove Hydrogen and Fluorine from the reference data, this is only for evaluation purposes. Should be True for all other purposes.
     """
-    mace_model = get_loaded_mace_model(model_repo_path, model_name, device)
+    mace_model = get_loaded_mace_model(model_name, device)
     if rng is None:
         rng = np.random.default_rng(0)
     reference_data = get_reference_data(
@@ -187,16 +188,16 @@ def get_hydromace_calculator(model_repo_path, device):
 
 
 def get_loaded_mace_model(
-    model_repo_path: str = "https://github.com/RokasEl/MACE-Models",
-    model_name="medium_spice",
+    model_name="medium",
     device: str = "cuda",
 ) -> nn.Module:
-    if model_repo_path.startswith("https://github.com"):
-        logging.info(
-            "Loading model from github. Consider cloning the repo locally for faster loading."
-        )
-    model_loader = zntrack.from_rev(model_name, remote=model_repo_path)
-    pretrained_model = model_loader.get_model()
+    assert model_name in (
+        "small",
+        "medium",
+    ), "Only small and medium models are supported"
+    pretrained_model: torch.nn.Module = mace_off(
+        model=model_name, device=device, return_raw_model=True
+    )
     model_config = get_mace_config(pretrained_model)
     model = ScaleShiftMACE(
         **model_config,

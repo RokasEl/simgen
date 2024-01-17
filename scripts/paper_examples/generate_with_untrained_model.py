@@ -10,7 +10,6 @@ from ase import Atoms
 
 from simgen.atoms_cleanup import cleanup_atoms
 from simgen.utils import (
-    get_loaded_mace_model,
     get_mace_similarity_calculator,
     get_system_torch_device_str,
     initialize_mol,
