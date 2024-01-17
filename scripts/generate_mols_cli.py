@@ -29,7 +29,7 @@ def main(
     model_repo_path: str = typer.Option(
         "https://github.com/RokasEl/MACE-Models", help="Path to MACE model repository"
     ),
-    model_name: str = typer.Option("medium_spice", help="Name of MACE model to use"),
+    model_name: str = typer.Option("medium", help="Name of the MACE-OFF model to use"),
     reference_data_name: str = typer.Option(
         "simgen_reference_data_medium", help="Name of reference data to use"
     ),

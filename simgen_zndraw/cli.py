@@ -27,8 +27,8 @@ class Device(str, Enum):
 
 
 class SupportedModels(str, Enum):
-    small_spice = "small"
-    medium_spice = "medium"
+    small_spice = "small_spice"
+    medium_spice = "medium_spice"
 
 
 @cli_app.command(help="Set the default path to the MACE-models repo")
@@ -127,11 +127,11 @@ def connect(
     print("Loading models...")
     if path is None:
         path = get_default_mace_models_path()
-
+    model_name = mace_model_name.value.split("_")[0]
     models = {
         "generation": get_mace_similarity_calculator(
             path,
-            mace_model_name.value,
+            model_name,
             reference_data_name,
             num_reference_mols=-1,
             device=device.value,
