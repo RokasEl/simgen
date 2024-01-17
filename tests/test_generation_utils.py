@@ -10,6 +10,7 @@ from simgen.generation_utils import (
     ExponentialRepulsionBlock,
     batch_atoms,
     calculate_path_length,
+    check_atoms_outside_threshold,
     duplicate_atoms,
     get_edge_array_and_neighbour_numbers,
     get_model_dtype,
@@ -158,3 +159,31 @@ def test_assigning_model_dtype():
 
     model.to(torch.float32)
     assert get_model_dtype(model) == torch.float32
+
+
+@pytest.mark.parametrize(
+    "atoms, expected, threshold",
+    [
+        (initialize_mol("C6H6"), False, 10),
+        (initialize_mol("C6H6"), True, 1),
+        (
+            Atoms("CCHF", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]]),
+            False,
+            1,
+        ),
+        (
+            Atoms("CCHF", positions=[[1e9, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]]),
+            True,
+            1,
+        ),
+        (
+            Atoms(
+                "CCHF", positions=[[1e9, 0, 0], [1e9, 0, 1], [1e9, 1, 0], [1e9, 0, 0]]
+            ),
+            False,
+            1,
+        ),
+    ],
+)
+def test_check_atoms_outside_threshold(atoms, expected, threshold):
+    assert check_atoms_outside_threshold(atoms, threshold) == expected

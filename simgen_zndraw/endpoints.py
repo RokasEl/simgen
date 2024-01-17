@@ -38,14 +38,18 @@ def generate(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args
         num_steps=request.max_steps,
     )
     mol = ase.Atoms(f"C{request.num_atoms_to_add}")
-    trajectory = generator.generate(
-        mol,
-        swapping_z_table=DEFAULT_GENERATION_PARAMS.swapping_table,
-        num_particles=DEFAULT_GENERATION_PARAMS.num_particles,
-        particle_swap_frequency=DEFAULT_GENERATION_PARAMS.particle_swap_frequency,
-        do_final_cleanup=False,
-        scaffold=request.atoms,
-    )
+    try:
+        trajectory = generator.generate(
+            mol,
+            swapping_z_table=DEFAULT_GENERATION_PARAMS.swapping_table,
+            num_particles=DEFAULT_GENERATION_PARAMS.num_particles,
+            particle_swap_frequency=DEFAULT_GENERATION_PARAMS.particle_swap_frequency,
+            do_final_cleanup=False,
+            scaffold=request.atoms,
+        )
+    except RuntimeError as e:
+        logging.error(f"Error generating molecule: {e}")
+        trajectory = []
     return trajectory
 
 

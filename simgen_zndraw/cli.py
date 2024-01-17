@@ -27,8 +27,8 @@ class Device(str, Enum):
 
 
 class SupportedModels(str, Enum):
-    small = "small"
-    medium = "medium"
+    small_spice = "small"
+    medium_spice = "medium"
 
 
 @cli_app.command(help="Set the default path to the MACE-models repo")
@@ -87,7 +87,7 @@ def launch(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
     mace_model_name: SupportedModels = typer.Option(
-        SupportedModels.medium, help="Name of MACE model to use"
+        SupportedModels.medium_spice, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "similarity_reference_data_small", help="Name of reference data to use"
@@ -115,7 +115,7 @@ def connect(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
     mace_model_name: SupportedModels = typer.Option(
-        SupportedModels.medium, help="Name of MACE model to use"
+        SupportedModels.medium_spice, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "simgen_reference_data_small", help="Name of reference data to use"

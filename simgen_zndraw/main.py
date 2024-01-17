@@ -94,9 +94,14 @@ class Generate(UpdateScene):
         else:
             logging.debug("Calling generate function")
             modified_atoms = generate(run_settings, generation_calc)
-        logging.debug("Generate function returned, adding atoms to vis")
-        vis.log(f"Received back {len(modified_atoms)} atoms.")
-        vis.extend(modified_atoms)
+        if len(modified_atoms) == 0:
+            vis.log(
+                "Generation did not return any atoms. The most likely reason is a too high restorative force multiplier, causing the atoms to explode mid-generation."
+            )
+        else:
+            logging.debug("Generate function returned, adding atoms to vis")
+            vis.log(f"Received back {len(modified_atoms)} atoms.")
+            vis.extend(modified_atoms)
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
         points = self._handle_points(vis.points, vis.segments)
@@ -191,6 +196,9 @@ class Relax(UpdateScene):
         run_settings = format_run_settings(
             vis, run_type="relax", max_steps=self.max_steps
         )
+        if run_settings.atoms is None or len(run_settings.atoms) == 0:
+            vis.log("No atoms to relax")
+            return
         logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         if generation_calc is None:
@@ -220,6 +228,9 @@ class Hydrogenate(UpdateScene):
         run_settings = format_run_settings(
             vis, run_type="hydrogenate", max_steps=self.max_steps
         )
+        if run_settings.atoms is None or len(run_settings.atoms) == 0:
+            vis.log("No atoms to hydrogenate")
+            return
         run_settings.atoms = self._check_and_remove_existing_hydrogen_atoms(
             vis, run_settings.atoms
         )

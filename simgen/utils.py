@@ -196,7 +196,7 @@ def get_loaded_mace_model(
         "medium",
     ), "Only small and medium models are supported"
     pretrained_model: torch.nn.Module = mace_off(
-        model=model_name, device=device, return_raw_model=True
+        model=model_name, device=device, return_raw_model=True, default_dtype="float32"
     )
     model_config = get_mace_config(pretrained_model)
     model = ScaleShiftMACE(

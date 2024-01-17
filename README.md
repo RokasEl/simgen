@@ -39,7 +39,7 @@ If you want to try out linker generation, add the `--add-linkers` flag to the `s
 Run `simgen connect --help` for more information.
 
 > [!TIP]
-> SiMGen uses the [`mace-models`](https://github.com/RokasEl/MACE-Models) package to download pretrained MACE models. Downloading local copies can speed up your workflow. To do so, run
+> SiMGen uses the [`mace-models`](https://github.com/RokasEl/MACE-Models) package to download data and the hydrogenation model. Downloading local copies can speed up your workflow. To do so, run
 > ```sh
 > git clone https://github.com/RokasEl/MACE-Models
 > cd MACE-Models

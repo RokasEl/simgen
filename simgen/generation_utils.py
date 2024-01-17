@@ -28,10 +28,20 @@ def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
     return atoms_copy
 
 
+def check_atoms_outside_threshold(atoms: ase.Atoms, threshold: float) -> bool:
+    """
+    Check if any atom positions are outside the threshold
+    """
+    positions = atoms.get_positions()
+    positions = positions - np.mean(positions, axis=0)
+    distances = np.linalg.norm(positions, axis=1)
+    return np.any(distances > threshold)
+
+
 def calculate_restorative_force_strength(num_atoms: int | float) -> float:
     sqrt_prefactor = 1.5664519  # prefactor fit to qm9
     bounding_sphere_diameter = sqrt_prefactor * np.sqrt(num_atoms)
-    force_strength = 0.7 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2  # empirical
+    force_strength = 0.5 / (0.2 + 0.1 * bounding_sphere_diameter) ** 2  # empirical
     return force_strength
 
 
