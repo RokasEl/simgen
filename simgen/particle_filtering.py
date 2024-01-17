@@ -17,6 +17,7 @@ from simgen.element_swapping import (
 from simgen.generation_utils import (
     batch_atoms,
     batch_to_correct_dtype,
+    check_atoms_outside_threshold,
     duplicate_atoms,
     get_atoms_from_batch,
 )
@@ -170,6 +171,13 @@ class ParticleFilterGenerator:
             self.swapped = False
         assert len(atoms_list) == 1
         atoms = atoms_list[0]
+        if check_atoms_outside_threshold(atoms, 100):
+            logging.critical(
+                "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
+            )
+            raise RuntimeError(
+                "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
+            )
         atom_ensemble = create_element_swapped_particles(
             atoms=atoms,
             beta=beta,

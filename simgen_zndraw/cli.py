@@ -26,6 +26,11 @@ class Device(str, Enum):
     cuda = "cuda"
 
 
+class SupportedModels(str, Enum):
+    small_spice = "small_spice"
+    medium_spice = "medium_spice"
+
+
 @cli_app.command(help="Set the default path to the MACE-models repo")
 def init(
     path: str = typer.Argument(..., help="Path to clone of MACE-models repo"),
@@ -81,8 +86,8 @@ def launch(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
-    mace_model_name: str = typer.Option(
-        "small_spice", help="Name of MACE model to use"
+    mace_model_name: SupportedModels = typer.Option(
+        SupportedModels.medium_spice, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "similarity_reference_data_small", help="Name of reference data to use"
@@ -109,8 +114,8 @@ def connect(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
-    mace_model_name: str = typer.Option(
-        "small_spice", help="Name of MACE model to use"
+    mace_model_name: SupportedModels = typer.Option(
+        SupportedModels.medium_spice, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
         "simgen_reference_data_small", help="Name of reference data to use"
@@ -122,11 +127,11 @@ def connect(
     print("Loading models...")
     if path is None:
         path = get_default_mace_models_path()
-
+    model_name = mace_model_name.value.split("_")[0]
     models = {
         "generation": get_mace_similarity_calculator(
             path,
-            mace_model_name,
+            model_name,
             reference_data_name,
             num_reference_mols=-1,
             device=device.value,
@@ -138,16 +143,15 @@ def connect(
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
         linkers = []
-    while True:
-        vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
-        if add_linkers:
-            vis.extend(linkers)
-        vis.register_modifier(
-            DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
-        )
-        while vis.socket.connected:
-            vis.socket.sleep(5)
-        print("Connection lost, stopping...")
+    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
+    vis.config.call_timeout = 3
+    if add_linkers:
+        vis.extend(linkers)
+    vis.register_modifier(
+        DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
+    )
+    vis.socket.sleep(1e9)
+    print("Connection lost, stopping...")
 
 
 if __name__ == "__main__":

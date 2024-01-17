@@ -1,20 +1,15 @@
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional
 
 import einops
 import numpy as np
 import torch
-import torch.nn.functional as F
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 from mace.data.atomic_data import AtomicData
 from mace.modules.blocks import LinearNodeEmbeddingBlock
 from mace.modules.models import MACE
-from mace.modules.utils import (
-    compute_forces,
-    get_edge_vectors_and_lengths,
-    get_outputs,
-)
+from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools.scatter import scatter_mean, scatter_sum
 
 from simgen.utils import get_system_torch_device_str
