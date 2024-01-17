@@ -96,7 +96,7 @@ class Generate(UpdateScene):
             modified_atoms = generate(run_settings, generation_calc)
         if len(modified_atoms) == 0:
             vis.log(
-                "Generation did not return any atoms. The most likely reason is a too high restorative force multiplier, causing the atoms to explode mid-generation."
+                "Generation did not return any atoms. Adjust the guiding force multiplier.\nIf trying to generate few atoms, try decreasing the multiplier.\nIf trying to generate many atoms, try increasing the multiplier."
             )
         else:
             logging.debug("Generate function returned, adding atoms to vis")

@@ -173,10 +173,10 @@ class ParticleFilterGenerator:
         atoms = atoms_list[0]
         if check_atoms_outside_threshold(atoms, 100):
             logging.critical(
-                "Atoms exploded during the main loop of generation. Consider reducing the restorative force strength."
+                "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
             )
             raise RuntimeError(
-                "Atoms exploded during the main loop of generation. Consider reducing the restorative force strength."
+                "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
             )
         atom_ensemble = create_element_swapped_particles(
             atoms=atoms,
