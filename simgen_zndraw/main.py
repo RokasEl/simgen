@@ -276,7 +276,13 @@ run_types = t.Union[Generate, Hydrogenate, Relax]
 @decorator
 def _run_with_recovery(func, num_retries=10, *args, **kwargs):
     vis = args[1]
+    starting_token = vis.token
     for i in range(num_retries):
+        if vis.token != starting_token:
+            vis.log(
+                "Congratulations! You have found a race condition! Please wait a minute and restart the browser."
+            )
+            return
         try:
             if i > 0:
                 vis.log(
