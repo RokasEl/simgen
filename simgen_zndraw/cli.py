@@ -90,16 +90,17 @@ def launch(
         SupportedModels.medium_spice, help="Name of MACE model to use"
     ),
     reference_data_name: str = typer.Option(
-        "similarity_reference_data_small", help="Name of reference data to use"
+        "simgen_reference_data_small", help="Name of reference data to use"
     ),
     device: Device = typer.Option(Device.cpu),
     port: int = 5000,
 ):
     if path is None:
         path = get_default_mace_models_path()
+    model_name = mace_model_name.value.split("_")[0]
     app.config["device"] = device.value
     app.config["mace_models_path"] = path
-    app.config["mace_model_name"] = mace_model_name
+    app.config["mace_model_name"] = model_name
     app.config["reference_data_name"] = reference_data_name
     url = f"http://127.0.0.1:{port}"
     logging.info(f"Starting generation server at {url}")
