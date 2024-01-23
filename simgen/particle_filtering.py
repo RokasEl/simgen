@@ -123,6 +123,7 @@ class ParticleFilterGenerator:
                 mask=mask,
             )
             trajectories.extend(cleaned)
+        self._values_to_numpy(trajectories)
         return trajectories
 
     def _maximise_log_similarity(
@@ -224,3 +225,10 @@ class ParticleFilterGenerator:
             num_particles
         )
         return merged, mask, torch_mask
+
+    @staticmethod
+    def _values_to_numpy(atoms: ase.Atoms) -> ase.Atoms:
+        for _atoms in atoms:
+            for k, v in _atoms.info.items():
+                if isinstance(v, torch.Tensor):
+                    _atoms.info[k] = v.detach().cpu().numpy()

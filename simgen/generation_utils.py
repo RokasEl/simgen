@@ -18,9 +18,9 @@ def duplicate_atoms(atoms: ase.Atoms, copy_info=True) -> ase.Atoms:
     """
     Create a deep copy of the atoms object
     """
-    for v in atoms.info.values():
+    for k, v in atoms.info.items():
         if isinstance(v, torch.Tensor):
-            v = v.detach().cpu().numpy()
+            atoms.info[k] = v.detach().cpu().numpy()
     atoms_copy = ase.Atoms(
         numbers=atoms.get_atomic_numbers(),
         positions=atoms.get_positions(),
