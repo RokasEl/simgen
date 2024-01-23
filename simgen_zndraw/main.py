@@ -299,6 +299,8 @@ def _run_with_recovery(func, num_retries=10, *args, **kwargs):
             vis.reconnect()
         except Exception:
             traceback.print_exc()
+            logging.error("Failed to run function")
+            return
     raise requests.exceptions.ConnectionError("Failed to connect to server")
 
 
