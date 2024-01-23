@@ -2,6 +2,7 @@ services:
   simgen:
     image: simgen
     restart: always
+    command: --auth-token <your-token> --url <url> --device "cuda" --mace-model-name "medium_spice" --reference-data-name "simgen_reference_data_medium"
     deploy:
       resources:
         reservations:
