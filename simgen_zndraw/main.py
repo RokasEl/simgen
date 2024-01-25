@@ -338,13 +338,13 @@ class DiffusionModelling(UpdateScene):
         logging.debug("-" * 72)
 
 
-class DiffusionModellingNoPort(UpdateScene):
+class SiMGen(UpdateScene):
     """
     Click on `run type` to select the type of run to perform.\n
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    discriminator: t.Literal["DiffusionModellingNoPort"] = "DiffusionModellingNoPort"
+    discriminator: t.Literal["SiMGen"] = "SiMGen"
     run_type: run_types = Field(discriminator="discriminator")
 
     @_run_with_recovery
