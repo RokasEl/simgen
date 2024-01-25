@@ -13,7 +13,7 @@ from simgen.utils import (
     get_mace_similarity_calculator,
 )
 from simgen_zndraw import DefaultGenerationParams
-from simgen_zndraw.main import DiffusionModellingNoPort
+from simgen_zndraw.main import SiMGen
 
 from .local_server import app
 from .utils import get_default_mace_models_path
@@ -149,7 +149,7 @@ def connect(
     if add_linkers:
         vis.extend(linkers)
     vis.register_modifier(
-        DiffusionModellingNoPort, run_kwargs={"calculators": models}, default=True  # type: ignore
+        SiMGen, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
     vis.socket.sleep(1e9)
     print("Connection lost, stopping...")
