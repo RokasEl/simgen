@@ -183,7 +183,7 @@ def cleanup_atoms(
         pruned_atoms.copy(), hydrogenation_type, hydrogenation_calc
     )
     relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=40, max_step=0.05
+        [hydrogenated_atoms.copy()], calc, num_steps=30, max_step=0.05
     )[0]
     element_relaxed_atoms = relax_elements(
         relaxed_hydrogenated_atoms,
@@ -194,9 +194,9 @@ def cleanup_atoms(
     final_relaxed_atoms = attach_calculator(
         [element_relaxed_atoms.copy()], calc, calculation_type="mace"
     )
-    final_relaxed_atoms = run_dynamics(
-        final_relaxed_atoms, num_steps=100, max_step=0.1
-    )[0]
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=30, max_step=0.1)[
+        0
+    ]
     final_relaxed_atoms = remove_isolated_atoms_using_covalent_radii(
         final_relaxed_atoms
     )

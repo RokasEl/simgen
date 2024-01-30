@@ -1,5 +1,6 @@
 import logging
 from functools import partial
+from time import monotonic
 from typing import List, Literal, Tuple
 
 import ase
@@ -88,6 +89,7 @@ class ParticleFilterGenerator:
         scaffold: ase.Atoms | None = None,
         hydrogenation_type: Literal["valence"] | Literal["hydromace"] = "valence",
         hydrogenation_calc: HydroMaceCalculator | None = None,
+        timeout: float = np.inf,  # only needed for the web interface
     ):
         # initialise mol
         molecule = self.guiding_manifold.initialise_positions(molecule, scale=0.5)
@@ -108,6 +110,7 @@ class ParticleFilterGenerator:
             swapping_z_table,
             mask,
             torch_mask,
+            timeout=timeout,
         )
         trajectories.extend(intermediate_configs)
 
@@ -134,14 +137,19 @@ class ParticleFilterGenerator:
         swapping_z_table: AtomicNumberTable,
         mask: np.ndarray,
         torch_mask: torch.Tensor,
+        timeout: float = np.inf,
     ):
         atoms = [duplicate_atoms(initial_atoms)]
         batched = self.batch_atoms(atoms)
         self.swapped = False
         intermediate_configs = []
+        start_time = monotonic()
         for step, (sigma_cur, sigma_next) in enumerate(
             zip(self.sigmas[:-1], self.sigmas[1:]),
         ):
+            run_time = monotonic() - start_time
+            if run_time > timeout:
+                raise RuntimeError(f"Generation timed out after {run_time:.2f}s")
             if step % particle_swap_frequency == 0 and num_particles > 1:
                 atoms = self._prepare_atoms_for_swap(atoms, sigma_next)
                 atoms = self._collect_and_swap(
@@ -176,7 +184,7 @@ class ParticleFilterGenerator:
             logging.critical(
                 "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
             )
-            raise RuntimeError(
+            raise ValueError(
                 "Atoms exploded during the main loop of generation. Adjust the restorative force strength."
             )
         atom_ensemble = create_element_swapped_particles(
@@ -227,7 +235,7 @@ class ParticleFilterGenerator:
         return merged, mask, torch_mask
 
     @staticmethod
-    def _values_to_numpy(atoms: ase.Atoms) -> ase.Atoms:
+    def _values_to_numpy(atoms: List[ase.Atoms]):
         for _atoms in atoms:
             for k, v in _atoms.info.items():
                 if isinstance(v, torch.Tensor):

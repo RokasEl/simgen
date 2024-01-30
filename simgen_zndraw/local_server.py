@@ -58,7 +58,7 @@ def run():
     endpoint = getattr(endpoints, endpoint_name)
     simgen_calc, hydromace_calc = get_models()
     logging.info(f"Received request: {formatted_request.run_type}.\nRunning...")
-    results = endpoint(formatted_request, simgen_calc, hydromace_calc)
+    results, _ = endpoint(formatted_request, simgen_calc, hydromace_calc)
     results = jsonify_atoms(*results)
     logging.info("Completed. Sending back the response.")
     return results
