@@ -152,10 +152,14 @@ def connect(
         SiMGen, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
     while True:
-        if not vis.connected:
+        try:
+            vis.socket.emit("ping")
+        except Exception as e:
+            print(f"Not connected to ZnDraw: {e}")
+            print("Trying to reconnect...")
             vis.reconnect()
             print("Reconnected to ZnDraw")
-        else:
+        finally:
             print(32 * "-")
             print("Sleeping for 10 seconds")
             vis.socket.sleep(10)
