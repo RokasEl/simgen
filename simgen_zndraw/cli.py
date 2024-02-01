@@ -155,6 +155,8 @@ def connect(
         if not vis.socket.connected:
             vis.reconnect()
             print("Reconnected to ZnDraw")
+        else:
+            vis.socket.sleep(1)
 
 
 if __name__ == "__main__":
