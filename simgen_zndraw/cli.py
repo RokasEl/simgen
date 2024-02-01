@@ -151,8 +151,10 @@ def connect(
     vis.register_modifier(
         SiMGen, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
-    vis.socket.sleep(1e9)
-    print("Connection lost, stopping...")
+    while True:
+        if not vis.socket.connected:
+            vis.reconnect()
+            print("Reconnected to ZnDraw")
 
 
 if __name__ == "__main__":
