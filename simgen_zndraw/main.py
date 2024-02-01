@@ -1,4 +1,5 @@
 import logging
+import time
 import traceback
 import typing as t
 
@@ -215,7 +216,7 @@ class Relax(UpdateScene):
             ]
         else:
             logging.debug("Calling relax function")
-            modified_atoms = relax(run_settings, generation_calc)
+            modified_atoms, _ = relax(run_settings, generation_calc)
         logging.debug("Relax function returned, adding atoms to vis")
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
@@ -252,7 +253,7 @@ class Hydrogenate(UpdateScene):
             ]
         else:
             logging.debug("Calling hydrogenate function")
-            modified_atoms = hydrogenate(
+            modified_atoms, _ = hydrogenate(
                 run_settings, generation_calc, hydrogenation_calc
             )
         logging.debug("Hydrogenate function returned, adding atoms to vis")
@@ -280,7 +281,11 @@ run_types = t.Union[Generate, Hydrogenate, Relax]
 def _run_with_recovery(func, num_retries=10, *args, **kwargs):
     vis = args[1]
     starting_token = vis.token
+    timeout = kwargs.get("timeout", 60)
+    already_ran_for = 0
+    start = time.monotonic()
     for i in range(num_retries):
+        timeout = timeout - already_ran_for
         if vis.token != starting_token:
             vis.log(
                 "Congratulations! You have found a race condition! Please wait a minute and restart the browser."
@@ -291,6 +296,7 @@ def _run_with_recovery(func, num_retries=10, *args, **kwargs):
                 vis.log(
                     f"Failed to connect to server, trying again ({i+1}/{num_retries})"
                 )
+            kwargs["timeout"] = timeout
             return func(*args, **kwargs)
         except (
             socketio_exceptions.ConnectionError,
@@ -304,6 +310,8 @@ def _run_with_recovery(func, num_retries=10, *args, **kwargs):
             traceback.print_exc()
             logging.error("Failed to run function")
             return
+        end = time.monotonic()
+        already_ran_for = end - start
     raise requests.exceptions.ConnectionError("Failed to connect to server")
 
 
