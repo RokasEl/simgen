@@ -362,9 +362,7 @@ class SiMGen(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
 
     @_run_with_recovery
-    def run(
-        self, vis: ZnDraw, calculators: dict | None = None, timeout: float = 60
-    ) -> None:
+    def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
         logging.debug(f"Vis token: {vis.token}")
@@ -377,6 +375,7 @@ class SiMGen(UpdateScene):
         vis.bookmarks = vis.bookmarks | {
             vis.step: f"Running {self.run_type.discriminator}"
         }
+        timeout = kwargs.get("timeout", 60)
         self.run_type.run(
             vis=vis,
             client_address=None,
