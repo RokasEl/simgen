@@ -75,11 +75,13 @@ class Generate(UpdateScene):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators: dict, timeout) -> None:
         vis.log("Running Generation")
         logging.debug("Reached Generate run method")
         run_specific_settings = self._get_run_specific_settings(vis)
-        run_settings = format_run_settings(vis, **run_specific_settings)
+        run_settings = format_run_settings(
+            vis, **run_specific_settings, timeout=timeout
+        )
         logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         if generation_calc is None:
@@ -191,11 +193,11 @@ class Relax(UpdateScene):
     discriminator: t.Literal["Relax"] = Field("Relax")
     max_steps: int = Field(50, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
         vis.log("Running Relax")
         logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
-            vis, run_type="relax", max_steps=self.max_steps
+            vis, run_type="relax", max_steps=self.max_steps, timeout=timeout
         )
         if run_settings.atoms is None or len(run_settings.atoms) == 0:
             vis.log("No atoms to relax")
@@ -223,11 +225,11 @@ class Hydrogenate(UpdateScene):
     discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
     max_steps: int = Field(30, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
         logging.debug("Reached Hydrogenate run method")
         vis.log("Running Hydrogenate")
         run_settings = format_run_settings(
-            vis, run_type="hydrogenate", max_steps=self.max_steps
+            vis, run_type="hydrogenate", max_steps=self.max_steps, timeout=timeout
         )
         if run_settings.atoms is None or len(run_settings.atoms) == 0:
             vis.log("No atoms to hydrogenate")
@@ -316,7 +318,9 @@ class DiffusionModelling(UpdateScene):
     client_address: str = Field("http://127.0.0.1:5000/run")
 
     @_run_with_recovery
-    def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+    def run(
+        self, vis: ZnDraw, calculators: dict | None = None, timeout: float = 60
+    ) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
         logging.debug(f"Vis token: {vis.token}")
@@ -333,6 +337,7 @@ class DiffusionModelling(UpdateScene):
             vis=vis,
             client_address=None,
             calculators=calculators,
+            timeout=timeout,
         )
         logging.debug("Accessing vis.append when removing isolated atoms")
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
@@ -349,7 +354,9 @@ class SiMGen(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
 
     @_run_with_recovery
-    def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+    def run(
+        self, vis: ZnDraw, calculators: dict | None = None, timeout: float = 60
+    ) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
         logging.debug(f"Vis token: {vis.token}")
@@ -366,6 +373,7 @@ class SiMGen(UpdateScene):
             vis=vis,
             client_address=None,
             calculators=calculators,
+            timeout=timeout,
         )
         logging.debug("Accessing vis.append when removing isolated atoms")
         vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
