@@ -152,7 +152,7 @@ def connect(
         SiMGen, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
     while True:
-        if not vis.socket.connected:
+        if not vis.connected:
             vis.reconnect()
             print("Reconnected to ZnDraw")
         else:
