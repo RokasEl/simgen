@@ -105,6 +105,9 @@ class Generate(UpdateScene):
         else:
             logging.debug("Generate function returned, adding atoms to vis")
             vis.log(f"Received back {len(modified_atoms)} atoms.")
+            modified_atoms.append(
+                remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+            )
             vis.extend(modified_atoms)
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
@@ -218,6 +221,9 @@ class Relax(UpdateScene):
             logging.debug("Calling relax function")
             modified_atoms, _ = relax(run_settings, generation_calc)
         logging.debug("Relax function returned, adding atoms to vis")
+        modified_atoms.append(
+            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -257,6 +263,9 @@ class Hydrogenate(UpdateScene):
                 run_settings, generation_calc, hydrogenation_calc
             )
         logging.debug("Hydrogenate function returned, adding atoms to vis")
+        modified_atoms.append(
+            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -348,7 +357,6 @@ class DiffusionModelling(UpdateScene):
             timeout=timeout,
         )
         logging.debug("Accessing vis.append when removing isolated atoms")
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
         logging.debug("-" * 72)
 
 
@@ -382,6 +390,4 @@ class SiMGen(UpdateScene):
             calculators=calculators,
             timeout=timeout,
         )
-        logging.debug("Accessing vis.append when removing isolated atoms")
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
         logging.debug("-" * 72)
