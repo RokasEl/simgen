@@ -178,9 +178,10 @@ class Generate(UpdateScene):
             logging.info(
                 "Calculating number of atoms to add based on curve length and density"
             )
-            assert (
-                points.shape[0] > 1
-            ), "`PerAngstrom` requires at least 2 points drawn in the interface"
+            if points.shape[0] <= 1:
+                raise ValueError(
+                    "`PerAngstrom` requires at least 2 points drawn in the interface"
+                )
             curve_length = calculate_path_length(points)
             num_atoms_to_add = np.ceil(curve_length * atom_parameter_value).astype(int)
             logging.info(
