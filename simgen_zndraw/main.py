@@ -1,13 +1,9 @@
 import logging
-import time
-import traceback
 import typing as t
 
 import ase
 import numpy as np
 import requests
-import socketio.exceptions as socketio_exceptions
-from decorator import decorator
 from pydantic import BaseModel, Field
 from zndraw import ZnDraw
 from zndraw.modify import UpdateScene
@@ -287,44 +283,6 @@ class Hydrogenate(UpdateScene):
 run_types = t.Union[Generate, Hydrogenate, Relax]
 
 
-@decorator
-def _run_with_recovery(func, num_retries=10, *args, **kwargs):
-    vis = args[1]
-    starting_token = vis.token
-    timeout = kwargs.get("timeout", 60)
-    already_ran_for = 0
-    start = time.monotonic()
-    for i in range(num_retries):
-        timeout = timeout - already_ran_for
-        if vis.token != starting_token:
-            vis.log(
-                "Congratulations! You have found a race condition! Please wait a minute and restart the browser."
-            )
-            return
-        try:
-            if i > 0:
-                vis.log(
-                    f"Failed to connect to server, trying again ({i+1}/{num_retries})"
-                )
-            kwargs["timeout"] = timeout
-            return func(*args, **kwargs)
-        except (
-            socketio_exceptions.ConnectionError,
-            socketio_exceptions.BadNamespaceError,
-            socketio_exceptions.TimeoutError,
-        ):
-            traceback.print_exc()
-            print("Failed to connect to server, trying again")
-            vis.reconnect()
-        except Exception:
-            traceback.print_exc()
-            logging.error("Failed to run function")
-            return
-        end = time.monotonic()
-        already_ran_for = end - start
-    raise requests.exceptions.ConnectionError("Failed to connect to server")
-
-
 class DiffusionModelling(UpdateScene):
     """
     Click on `run type` to select the type of run to perform.\n
@@ -335,7 +293,6 @@ class DiffusionModelling(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
 
-    @_run_with_recovery
     def run(
         self, vis: ZnDraw, calculators: dict | None = None, timeout: float = 60
     ) -> None:
@@ -370,7 +327,6 @@ class SiMGen(UpdateScene):
     discriminator: t.Literal["SiMGen"] = "SiMGen"
     run_type: run_types = Field(discriminator="discriminator")
 
-    @_run_with_recovery
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
