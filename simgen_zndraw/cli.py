@@ -13,7 +13,7 @@ from simgen.utils import (
     get_mace_similarity_calculator,
 )
 from simgen_zndraw import DefaultGenerationParams
-from simgen_zndraw.main import SiMGen
+from simgen_zndraw.main import SiMGen, SiMGenDemo
 
 from .local_server import app
 from .utils import get_default_mace_models_path
@@ -148,8 +148,9 @@ def connect(
     vis.config.call_timeout = 3
     if add_linkers:
         vis.extend(linkers)
+    vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
     vis.register_modifier(
-        SiMGen, run_kwargs={"calculators": models}, default=True  # type: ignore
+        SiMGenDemo, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
     while True:
         try:

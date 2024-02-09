@@ -1,12 +1,13 @@
 import logging
 import typing as t
+from typing import Any
 
 import ase
 import numpy as np
 import requests
-from pydantic import BaseModel, Field
-from zndraw import ZnDraw
+from pydantic import BaseModel, ConfigDict, Field
 from zndraw.modify import UpdateScene
+from zndraw.zndraw_frozen import FrozenZnDraw as ZnDraw
 
 from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
@@ -72,7 +73,7 @@ class Generate(UpdateScene):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    def run(self, vis: ZnDraw, client_address, calculators: dict, timeout) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators: dict, timeout) -> ase.Atoms:
         vis.log("Running Generation")
         logging.debug("Reached Generate run method")
         run_specific_settings = self._get_run_specific_settings(vis)
@@ -105,6 +106,7 @@ class Generate(UpdateScene):
                 remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
             )
             vis.extend(modified_atoms)
+            return modified_atoms[-1]
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
         points = self._handle_points(vis.points, vis.segments)
@@ -194,7 +196,7 @@ class Relax(UpdateScene):
     discriminator: t.Literal["Relax"] = Field("Relax")
     max_steps: int = Field(50, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
         vis.log("Running Relax")
         logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
@@ -223,13 +225,14 @@ class Relax(UpdateScene):
         )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
+        return modified_atoms[-1]
 
 
 class Hydrogenate(UpdateScene):
     discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
     max_steps: int = Field(30, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
         logging.debug("Reached Hydrogenate run method")
         vis.log("Running Hydrogenate")
         run_settings = format_run_settings(
@@ -265,6 +268,7 @@ class Hydrogenate(UpdateScene):
         )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
+        return modified_atoms[-1]
 
     @staticmethod
     def _check_and_remove_existing_hydrogen_atoms(
@@ -348,3 +352,84 @@ class SiMGen(UpdateScene):
             timeout=timeout,
         )
         logging.debug("-" * 72)
+
+
+def _format_fields(schema, cls):
+    return cls._update_schema(schema)
+
+
+class SiMGenDemo(UpdateScene):
+    discriminator: t.Literal["SiMGenDemo"] = "SiMGenDemo"
+    atoms_per_angstrom: float = Field(
+        1.2,
+        ge=0.8,
+        le=2.0,
+        description="Num atoms added = atoms_per_angstrom * curve_length",
+    )
+    guiding_force_multiplier: float = Field(
+        1.5,
+        ge=1.0,
+        le=10.0,
+        description="Multiplier for guiding force. Increase if molecules falls apart.",
+    )
+
+    model_config = ConfigDict(json_schema_extra=_format_fields)
+
+    def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
+        vis.log("Sending request to inference server.")
+        if len(vis) > vis.step + 1:
+            del vis[vis.step + 1 :]
+        if calculators is None:
+            raise ValueError("No calculators provided")
+        bookmarks = vis.bookmarks.copy()
+        bookmarks = bookmarks | {int(vis.step): f"SiMGen: Generating a structure."}
+        vis.bookmarks = bookmarks
+        timeout = kwargs.get("timeout", 60)
+        gen_class = Generate(
+            discriminator="Generate",
+            num_steps=50,
+            atom_number=PerAngstrom(atoms_per_angstrom=self.atoms_per_angstrom),
+            guiding_force_multiplier=self.guiding_force_multiplier,
+        )
+        atoms = gen_class.run(
+            vis=vis,
+            client_address=None,
+            calculators=calculators,
+            timeout=timeout,
+        )
+
+        vis._cached_data["atoms"] = atoms
+        bookmarks = bookmarks | {len(vis): f"SiMGen: Hydrogenating the structure."}
+        vis.bookmarks = bookmarks
+        hydrogenate_class = Hydrogenate(
+            discriminator="Hydrogenate",
+            max_steps=30,
+        )
+        atoms = hydrogenate_class.run(
+            vis=vis,
+            client_address=None,
+            calculators=calculators,
+            timeout=timeout,
+        )
+
+        vis._cached_data["atoms"] = atoms
+        vis._cached_data["selection"] = []
+        bookmarks = bookmarks | {len(vis): f"SiMGen: Relaxing the structure."}
+        vis.bookmarks = bookmarks
+        relax_class = Relax(
+            discriminator="Relax",
+            max_steps=50,
+        )
+        relax_class.run(
+            vis=vis,
+            client_address=None,
+            calculators=calculators,
+            timeout=timeout,
+        )
+        vis.log("Finished running SiMGen demo.")
+
+    @classmethod
+    def _update_schema(cls, schema: dict) -> dict:
+        schema["properties"]["atoms_per_angstrom"]["format"] = "range"
+        schema["properties"]["guiding_force_multiplier"]["format"] = "range"
+        return schema
