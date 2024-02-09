@@ -145,7 +145,6 @@ def connect(
     else:
         linkers = []
     vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
-    vis.config.call_timeout = 3
     if add_linkers:
         vis.extend(linkers)
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
