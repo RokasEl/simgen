@@ -1,12 +1,9 @@
 import logging
-import traceback
 import typing as t
 
 import ase
 import numpy as np
 import requests
-import socketio.exceptions as socketio_exceptions
-from decorator import decorator
 from pydantic import BaseModel, Field
 from zndraw import ZnDraw
 from zndraw.modify import UpdateScene
@@ -75,11 +72,13 @@ class Generate(UpdateScene):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    def run(self, vis: ZnDraw, client_address, calculators: dict) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators: dict, timeout) -> None:
         vis.log("Running Generation")
         logging.debug("Reached Generate run method")
         run_specific_settings = self._get_run_specific_settings(vis)
-        run_settings = format_run_settings(vis, **run_specific_settings)
+        run_settings = format_run_settings(
+            vis, **run_specific_settings, timeout=timeout
+        )
         logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         if generation_calc is None:
@@ -91,16 +90,20 @@ class Generate(UpdateScene):
             modified_atoms = [
                 atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
             ]
+            e = "Exceptions currently not sent via http"
         else:
             logging.debug("Calling generate function")
-            modified_atoms = generate(run_settings, generation_calc)
+            modified_atoms, e = generate(run_settings, generation_calc)
         if len(modified_atoms) == 0:
             vis.log(
-                "Generation did not return any atoms. Adjust the guiding force multiplier.\nIf trying to generate few atoms, try decreasing the multiplier.\nIf trying to generate many atoms, try increasing the multiplier."
+                f"Generation did not return any atoms. Error: {e}. Please try again."
             )
         else:
             logging.debug("Generate function returned, adding atoms to vis")
             vis.log(f"Received back {len(modified_atoms)} atoms.")
+            modified_atoms.append(
+                remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+            )
             vis.extend(modified_atoms)
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
@@ -171,9 +174,10 @@ class Generate(UpdateScene):
             logging.info(
                 "Calculating number of atoms to add based on curve length and density"
             )
-            assert (
-                points.shape[0] > 1
-            ), "`PerAngstrom` requires at least 2 points drawn in the interface"
+            if points.shape[0] <= 1:
+                raise ValueError(
+                    "`PerAngstrom` requires at least 2 points drawn in the interface"
+                )
             curve_length = calculate_path_length(points)
             num_atoms_to_add = np.ceil(curve_length * atom_parameter_value).astype(int)
             logging.info(
@@ -190,11 +194,11 @@ class Relax(UpdateScene):
     discriminator: t.Literal["Relax"] = Field("Relax")
     max_steps: int = Field(50, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
         vis.log("Running Relax")
         logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
-            vis, run_type="relax", max_steps=self.max_steps
+            vis, run_type="relax", max_steps=self.max_steps, timeout=timeout
         )
         if run_settings.atoms is None or len(run_settings.atoms) == 0:
             vis.log("No atoms to relax")
@@ -212,8 +216,11 @@ class Relax(UpdateScene):
             ]
         else:
             logging.debug("Calling relax function")
-            modified_atoms = relax(run_settings, generation_calc)
+            modified_atoms, _ = relax(run_settings, generation_calc)
         logging.debug("Relax function returned, adding atoms to vis")
+        modified_atoms.append(
+            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -222,11 +229,11 @@ class Hydrogenate(UpdateScene):
     discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
     max_steps: int = Field(30, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators) -> None:
+    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> None:
         logging.debug("Reached Hydrogenate run method")
         vis.log("Running Hydrogenate")
         run_settings = format_run_settings(
-            vis, run_type="hydrogenate", max_steps=self.max_steps
+            vis, run_type="hydrogenate", max_steps=self.max_steps, timeout=timeout
         )
         if run_settings.atoms is None or len(run_settings.atoms) == 0:
             vis.log("No atoms to hydrogenate")
@@ -249,10 +256,13 @@ class Hydrogenate(UpdateScene):
             ]
         else:
             logging.debug("Calling hydrogenate function")
-            modified_atoms = hydrogenate(
+            modified_atoms, _ = hydrogenate(
                 run_settings, generation_calc, hydrogenation_calc
             )
         logging.debug("Hydrogenate function returned, adding atoms to vis")
+        modified_atoms.append(
+            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
 
@@ -273,37 +283,6 @@ class Hydrogenate(UpdateScene):
 run_types = t.Union[Generate, Hydrogenate, Relax]
 
 
-@decorator
-def _run_with_recovery(func, num_retries=10, *args, **kwargs):
-    vis = args[1]
-    starting_token = vis.token
-    for i in range(num_retries):
-        if vis.token != starting_token:
-            vis.log(
-                "Congratulations! You have found a race condition! Please wait a minute and restart the browser."
-            )
-            return
-        try:
-            if i > 0:
-                vis.log(
-                    f"Failed to connect to server, trying again ({i+1}/{num_retries})"
-                )
-            return func(*args, **kwargs)
-        except (
-            socketio_exceptions.ConnectionError,
-            socketio_exceptions.BadNamespaceError,
-            socketio_exceptions.TimeoutError,
-        ):
-            traceback.print_exc()
-            print("Failed to connect to server, trying again")
-            vis.reconnect()
-        except Exception:
-            traceback.print_exc()
-            logging.error("Failed to run function")
-            return
-    raise requests.exceptions.ConnectionError("Failed to connect to server")
-
-
 class DiffusionModelling(UpdateScene):
     """
     Click on `run type` to select the type of run to perform.\n
@@ -314,8 +293,9 @@ class DiffusionModelling(UpdateScene):
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
 
-    @_run_with_recovery
-    def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+    def run(
+        self, vis: ZnDraw, calculators: dict | None = None, timeout: float = 60
+    ) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
         logging.debug(f"Vis token: {vis.token}")
@@ -332,9 +312,9 @@ class DiffusionModelling(UpdateScene):
             vis=vis,
             client_address=None,
             calculators=calculators,
+            timeout=timeout,
         )
         logging.debug("Accessing vis.append when removing isolated atoms")
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
         logging.debug("-" * 72)
 
 
@@ -347,8 +327,7 @@ class SiMGen(UpdateScene):
     discriminator: t.Literal["SiMGen"] = "SiMGen"
     run_type: run_types = Field(discriminator="discriminator")
 
-    @_run_with_recovery
-    def run(self, vis: ZnDraw, calculators: dict | None = None) -> None:
+    def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         logging.debug("-" * 72)
         vis.log("Sending request to inference server.")
         logging.debug(f"Vis token: {vis.token}")
@@ -361,11 +340,11 @@ class SiMGen(UpdateScene):
         vis.bookmarks = vis.bookmarks | {
             vis.step: f"Running {self.run_type.discriminator}"
         }
+        timeout = kwargs.get("timeout", 60)
         self.run_type.run(
             vis=vis,
             client_address=None,
             calculators=calculators,
+            timeout=timeout,
         )
-        logging.debug("Accessing vis.append when removing isolated atoms")
-        vis.append(remove_isolated_atoms_using_covalent_radii(vis[-1]))
         logging.debug("-" * 72)

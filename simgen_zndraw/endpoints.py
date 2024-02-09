@@ -1,4 +1,5 @@
 import logging
+from time import monotonic
 
 import ase
 import numpy as np
@@ -46,11 +47,13 @@ def generate(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args
             particle_swap_frequency=DEFAULT_GENERATION_PARAMS.particle_swap_frequency,
             do_final_cleanup=False,
             scaffold=request.atoms,
+            timeout=request.timeout,
         )
-    except RuntimeError as e:
+        return trajectory, None
+    except (RuntimeError, ValueError) as e:
         logging.error(f"Error generating molecule: {e}")
         trajectory = []
-    return trajectory
+        return trajectory, e
 
 
 def hydrogenate(
@@ -67,11 +70,19 @@ def hydrogenate(
         hydrogenated = hydrogenate_deterministically(
             request.atoms, edge_array=edge_array
         )
-    to_relax = hydrogenated.copy()
-    relaxed_atoms_with_h = relax_hydrogens(
-        [to_relax], simgen_calc, num_steps=request.max_steps, max_step=0.1
+    mask = np.where(hydrogenated.get_atomic_numbers() != 1)[0]
+    to_relax = attach_calculator(
+        [hydrogenated.copy()], simgen_calc, calculation_type="mace", mask=mask
     )[0]
-    return [hydrogenated, relaxed_atoms_with_h]
+    relaxation_trajectory = [to_relax.copy()]
+    dyn = LBFGS(to_relax, maxstep=0.2)
+    start = monotonic()
+    for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
+        if monotonic() - start > request.timeout:
+            logging.info("Relaxation taking too long, stopping")
+            break
+        relaxation_trajectory.append(to_relax.copy())
+    return relaxation_trajectory, None
 
 
 def relax(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args):
@@ -90,7 +101,11 @@ def relax(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args):
     logging.info("Relaxing structure")
     relaxation_trajectory = [relaxed_atoms.copy()]
     dyn = LBFGS(relaxed_atoms, maxstep=0.2)
+    start = monotonic()
     for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
+        if monotonic() - start > request.timeout:
+            logging.info("Relaxation taking too long, stopping")
+            break
         relaxation_trajectory.append(relaxed_atoms.copy())
     logging.info("Finished relaxation")
-    return relaxation_trajectory
+    return relaxation_trajectory, None

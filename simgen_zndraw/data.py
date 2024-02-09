@@ -34,7 +34,7 @@ class RequestAtoms:
     # hydrogenate and relax params
     max_steps: int = 50
     # experimental
-    url: str | None = None
+    timeout: float = 10.0
 
 
 def format_run_settings(vis, **kwargs) -> RequestAtoms:
@@ -59,7 +59,7 @@ def settings_to_json(settings: RequestAtoms) -> str:
         "num_atoms_to_add": settings.num_atoms_to_add,
         "restorative_force_multiplier": settings.restorative_force_multiplier,
         "max_steps": settings.max_steps,
-        "url": settings.url,
+        "timeout": settings.timeout,
     }
     return json.dumps(serializable_settings)
 
@@ -78,7 +78,7 @@ def settings_from_json(settings_json: str | bytes) -> RequestAtoms:
             "restorative_force_multiplier"
         ],
         max_steps=serializable_settings["max_steps"],
-        url=serializable_settings["url"],
+        timeout=serializable_settings["timeout"],
     )
     return settings
 
