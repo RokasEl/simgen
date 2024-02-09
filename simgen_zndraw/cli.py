@@ -147,10 +147,10 @@ def connect(
     vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
     if add_linkers:
         vis.extend(linkers)
-    vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
     vis.register_modifier(
         SiMGenDemo, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
+    vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
     while True:
         try:
             vis.socket.emit("ping")
