@@ -7,7 +7,7 @@ import numpy as np
 import requests
 from pydantic import BaseModel, ConfigDict, Field
 from zndraw.modify import UpdateScene
-from zndraw.zndraw_frozen import FrozenZnDraw as ZnDraw
+from zndraw.zndraw_frozen import ZnDrawFrozen as ZnDraw
 
 from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
