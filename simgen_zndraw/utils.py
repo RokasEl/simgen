@@ -4,9 +4,26 @@ import pathlib
 import ase
 import networkx as nx
 import numpy as np
+from znframe.frame import get_radius
 
 from simgen.hydrogenation import get_edge_array_from_atoms
 from simgen_zndraw import DefaultGenerationParams
+
+
+def get_anchor_point_positions(
+    atoms: ase.Atoms, selection: list[int], camera_dict: dict[str, list[float]]
+) -> np.ndarray:
+    if len(selection) < 2:
+        raise ValueError("Need at least two atoms to define a connection")
+    positions = atoms.positions[selection]
+    numbers = atoms.numbers[selection]
+    camera_position = np.array(camera_dict["position"])[None, :]  # 1x3
+
+    radii: np.ndarray = get_radius(numbers)[0][:, None]  # Nx1
+    direction = camera_position - positions  # Nx3
+    direction /= np.linalg.norm(direction, axis=1)[:, None]  # Nx3
+    anchor_point_positions = positions + direction * radii
+    return anchor_point_positions
 
 
 def get_edge_array(atoms: ase.Atoms) -> np.ndarray:

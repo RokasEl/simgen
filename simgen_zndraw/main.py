@@ -20,6 +20,7 @@ from simgen.utils import setup_logger
 
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
+from .utils import get_anchor_point_positions
 
 setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
 
@@ -109,7 +110,20 @@ class Generate(UpdateScene):
             return modified_atoms[-1]
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
+        logging.critical(vis.points)
         points = self._handle_points(vis.points, vis.segments)
+        if points is None:
+            if len(vis.selection) <= 1:
+                logging.info("No location provided, will generate at origin")
+                points = np.array([[0.0, 0.0, 0.0]])
+            else:
+                points = get_anchor_point_positions(
+                    vis.atoms, vis.selection, vis.camera
+                )
+                vis.points = points
+                vis.selection = []
+                points = interpolate_points(points, 100)
+
         if len(vis.atoms):
             points = self._remove_collisions_between_prior_and_atoms(
                 points, vis.atoms.get_positions()
@@ -127,10 +141,9 @@ class Generate(UpdateScene):
         }
 
     @staticmethod
-    def _handle_points(points, segments) -> np.ndarray:
+    def _handle_points(points, segments) -> np.ndarray | None:
         if points.size == 0:
-            logging.info("No location provided, will generate at origin")
-            return np.array([[0.0, 0.0, 0.0]])
+            return None
         elif points.shape[0] == 1:
             return points
         else:
