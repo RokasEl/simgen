@@ -361,7 +361,7 @@ def _format_fields(schema, cls):
 class SiMGenDemo(UpdateScene):
     discriminator: t.Literal["SiMGenDemo"] = "SiMGenDemo"
     atoms_per_angstrom: float = Field(
-        1.25,
+        1.2,
         ge=0.8,
         le=2.0,
         description="Num atoms added = atoms_per_angstrom * curve_length",
@@ -373,7 +373,7 @@ class SiMGenDemo(UpdateScene):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    model_config = ConfigDict(json_schema_extra=_format_fields)
+    # model_config = ConfigDict(json_schema_extra=_format_fields) # Not working on ZnDraw side yet
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         vis.log("Sending request to inference server.")
