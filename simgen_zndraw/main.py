@@ -361,13 +361,13 @@ def _format_fields(schema, cls):
 class SiMGenDemo(UpdateScene):
     discriminator: t.Literal["SiMGenDemo"] = "SiMGenDemo"
     atoms_per_angstrom: float = Field(
-        1.3,
+        1.25,
         ge=0.8,
         le=2.0,
         description="Num atoms added = atoms_per_angstrom * curve_length",
     )
     guiding_force_multiplier: float = Field(
-        1.75,
+        1.5,
         ge=1.0,
         le=10.0,
         description="Multiplier for guiding force. Increase if molecules falls apart.",
