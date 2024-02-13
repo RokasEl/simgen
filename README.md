@@ -1,5 +1,7 @@
 # Similarity based Molecular Generation (SiMGen)
 
+<img src="banner_animation.gif" height="350"/>
+
 SiMGen is a local similarity based molecular generation method. It uses a pretrained MACE model to generate local molecular descriptors and a time-dependent similarity kernel to generate new molecules.
 
 SiMGen is available as an online web-tool at [https://zndraw.icp.uni-stuttgart.de/](https://zndraw.icp.uni-stuttgart.de/).
