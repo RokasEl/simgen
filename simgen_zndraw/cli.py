@@ -150,6 +150,7 @@ def connect(
     vis.register_modifier(
         SiMGenDemo, run_kwargs={"calculators": models}, default=True  # type: ignore
     )
+    vis.socket.sleep(10)
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
     while True:
         try:
