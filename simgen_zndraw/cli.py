@@ -125,7 +125,7 @@ def connect(
     auth_token: Optional[str] = typer.Option(None, help="Authentication token"),
     device: Device = typer.Option(Device.cpu),
 ):
-    print("Loading models...")
+    logging.info("Loading models...")
     if path is None:
         path = get_default_mace_models_path()
     model_name = mace_model_name.value.split("_")[0]
@@ -139,7 +139,7 @@ def connect(
         ),
         "hydrogenation": get_hydromace_calculator(path, device=device.value),
     }
-    print("Connecting to ZnDraw...")
+    logging.info("Connecting to ZnDraw...")
     if add_linkers:
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
@@ -155,15 +155,15 @@ def connect(
     while True:
         try:
             vis.socket.emit("ping")
-        except Exception as e:
-            print("\n", 32 * "-")
-            print(f"Not connected to ZnDraw: {e}")
-            print("Trying to reconnect...")
-            vis.reconnect()
-            print("Reconnected to ZnDraw")
-        finally:
-            print(".", end="")
             vis.socket.emit("modifier:available", vis._available)
+        except Exception as e:
+            logging.critical(32 * "-")
+            logging.critical("Not connected to ZnDraw: %s", e)
+            logging.critical("Trying to reconnect...")
+            vis.reconnect()
+            logging.critical("Reconnected to ZnDraw")
+        finally:
+            print(".", end="", flush=True)
             vis.socket.sleep(10)
 
 
