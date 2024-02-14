@@ -154,7 +154,6 @@ def connect(
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
     while True:
         try:
-            vis.socket.emit("ping")
             vis.socket.emit("modifier:available", vis._available)
         except Exception as e:
             logging.critical(32 * "-")
@@ -163,7 +162,6 @@ def connect(
             vis.reconnect()
             logging.critical("Reconnected to ZnDraw")
         finally:
-            print(".", end="", flush=True)
             vis.socket.sleep(10)
 
 
