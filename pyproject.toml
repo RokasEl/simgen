@@ -17,7 +17,7 @@ dependencies = [
     "typer[all]>=0.7.0",
     "decorator",
     "mace-models>=0.1.2",
-    "hydromace @ git+https://github.com/RokasEl/hydromace/",
+    "hydromace",
     "znframe",
     "zndraw",
 ]
