@@ -156,13 +156,14 @@ def connect(
         try:
             vis.socket.emit("ping")
         except Exception as e:
+            print("\n", 32 * "-")
             print(f"Not connected to ZnDraw: {e}")
             print("Trying to reconnect...")
             vis.reconnect()
             print("Reconnected to ZnDraw")
         finally:
-            print(32 * "-")
-            print("Sleeping for 10 seconds")
+            print(".", end="")
+            vis.socket.emit("modifier:available", vis._available)
             vis.socket.sleep(10)
 
 
