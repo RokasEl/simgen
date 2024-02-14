@@ -97,6 +97,7 @@ class Generate(UpdateScene):
             logging.debug("Calling generate function")
             modified_atoms, e = generate(run_settings, generation_calc)
         if len(modified_atoms) == 0:
+            logging.error(f"Generation did not return any atoms. Error: {e}")
             vis.log(
                 f"Generation did not return any atoms. Error: {e}. Please try again."
             )
@@ -110,7 +111,6 @@ class Generate(UpdateScene):
             return modified_atoms[-1]
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
-        logging.critical(vis.points)
         points = self._handle_points(vis.points, vis.segments)
         if points is None:
             if len(vis.selection) <= 1:
@@ -372,6 +372,11 @@ def _format_fields(schema, cls):
 
 
 class SiMGenDemo(UpdateScene):
+    """
+    Demo of SiMGen. Generates a structure, hydrogenates it, and relaxes it.
+    See the tutorial for more information.
+    """
+
     discriminator: t.Literal["SiMGenDemo"] = "SiMGenDemo"
     atoms_per_angstrom: float = Field(
         1.2,
