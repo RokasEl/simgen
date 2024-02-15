@@ -1,3 +1,5 @@
+[![DOI](https://img.shields.io/badge/arXiv-2402.08708-red)](https://arxiv.org/abs/2402.08708)
+
 # Similarity based Molecular Generation (SiMGen)
 
 <a href="https://zndraw.icp.uni-stuttgart.de">
@@ -72,6 +74,13 @@ To construct molecules with more complicated shapes, you will have to manually d
 If you use SiMGen in your research, please cite the following paper:
 
 ```bibtex
+@misc{elijosiusZeroShotMolecular2024,
+  title = {Zero {{Shot Molecular Generation}} via {{Similarity Kernels}}},
+  author = {Elijo{\v s}ius, Rokas and Zills, Fabian and Batatia, Ilyes and Norwood, Sam Walton and Kov{\'a}cs, D{\'a}vid P{\'e}ter and Holm, Christian and Cs{\'a}nyi, G{\'a}bor},
+  year = {2024},
+  eprint = {2402.08708},
+  archiveprefix = {arxiv},
+}
 ```
 
 
