@@ -43,7 +43,7 @@ def main(
     rng = np.random.default_rng(0)
     score_model = get_mace_similarity_calculator(
         model_repo_path,
-        model_name="medium_spice",
+        model_name="medium",
         data_name="simgen_reference_data_medium",
         num_reference_mols=num_reference_mols,
         num_to_sample_uniformly_per_size=2,

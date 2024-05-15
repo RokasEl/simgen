@@ -80,7 +80,7 @@ def main(
         logging.info(f"Generating molecule {i}")
         size = num_heavy_atoms
         mol = initialize_mol(f"C{size}")
-        restorative_force_strength = calculate_restorative_force_strength(size)
+        restorative_force_strength = 0.7 * calculate_restorative_force_strength(size)
         particle_filter = ParticleFilterGenerator(
             score_model,
             guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance_arr),
