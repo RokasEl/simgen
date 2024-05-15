@@ -185,14 +185,11 @@ class RadialDistanceTransformBlock(RadialEmbeddingBlock):
             "r_min", torch.tensor(r_min, dtype=torch.get_default_dtype())
         )
 
-    def forward(
-        self,
-        edge_lengths: torch.Tensor,  # [n_edges, 1]
-    ):
+    def forward(self, edge_lengths: torch.Tensor, *args):  # [n_edges, 1]
         transformed_edges = (
             torch.nn.functional.relu(edge_lengths - self.r_min) + self.r_min
         )
-        return super().forward(transformed_edges)
+        return super().forward(transformed_edges, *args)
 
 
 def get_model_dtype(model: torch.nn.Module) -> torch.dtype:

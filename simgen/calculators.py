@@ -1,4 +1,3 @@
-"""ASE calculator comparing SOAP similarity"""
 import logging
 import warnings
 from functools import partial
