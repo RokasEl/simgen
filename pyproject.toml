@@ -14,12 +14,12 @@ dependencies = [
     "einops>=0.6.1",
     "fire>=0.5.0",
     "frozendict>=2.3.7",
-    "typer[all]>=0.7.0",
+    "typer>=0.7",
     "decorator",
     "mace-models>=0.1.2",
     "hydromace",
     "znframe",
-    "zndraw",
+    "zndraw>=0.3",
 ]
 
 [tool.setuptools.packages.find]

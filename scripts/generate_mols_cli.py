@@ -21,7 +21,7 @@ from simgen.utils import (
 DEVICE = get_system_torch_device_str()
 
 
-app = typer.Typer()
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 @app.command()
@@ -52,6 +52,10 @@ def main(
     track_trajectories: bool = typer.Option(
         default=False,
         help="If true, save all trajectory configurations instead of just the last",
+    ),
+    do_final_cleanup: bool = typer.Option(
+        default=True,
+        help="If true, clean up generated molecules by hydrogenating them and relaxing them. False if you want to save the raw output of the particle filter.",
     ),
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
@@ -95,6 +99,7 @@ def main(
             particle_swap_frequency=2,
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
+            do_final_cleanup=do_final_cleanup,
         )
 
         if save_path.is_dir():
