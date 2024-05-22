@@ -58,6 +58,7 @@ def get_edge_array_from_atoms(
 
 
 def hydrogenate_hydromace(atoms: ase.Atoms, hydromace_calc: HydroMaceCalculator):
+    atoms = atoms.copy()
     num_hs_to_add = hydromace_calc.predict_missing_hydrogens(atoms)
     num_hs_to_add_per_atom = np.round(num_hs_to_add).astype(int)
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)

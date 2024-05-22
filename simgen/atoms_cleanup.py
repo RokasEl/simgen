@@ -73,6 +73,8 @@ def attach_calculator(
         atoms.info["calculation_type"] = calculation_type
         if mask is not None:
             atoms.info["mask"] = mask
+        elif "mask" in atoms.info:
+            del atoms.info["mask"]
         atoms.calc = calculator
     return atoms_list
 
@@ -183,18 +185,16 @@ def cleanup_atoms(
         pruned_atoms.copy(), hydrogenation_type, hydrogenation_calc
     )
     relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=30, max_step=0.05
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
     )[0]
-    element_relaxed_atoms = relax_elements(
-        relaxed_hydrogenated_atoms,
-        z_table,
-        num_element_sweeps=num_element_sweeps,
-        mask=mask,
+    # Add additional hydrogens to the relaxed atoms
+    relaxed_hydrogenated_atoms = add_hydrogens(
+        relaxed_hydrogenated_atoms, hydrogenation_type, hydrogenation_calc
     )
     final_relaxed_atoms = attach_calculator(
-        [element_relaxed_atoms.copy()], calc, calculation_type="mace"
+        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
     )
-    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=30, max_step=0.1)[
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
         0
     ]
     final_relaxed_atoms = remove_isolated_atoms_using_covalent_radii(
@@ -204,6 +204,5 @@ def cleanup_atoms(
         pruned_atoms,
         hydrogenated_atoms,
         relaxed_hydrogenated_atoms,
-        element_relaxed_atoms,
         final_relaxed_atoms,
     ]
