@@ -3,17 +3,7 @@ import pytest
 import torch
 from mace.tools.scatter import scatter_sum
 
-from simgen.calculators import MaceSimilarityCalculator
 from simgen.utils import get_system_torch_device_str, initialize_mol
-
-from .fixtures import (
-    loaded_mace_similarity_calculator,
-    loaded_model,
-    mace_model,
-    test_molecules,
-    training_molecules,
-    z_table,
-)
 
 torch.set_default_dtype(torch.float64)
 

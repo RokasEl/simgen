@@ -34,3 +34,6 @@ simgen = "simgen_zndraw.cli:cli_app"
 all = [
     "rdkit>=2023.9.4"
 ]
+
+[tool.ruff.lint]
+ignore = ["E731"]

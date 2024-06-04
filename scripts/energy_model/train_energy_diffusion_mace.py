@@ -1,17 +1,13 @@
 import logging
+from functools import partial
 
 import numpy as np
 import torch
 from e3nn import o3
+from fire import Fire
 from mace import data, modules, tools
 from mace.tools import torch_geometric
 from mace.tools.scripts_utils import get_dataset_from_xyz
-from torch.nn.utils.clip_grad import clip_grad_norm_
-
-torch.set_default_dtype(torch.float64)
-from functools import partial
-
-from fire import Fire
 
 import wandb
 from energy_model.diffusion_tools import (
@@ -24,6 +20,7 @@ from energy_model.diffusion_tools import (
 from energy_model.training_tools import get_default_optimizer
 from simgen.utils import get_system_torch_device_str, setup_logger
 
+torch.set_default_dtype(torch.float64)
 Z_TABLE = tools.AtomicNumberTable([1, 6, 7, 8, 9])
 DEVICE = get_system_torch_device_str()
 

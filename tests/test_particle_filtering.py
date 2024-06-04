@@ -1,6 +1,4 @@
 import numpy as np
-import pytest
-from ase import Atoms
 
 from simgen.particle_filtering import ParticleFilterGenerator
 from simgen.utils import initialize_mol

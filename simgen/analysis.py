@@ -1,4 +1,3 @@
-from collections import Counter
 from dataclasses import dataclass
 from io import StringIO
 
@@ -9,7 +8,6 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, rdDetermineBonds
 
 from .calculators import MaceSimilarityCalculator
-from .generation_utils import get_edge_array_and_neighbour_numbers
 from .hydrogenation import NATURAL_VALENCES
 from .hydrogenation_deterministic import build_xae_molecule
 

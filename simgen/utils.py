@@ -94,8 +94,8 @@ def read_qm9_xyz(filename):
     natoms = int(lines[0])
     parsed_props = _get_qm9_props(lines[1])
     elements, coords, charges = [], [], []
-    for l in lines[2:-3]:
-        element, *coord, charge = _process_line(l)
+    for line in lines[2:-3]:
+        element, *coord, charge = _process_line(line)
         elements.append(element)
         coords.append(coord)
         charges.append(charge)
@@ -111,7 +111,7 @@ def read_qm9_xyz(filename):
 def initialize_mol(molecule_str="C6H6"):
     try:
         mol = molecule(molecule_str)
-    except:
+    except KeyError:
         mol = Atoms(molecule_str)
     return mol
 

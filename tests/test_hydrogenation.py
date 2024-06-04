@@ -8,7 +8,6 @@ from simgen.hydrogenation import (
     check_hydrogen_position_is_valid,
     get_exclusion_radii,
 )
-from simgen.utils import initialize_mol
 
 
 @pytest.mark.parametrize(

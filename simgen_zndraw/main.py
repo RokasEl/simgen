@@ -1,11 +1,10 @@
 import logging
 import typing as t
-from typing import Any
 
 import ase
 import numpy as np
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 from zndraw.modify import UpdateScene
 from zndraw.zndraw_frozen import ZnDrawFrozen as ZnDraw
 
@@ -400,7 +399,7 @@ class SiMGenDemo(UpdateScene):
         if calculators is None:
             raise ValueError("No calculators provided")
         bookmarks = vis.bookmarks.copy()
-        bookmarks = bookmarks | {int(vis.step): f"SiMGen: Generating a structure."}
+        bookmarks = bookmarks | {int(vis.step): "SiMGen: Generating a structure."}
         vis.bookmarks = bookmarks
         timeout = kwargs.get("timeout", 60)
         gen_class = Generate(
@@ -417,7 +416,7 @@ class SiMGenDemo(UpdateScene):
         )
 
         vis._cached_data["atoms"] = atoms
-        bookmarks = bookmarks | {len(vis): f"SiMGen: Hydrogenating the structure."}
+        bookmarks = bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
         vis.bookmarks = bookmarks
         hydrogenate_class = Hydrogenate(
             discriminator="Hydrogenate",
@@ -432,7 +431,7 @@ class SiMGenDemo(UpdateScene):
 
         vis._cached_data["atoms"] = atoms
         vis._cached_data["selection"] = []
-        bookmarks = bookmarks | {len(vis): f"SiMGen: Relaxing the structure."}
+        bookmarks = bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
         vis.bookmarks = bookmarks
         relax_class = Relax(
             discriminator="Relax",

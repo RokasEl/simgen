@@ -1,4 +1,3 @@
-import logging
 import warnings
 from functools import partial
 from typing import List
@@ -7,11 +6,7 @@ import ase
 import einops
 import numpy as np
 import torch
-from ase.calculators.calculator import (
-    Calculator,
-    PropertyNotImplementedError,
-    all_changes,
-)
+from ase.calculators.calculator import Calculator, all_changes
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.modules.models import MACE
 from mace.tools import AtomicNumberTable
@@ -23,7 +18,6 @@ from simgen.generation_utils import (
     batch_to_correct_dtype,
     convert_atoms_to_atomic_data,
     get_model_dtype,
-    remove_elements,
 )
 
 

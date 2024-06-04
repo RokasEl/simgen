@@ -9,7 +9,9 @@ from e3nn.util.jit import compile_mode
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
 from mace.modules.blocks import RadialEmbeddingBlock
+from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import AtomicNumberTable
+from mace.tools.scatter import scatter_sum
 from scipy.interpolate import splev, splprep  # type: ignore
 from torch import nn
 
@@ -149,10 +151,6 @@ def get_edge_array_and_neighbour_numbers(atoms: ase.Atoms, mult: float = 1.2):
     edge_array = np.stack(edge_array, axis=1)
     neighbour_numbers = np.bincount(edge_array[:, 0], minlength=len(atoms))
     return edge_array, neighbour_numbers
-
-
-from mace.modules.utils import get_edge_vectors_and_lengths
-from mace.tools.scatter import scatter_sum
 
 
 @compile_mode("script")

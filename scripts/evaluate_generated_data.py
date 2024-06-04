@@ -1,12 +1,10 @@
 import pathlib
 from typing import Iterable
 
-import ase
 import ase.io as aio
 import fire
 import numpy as np
 import pandas as pd
-import torch
 
 from simgen.analysis import (
     analyse_base,

@@ -1,13 +1,15 @@
+import logging
 import os
 
+import ase.io as ase_io
 import numpy as np
 import torch
 
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.integrators import IntegrationParameters
+from simgen.manifolds import CirclePrior, MultivariateGaussianPrior
 from simgen.particle_filtering import ParticleFilterGenerator
-
-torch.set_default_dtype(torch.float64)
-from ase import Atoms
-
 from simgen.utils import (
     get_hydromace_calculator,
     get_mace_similarity_calculator,
@@ -16,17 +18,8 @@ from simgen.utils import (
     setup_logger,
 )
 
+torch.set_default_dtype(torch.float64)
 DEVICE = get_system_torch_device_str()
-
-import logging
-
-import ase.io as ase_io
-from hydromace.interface import HydroMaceCalculator
-
-from simgen.element_swapping import SwappingAtomicNumberTable
-from simgen.generation_utils import calculate_restorative_force_strength
-from simgen.integrators import IntegrationParameters
-from simgen.manifolds import CirclePrior, MultivariateGaussianPrior
 
 
 def main(

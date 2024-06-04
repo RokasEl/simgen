@@ -15,13 +15,6 @@ from simgen.atoms_cleanup import (
 from simgen.generation_utils import batch_atoms
 from simgen.utils import get_system_torch_device_str, initialize_mol
 
-from .fixtures import (
-    loaded_mace_similarity_calculator,
-    loaded_model,
-    test_molecules,
-    training_molecules,
-)
-
 z_table = AtomicNumberTable([1, 6, 7, 8, 9])
 
 

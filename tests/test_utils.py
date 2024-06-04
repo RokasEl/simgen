@@ -1,12 +1,9 @@
 import numpy as np
-import pytest
 import torch
 from e3nn import o3
 from mace.modules import interaction_classes
 
 from simgen.utils import get_mace_config
-
-from .fixtures import mace_model, training_molecules, z_table
 
 
 def test_get_mace_config(mace_model, z_table):

@@ -1,5 +1,3 @@
-import pytest
-
 from simgen.temperature_annealing import ExponentialThermostat
 
 

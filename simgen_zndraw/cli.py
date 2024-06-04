@@ -52,7 +52,7 @@ def init(
     current_default_path = config.default_model_path
     if current_default_path is not None and not force:
         print(f"Default model path is already set to {current_default_path}")
-        print(f"If you want to change it, run the command with the --force flag")
+        print("If you want to change it, run the command with the --force flag")
     else:
         config.default_model_path = (
             pathlib.Path(path).expanduser().absolute().as_posix()
@@ -73,7 +73,7 @@ def init(
         pkg = "simgen_zndraw.main.DiffusionModelling"
         config.modify_functions = list(
             filter(
-                lambda x: not "DiffusionModelling".lower() in x.lower(),
+                lambda x: "DiffusionModelling".lower() not in x.lower(),
                 config.modify_functions,
             )
         )

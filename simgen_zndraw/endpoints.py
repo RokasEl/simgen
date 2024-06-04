@@ -6,7 +6,7 @@ import numpy as np
 from ase.optimize import LBFGS
 from hydromace.interface import HydroMaceCalculator
 
-from simgen.atoms_cleanup import attach_calculator, relax_hydrogens
+from simgen.atoms_cleanup import attach_calculator
 from simgen.calculators import MaceSimilarityCalculator
 from simgen.generation_utils import calculate_restorative_force_strength
 from simgen.hydrogenation import (

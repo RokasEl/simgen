@@ -1,11 +1,8 @@
-from itertools import product
-
 import ase
 import numpy as np
 from ase.data import covalent_radii
 from frozendict import frozendict
 from hydromace.interface import HydroMaceCalculator
-from scipy.stats import binom
 
 from simgen.hydrogenation_deterministic import build_xae_molecule
 

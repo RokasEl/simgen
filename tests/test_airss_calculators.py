@@ -22,6 +22,7 @@ def test_mopac_calculator():
     np.testing.assert_allclose(forces, expected_forces * 0.0433641153087705)
 
     atoms = molecule("CH4")
+    calc = MopacCalculator()
     atoms.calc = calc
     energy = atoms.get_potential_energy()
     forces = atoms.get_forces()
