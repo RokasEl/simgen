@@ -105,9 +105,7 @@ def main(
         size = num_heavy_atoms
         mol = initialize_mol(f"C{size}")
         restorative_force_strength = (
-            additional_force_multiplier
-            * 0.7
-            * calculate_restorative_force_strength(size)
+            additional_force_multiplier * calculate_restorative_force_strength(size)
         )
         particle_filter = ParticleFilterGenerator(
             score_model,
