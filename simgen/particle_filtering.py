@@ -89,6 +89,7 @@ class ParticleFilterGenerator:
         scaffold: ase.Atoms | None = None,
         hydrogenation_type: Literal["valence"] | Literal["hydromace"] = "valence",
         hydrogenation_calc: HydroMaceCalculator | None = None,
+        cleanup_scheme: str = "add_hs_once",
         timeout: float = np.inf,  # only needed for the web interface
     ):
         # initialise mol
@@ -124,6 +125,7 @@ class ParticleFilterGenerator:
                 swapping_z_table,
                 num_element_sweeps="all",
                 mask=mask,
+                cleanup_scheme=cleanup_scheme,
             )
             trajectories.extend(cleaned)
         self._values_to_numpy(trajectories)

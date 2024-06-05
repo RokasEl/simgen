@@ -176,9 +176,9 @@ def get_mace_similarity_calculator(
     return mace_similarity_calculator
 
 
-def get_hydromace_calculator(model_repo_path, device):
+def get_hydromace_calculator(model_repo_path: str, model_name: str, device: str):
     try:
-        model_loader = zntrack.from_rev("hydromace", remote=model_repo_path)
+        model_loader = zntrack.from_rev(model_name, remote=model_repo_path)
         model = model_loader.get_model(device=device)
         hydrogenation_model = HydroMaceCalculator(model, device=device)
         return hydrogenation_model

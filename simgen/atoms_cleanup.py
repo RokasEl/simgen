@@ -1,3 +1,5 @@
+import importlib
+import logging
 from typing import List, Literal, Tuple
 
 import ase
@@ -16,6 +18,7 @@ from simgen.generation_utils import (
     get_edge_array_and_neighbour_numbers,
 )
 from simgen.hydrogenation import (
+    add_hydrogens_to_atoms,
     hydrogenate_deterministically,
     hydrogenate_hydromace,
 )
@@ -88,6 +91,7 @@ def add_hydrogens(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc)
                 "Trying to use model to hydrogenate, but no model provided."
             )
         atoms = hydrogenate_hydromace(atoms, hydrogenation_calc)
+        print(atoms)
     else:
         raise NotImplementedError(
             f"Hydrogenation type {hydrogenation_type} not implemented."
@@ -167,6 +171,102 @@ def relax_elements(
     return mol
 
 
+### Cleanup Schemes ###
+
+
+def add_hs_once(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc):
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    final_relaxed_atoms = attach_calculator(
+        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
+    )
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    return [hydrogenated_atoms, relaxed_hydrogenated_atoms, final_relaxed_atoms]
+
+
+def add_hs_twice_after_initial_hydrogen_relaxation(
+    atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
+):
+    assert hydrogenation_type == "hydromace"
+    out = []
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    out.append(hydrogenated_atoms)
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    out.append(relaxed_hydrogenated_atoms)
+    num_hs_to_add = hydrogenation_calc.predict_missing_hydrogens(
+        relaxed_hydrogenated_atoms
+    )
+    if np.any(num_hs_to_add > 0):
+        logging.info(
+            f"Adding additional {num_hs_to_add.sum()} hydrogens to the relaxed atoms."
+        )
+        second_hydrogenated_atoms = add_hydrogens_to_atoms(
+            relaxed_hydrogenated_atoms, num_hs_to_add
+        )
+        out.append(second_hydrogenated_atoms)
+        second_relaxed = relax_hydrogens(
+            [second_hydrogenated_atoms], calc, num_steps=15, max_step=0.1
+        )[0]
+        out.append(second_relaxed)
+        to_relax = second_relaxed.copy()
+    else:
+        to_relax = relaxed_hydrogenated_atoms.copy()
+    final_relaxed_atoms = attach_calculator([to_relax], calc, calculation_type="mace")
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    out.append(final_relaxed_atoms)
+    return out
+
+
+def add_hs_twice_after_full_relaxation(
+    atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
+):
+    assert hydrogenation_type == "hydromace"
+    out = []
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    out.append(hydrogenated_atoms)
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    out.append(relaxed_hydrogenated_atoms)
+    final_relaxed_atoms = attach_calculator(
+        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
+    )
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    out.append(final_relaxed_atoms)
+    num_hs_to_add = hydrogenation_calc.predict_missing_hydrogens(final_relaxed_atoms)
+    if np.any(num_hs_to_add > 0):
+        logging.info(
+            f"Adding additional {num_hs_to_add.sum()} hydrogens to the relaxed atoms."
+        )
+        second_hydrogenated_atoms = add_hydrogens_to_atoms(
+            final_relaxed_atoms, num_hs_to_add
+        )
+        second_relaxed = relax_hydrogens(
+            [second_hydrogenated_atoms], calc, num_steps=20, max_step=0.1
+        )[0]
+        out.extend([second_hydrogenated_atoms, second_relaxed])
+    return out
+
+
+### /Cleanup Schemes ###
+
+
 def cleanup_atoms(
     atoms: ase.Atoms,
     hydrogenation_type: str,
@@ -174,6 +274,7 @@ def cleanup_atoms(
     z_table: AtomicNumberTable,
     num_element_sweeps: int | Literal["all"] = "all",
     mask=None,
+    cleanup_scheme: str = "add_hs_once",
 ) -> list[ase.Atoms]:
     """
     Wrapper function to allow easy extension with other cleanup functions if needed.
@@ -181,28 +282,13 @@ def cleanup_atoms(
     assert atoms.calc is not None
     calc: Calculator = atoms.calc
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
-    hydrogenated_atoms = add_hydrogens(
-        pruned_atoms.copy(), hydrogenation_type, hydrogenation_calc
+    logging.info(f"{globals().keys()} {cleanup_scheme}")
+    cleanup_function = globals()[cleanup_scheme]
+    intermediate_atoms = cleanup_function(
+        pruned_atoms, hydrogenation_type, hydrogenation_calc, calc
     )
-    relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
-    )[0]
-    # Add additional hydrogens to the relaxed atoms
-    relaxed_hydrogenated_atoms = add_hydrogens(
-        relaxed_hydrogenated_atoms, hydrogenation_type, hydrogenation_calc
-    )
-    final_relaxed_atoms = attach_calculator(
-        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
-    )
-    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
-        0
-    ]
     final_relaxed_atoms = remove_isolated_atoms_using_covalent_radii(
-        final_relaxed_atoms
+        intermediate_atoms[-1]
     )
-    return [
-        pruned_atoms,
-        hydrogenated_atoms,
-        relaxed_hydrogenated_atoms,
-        final_relaxed_atoms,
-    ]
+    out = [pruned_atoms, *intermediate_atoms, final_relaxed_atoms]
+    return out

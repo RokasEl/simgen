@@ -36,6 +36,9 @@ def main(
     save_path: str = typer.Option(
         ..., help="Path to save generated molecules, can be file or directory"
     ),
+    hydrogenation_model_name: str = typer.Option(
+        "hydromace", help="Name of hydrogenation model to use"
+    ),
     prior_gaussian_covariance: tuple[float, float, float] = typer.Option(
         default=(1.0, 1.0, 2.0),
         help="Covariance matrix for prior Gaussian distribution",
@@ -57,6 +60,9 @@ def main(
         default=True,
         help="If true, clean up generated molecules by hydrogenating them and relaxing them. False if you want to save the raw output of the particle filter.",
     ),
+    cleanup_scheme: str = typer.Option(
+        default="add_hs_once",
+    ),
 ):
     setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
     rng = np.random.default_rng(0)
@@ -69,7 +75,9 @@ def main(
         rng=rng,
     )
     hydromace_calc = get_hydromace_calculator(
-        model_repo_path=model_repo_path, device=DEVICE
+        model_repo_path=model_repo_path,
+        model_name=hydrogenation_model_name,
+        device=DEVICE,
     )
     integration_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
 
@@ -100,6 +108,7 @@ def main(
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
             do_final_cleanup=do_final_cleanup,
+            cleanup_scheme=cleanup_scheme,
         )
 
         if save_path.is_dir():
