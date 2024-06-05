@@ -281,7 +281,6 @@ def cleanup_atoms(
     assert atoms.calc is not None
     calc: Calculator = atoms.calc
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
-    logging.info(f"{globals().keys()} {cleanup_scheme}")
     cleanup_function = globals()[cleanup_scheme]
     intermediate_atoms = cleanup_function(
         pruned_atoms, hydrogenation_type, hydrogenation_calc, calc
