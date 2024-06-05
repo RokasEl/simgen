@@ -189,7 +189,7 @@ def add_hs_once(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, c
     return [hydrogenated_atoms, relaxed_hydrogenated_atoms, final_relaxed_atoms]
 
 
-def add_hs_twice_after_initial_hydrogen_relaxation(
+def add_and_relax_hydrogens_iteratively(
     atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
 ):
     assert hydrogenation_type == "hydromace"
@@ -228,7 +228,7 @@ def add_hs_twice_after_initial_hydrogen_relaxation(
     return out
 
 
-def add_hs_twice_after_full_relaxation(
+def add_hydrogens_after_full_relaxation(
     atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
 ):
     assert hydrogenation_type == "hydromace"
