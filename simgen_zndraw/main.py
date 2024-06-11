@@ -107,6 +107,7 @@ class Generate(UpdateScene):
                 remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
             )
             vis.extend(modified_atoms)
+            vis.step = len(vis) - 1
             return modified_atoms[-1]
 
     def _get_run_specific_settings(self, vis: ZnDraw) -> dict:
@@ -236,6 +237,7 @@ class Relax(UpdateScene):
             remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
         )
         vis.extend(modified_atoms)
+        vis.step = len(vis) - 1
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         return modified_atoms[-1]
 
@@ -280,6 +282,7 @@ class Hydrogenate(UpdateScene):
         )
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
+        vis.step = len(vis) - 1
         return modified_atoms[-1]
 
     @staticmethod
