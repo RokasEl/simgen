@@ -6,7 +6,7 @@ from typing import Optional
 import typer
 import zntrack
 from zndraw import ZnDraw
-from zndraw.settings import GlobalConfig
+# from zndraw.settings import GlobalConfig
 
 from simgen.utils import (
     get_hydromace_calculator,
@@ -144,25 +144,29 @@ def connect(
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
         linkers = []
-    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token)
+    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token, maximum_message_size=50_000)
+    vis.timeout['modifier'] = 1.0
+
     if add_linkers:
         vis.extend(linkers)
     vis.register_modifier(
-        SiMGenDemo, run_kwargs={"calculators": models}, default=True  # type: ignore
+        SiMGenDemo, run_kwargs={"calculators": models}, public=True  # type: ignore
     )
-    vis.socket.sleep(10)
-    vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, default=True)
-    while True:
-        try:
-            vis.socket.emit("modifier:available", vis._available)
-        except Exception as e:
-            logging.critical(32 * "-")
-            logging.critical("Not connected to ZnDraw: %s", e)
-            logging.critical("Trying to reconnect...")
-            vis.reconnect()
-            logging.critical("Reconnected to ZnDraw")
-        finally:
-            vis.socket.sleep(10)
+    vis.socket.sleep(2)
+    vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, public=True)
+    logging.info("All modifiers registered. Waiting for requests...")
+    vis.socket.wait()
+    # while True:
+    #     try:
+    #         vis.socket.emit("modifier:available", vis._available)
+    #     except Exception as e:
+    #         logging.critical(32 * "-")
+    #         logging.critical("Not connected to ZnDraw: %s", e)
+    #         logging.critical("Trying to reconnect...")
+    #         vis.socket.connect(vis.url, wait_timeout=10)
+    #         logging.critical("Reconnected to ZnDraw")
+    #     finally:
+    #         vis.socket.sleep(10)
 
 
 if __name__ == "__main__":
