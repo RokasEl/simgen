@@ -208,7 +208,7 @@ class CirclePrior(PointCloudPrior):
     def __init__(
         self,
         radius,
-        num_points=20,
+        num_points: int = 20,
         beta: float = 1,
         point_shape: PointShape = StandardGaussianPrior(),
     ):
@@ -223,3 +223,23 @@ class CirclePrior(PointCloudPrior):
     @property
     def curve_length(self):
         return 2 * np.pi * self.radius
+
+
+class LinePrior(PointCloudPrior):
+    def __init__(
+        self,
+        length,
+        num_points: int = 20,
+        beta: float = 1,
+        point_shape: PointShape = StandardGaussianPrior(),
+    ):
+        self.length = length
+        x = np.linspace(-length / 2, length / 2, num_points)
+        y = np.zeros(num_points)
+        z = np.zeros(num_points)
+        points = np.stack([x, y, z], axis=1)
+        super().__init__(points, beta, point_shape)
+
+    @property
+    def curve_length(self):
+        return self.length
