@@ -176,7 +176,9 @@ def get_mace_similarity_calculator(
     return mace_similarity_calculator
 
 
-def get_hydromace_calculator(model_repo_path: str, model_name: str = "hydromace", device: str = "cuda"):
+def get_hydromace_calculator(
+    model_repo_path: str, model_name: str = "hydromace", device: str = "cuda"
+):
     try:
         model_loader = zntrack.from_rev(model_name, remote=model_repo_path)
         model = model_loader.get_model(device=device)
@@ -236,6 +238,10 @@ def get_reference_data(
     if num_reference_mols == -1:
         return all_data
 
+    # now add further random molecules
+    if rng is None:
+        rng = np.random.default_rng(0)
+
     if num_to_sample_uniformly_per_size > 0:
         training_data, already_sampled_indices = sample_uniformly_across_heavy_atom_number(all_data, num_to_sample_uniformly_per_size, rng)  # type: ignore
         already_sampled = len(training_data)
@@ -248,9 +254,6 @@ def get_reference_data(
         training_data = []
         already_sampled = 0
 
-    # now add further random molecules
-    if rng is None:
-        rng = np.random.default_rng(0)
     too_add = num_reference_mols - already_sampled
     if too_add <= 0:
         logging.info("After sampling uniformly, got more molecules than requested.")
