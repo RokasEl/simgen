@@ -6,7 +6,7 @@ import numpy as np
 import requests
 from pydantic import BaseModel, Field
 from zndraw.modify import UpdateScene
-from zndraw.zndraw_frozen import ZnDrawFrozen as ZnDraw
+from zndraw import ZnDraw
 
 from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
@@ -415,6 +415,7 @@ class SiMGenDemo(UpdateScene):
             timeout=timeout,
         )
 
+        vis._cached_data = {}
         vis._cached_data["atoms"] = atoms
         bookmarks = bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
         vis.bookmarks = bookmarks
@@ -428,7 +429,7 @@ class SiMGenDemo(UpdateScene):
             calculators=calculators,
             timeout=timeout,
         )
-
+        vis._cached_data = {}
         vis._cached_data["atoms"] = atoms
         vis._cached_data["selection"] = []
         bookmarks = bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
