@@ -109,7 +109,7 @@ class PointCloudPrior(PriorManifold):
     ):
         """
         points: (N, 3) array of points
-        beta: 1/sigma of each point in the manifold, for calculating restorative force
+        beta: 1/sigma^2 of each point in the manifold, for calculating restorative force
         """
         self.points = points
         self.beta = beta
