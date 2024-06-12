@@ -45,9 +45,6 @@ def main(
     atoms_per_angstrom: float = typer.Option(
         default=1.2, help="Lengthwise atom density"
     ),
-    restorative_force_multiplier: float = typer.Option(
-        default=0.7, help="Multiplier for restorative force strength"
-    ),
     num_molecules: int = typer.Option(
         default=100, help="Number of molecules to generate"
     ),
@@ -87,15 +84,19 @@ def main(
     if save_path.is_dir():
         save_path.mkdir(parents=True, exist_ok=True)
 
-    prior = LinePrior(line_length, num_points=200, beta=1.5)
+    num_points = int(line_length * 5)
+    prior = LinePrior(line_length, num_points=num_points, beta=5.5)
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
         size = int(prior.curve_length * atoms_per_angstrom)
         mol = initialize_mol(f"C{size}")
+        additional_multiplier = (
+            line_length - 5.0
+        ) * 0.07 + 1  # 5 is the default line length
         restorative_force_strength = (
-            restorative_force_multiplier * calculate_restorative_force_strength(size)
+            additional_multiplier * calculate_restorative_force_strength(size)
         )
         particle_filter = ParticleFilterGenerator(
             score_model,
