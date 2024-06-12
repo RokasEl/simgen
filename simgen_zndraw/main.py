@@ -1,12 +1,14 @@
+import eventlet
+eventlet.monkey_patch()
+
 import logging
 import typing as t
 
 import ase
 import numpy as np
 import requests
-from pydantic import BaseModel, Field
-from zndraw.modify import UpdateScene
-from zndraw import ZnDraw
+from pydantic import BaseModel, Field, ConfigDict
+from zndraw import ZnDraw, Extension
 
 from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
@@ -60,8 +62,7 @@ class FixedNumber(BaseModel):
         return self.discriminator, self.number_of_atoms
 
 
-class Generate(UpdateScene):
-    discriminator: t.Literal["Generate"] = Field("Generate")
+class Generate(Extension):
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
     )
@@ -205,8 +206,7 @@ class Generate(UpdateScene):
             )
 
 
-class Relax(UpdateScene):
-    discriminator: t.Literal["Relax"] = Field("Relax")
+class Relax(Extension):
     max_steps: int = Field(50, ge=1)
 
     def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
@@ -242,8 +242,7 @@ class Relax(UpdateScene):
         return modified_atoms[-1]
 
 
-class Hydrogenate(UpdateScene):
-    discriminator: t.Literal["Hydrogenate"] = Field("Hydrogenate")
+class Hydrogenate(Extension):
     max_steps: int = Field(30, ge=1)
 
     def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
@@ -302,13 +301,12 @@ class Hydrogenate(UpdateScene):
 run_types = t.Union[Generate, Hydrogenate, Relax]
 
 
-class DiffusionModelling(UpdateScene):
+class DiffusionModelling(Extension):
     """
     Click on `run type` to select the type of run to perform.\n
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    discriminator: t.Literal["DiffusionModelling"] = "DiffusionModelling"
     run_type: run_types = Field(discriminator="discriminator")
     client_address: str = Field("http://127.0.0.1:5000/run")
 
@@ -337,13 +335,12 @@ class DiffusionModelling(UpdateScene):
         logging.debug("-" * 72)
 
 
-class SiMGen(UpdateScene):
+class SiMGen(Extension):
     """
     Click on `run type` to select the type of run to perform.\n
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    discriminator: t.Literal["SiMGen"] = "SiMGen"
     run_type: run_types = Field(discriminator="discriminator")
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
@@ -373,13 +370,12 @@ def _format_fields(schema, cls):
     return cls._update_schema(schema)
 
 
-class SiMGenDemo(UpdateScene):
+class SiMGenDemo(Extension):
     """
     Demo of SiMGen. Generates a structure, hydrogenates it, and relaxes it.
     See the tutorial for more information.
     """
 
-    discriminator: t.Literal["SiMGenDemo"] = "SiMGenDemo"
     atoms_per_angstrom: float = Field(
         1.2,
         ge=0.8,
@@ -393,7 +389,7 @@ class SiMGenDemo(UpdateScene):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    # model_config = ConfigDict(json_schema_extra=_format_fields) # Not working on ZnDraw side yet
+    model_config = ConfigDict(json_schema_extra=_format_fields) # Not working on ZnDraw side yet
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         vis.log("Sending request to inference server.")
@@ -401,9 +397,7 @@ class SiMGenDemo(UpdateScene):
             del vis[vis.step + 1 :]
         if calculators is None:
             raise ValueError("No calculators provided")
-        bookmarks = vis.bookmarks.copy()
-        bookmarks = bookmarks | {int(vis.step): "SiMGen: Generating a structure."}
-        vis.bookmarks = bookmarks
+        vis.bookmarks = vis.bookmarks | {int(vis.step): "SiMGen: Generating a structure."}
         timeout = kwargs.get("timeout", 60)
         gen_class = Generate(
             discriminator="Generate",
@@ -411,32 +405,24 @@ class SiMGenDemo(UpdateScene):
             atom_number=PerAngstrom(atoms_per_angstrom=self.atoms_per_angstrom),
             guiding_force_multiplier=self.guiding_force_multiplier,
         )
-        atoms = gen_class.run(
+        gen_class.run(
             vis=vis,
             client_address=None,
             calculators=calculators,
             timeout=timeout,
         )
-
-        vis._cached_data = {}
-        vis._cached_data["atoms"] = atoms
-        bookmarks = bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
-        vis.bookmarks = bookmarks
+        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
         hydrogenate_class = Hydrogenate(
             discriminator="Hydrogenate",
             max_steps=30,
         )
-        atoms = hydrogenate_class.run(
+        hydrogenate_class.run(
             vis=vis,
             client_address=None,
             calculators=calculators,
             timeout=timeout,
         )
-        vis._cached_data = {}
-        vis._cached_data["atoms"] = atoms
-        vis._cached_data["selection"] = []
-        bookmarks = bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
-        vis.bookmarks = bookmarks
+        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
         relax_class = Relax(
             discriminator="Relax",
             max_steps=50,

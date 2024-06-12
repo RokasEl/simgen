@@ -1,3 +1,7 @@
+import eventlet
+eventlet.monkey_patch()
+
+
 import json
 import pathlib
 import typing as t
