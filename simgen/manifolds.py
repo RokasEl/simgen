@@ -240,6 +240,16 @@ class LinePrior(PointCloudPrior):
         points = np.stack([x, y, z], axis=1)
         super().__init__(points, beta, point_shape)
 
+    def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
+        """
+        Initialise the atom positions randomly around the point cloud
+        """
+        mol = molecule.copy()
+        x_pos = np.linspace(-self.length / 2, self.length / 2, len(mol))
+        positions = np.stack([x_pos, np.zeros(len(mol)), np.zeros(len(mol))], axis=1)
+        mol.set_positions(positions)
+        return mol
+
     @property
     def curve_length(self):
         return self.length

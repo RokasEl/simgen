@@ -85,7 +85,9 @@ def main(
         save_path.mkdir(parents=True, exist_ok=True)
 
     num_points = int(line_length * 5)
-    point_shape = MultivariateGaussianPrior(covariance_matrix=np.diag([2.0, 1.0, 1.0]))
+    point_shape = MultivariateGaussianPrior(
+        covariance_matrix=np.diag([1.0, 0.5, 0.5]), normalise_covariance=False
+    )
     prior = LinePrior(
         line_length, num_points=num_points, beta=1.0, point_shape=point_shape
     )
@@ -98,9 +100,7 @@ def main(
         additional_multiplier = (
             line_length - 5.0
         ) * 0.07 + 1  # 5 is the default line length
-        restorative_force_strength = (
-            additional_multiplier * calculate_restorative_force_strength(size)
-        )
+        restorative_force_strength = 1.0
         particle_filter = ParticleFilterGenerator(
             score_model,
             guiding_manifold=prior,
