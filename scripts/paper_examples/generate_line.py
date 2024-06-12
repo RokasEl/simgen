@@ -8,7 +8,7 @@ import typer
 from simgen.element_swapping import SwappingAtomicNumberTable
 from simgen.generation_utils import calculate_restorative_force_strength
 from simgen.integrators import IntegrationParameters
-from simgen.manifolds import LinePrior
+from simgen.manifolds import LinePrior, MultivariateGaussianPrior
 from simgen.particle_filtering import ParticleFilterGenerator
 from simgen.utils import (
     get_hydromace_calculator,
@@ -85,7 +85,10 @@ def main(
         save_path.mkdir(parents=True, exist_ok=True)
 
     num_points = int(line_length * 5)
-    prior = LinePrior(line_length, num_points=num_points, beta=5.5)
+    point_shape = MultivariateGaussianPrior(covariance_matrix=np.diag([2.0, 1.0, 1.0]))
+    prior = LinePrior(
+        line_length, num_points=num_points, beta=1.0, point_shape=point_shape
+    )
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
