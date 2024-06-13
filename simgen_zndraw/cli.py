@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 import logging
 import pathlib
 from enum import Enum
@@ -144,8 +147,10 @@ def connect(
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
         linkers = []
-    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token, maximum_message_size=50_000)
+    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token, maximum_message_size=500_000)
     vis.timeout['modifier'] = 1.0
+    vis.timeout['emit_retries'] = 5
+    vis.timeout['call_retries'] = 5
 
     if add_linkers:
         vis.extend(linkers)
