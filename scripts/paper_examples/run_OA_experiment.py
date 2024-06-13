@@ -74,6 +74,9 @@ def main(
         default=False,
         help="If true, save all trajectory configurations instead of just the last",
     ),
+    use_scaffold: bool = typer.Option(
+        default=False, help="If true, use the OA as a scaffold"
+    ),
 ):
     setup_logger(level=logging.INFO, tag="OA_generation", directory="./logs")
 
@@ -99,6 +102,12 @@ def main(
     OA_ligands = data_loader.get_atoms()
     prior = construct_prior_from_atoms(OA_ligands, beta=beta)
 
+    if use_scaffold:
+        oa_structure = zntrack.from_rev("OA_parent", remote=model_repo_path)
+        oa_structure = oa_structure.get_atoms()
+    else:
+        oa_structure = None
+
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
@@ -121,6 +130,7 @@ def main(
             particle_swap_frequency=2,
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
+            scaffold=oa_structure,
         )
 
         if save_path.is_dir():
