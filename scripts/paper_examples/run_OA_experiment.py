@@ -78,7 +78,8 @@ def main(
         help="If true, save all trajectory configurations instead of just the last",
     ),
     use_scaffold: bool = typer.Option(
-        default=False, help="If true, use the OA as a scaffold"),
+        default=False, help="If true, use the OA as a scaffold"
+    ),
     cleanup_scheme: str = typer.Option(
         default="add_hs_once",
     ),
@@ -111,7 +112,7 @@ def main(
 
     if use_scaffold:
         oa_structure = zntrack.from_rev("OA_parent", remote=model_repo_path)
-        oa_structure = oa_structure.get_atoms()
+        oa_structure = oa_structure.get_atoms()[0]
     else:
         oa_structure = None
 
