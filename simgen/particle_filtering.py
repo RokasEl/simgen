@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from time import monotonic
-from typing import List, Literal, Tuple
+from typing import Literal
 
 import ase
 import numpy as np
@@ -147,7 +147,7 @@ class ParticleFilterGenerator:
         intermediate_configs = []
         start_time = monotonic()
         for step, (sigma_cur, sigma_next) in enumerate(
-            zip(self.sigmas[:-1], self.sigmas[1:]),
+            zip(self.sigmas[:-1], self.sigmas[1:], strict=False),
         ):
             run_time = monotonic() - start_time
             if run_time > timeout:
@@ -173,7 +173,7 @@ class ParticleFilterGenerator:
         return intermediate_configs
 
     def _collect_and_swap(
-        self, atoms_list: List[ase.Atoms], beta, num_particles, z_table, mask
+        self, atoms_list: list[ase.Atoms], beta, num_particles, z_table, mask
     ):
         if self.swapped:
             collected_mol, _ = collect_particles(atoms_list, beta)  # type: ignore
@@ -199,7 +199,7 @@ class ParticleFilterGenerator:
         self.swapped = True
         return atom_ensemble
 
-    def _prepare_atoms_for_swap(self, atoms_list: List[ase.Atoms], sigma_next):
+    def _prepare_atoms_for_swap(self, atoms_list: list[ase.Atoms], sigma_next):
         if sigma_next is isinstance(sigma_next, torch.Tensor):
             time = sigma_next.item()
         else:
@@ -218,7 +218,7 @@ class ParticleFilterGenerator:
         num_particles: int,
         device: str = "cpu",
         dtype: torch.dtype = torch.float32,
-    ) -> Tuple[ase.Atoms, np.ndarray, torch.Tensor]:
+    ) -> tuple[ase.Atoms, np.ndarray, torch.Tensor]:
         if scaffold is None:
             return (
                 molecule,
@@ -237,7 +237,7 @@ class ParticleFilterGenerator:
         return merged, mask, torch_mask
 
     @staticmethod
-    def _values_to_numpy(atoms: List[ase.Atoms]):
+    def _values_to_numpy(atoms: list[ase.Atoms]):
         for _atoms in atoms:
             for k, v in _atoms.info.items():
                 if isinstance(v, torch.Tensor):

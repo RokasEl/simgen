@@ -3,7 +3,6 @@ import os
 import sys
 from contextlib import contextmanager
 from time import perf_counter
-from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -79,7 +78,7 @@ def _get_qm9_props(line):
     clean_floats = [_parse_to_float(p) for p in properties[2:]]
     rotational_constants = clean_floats[:3]
     remaining_properties = clean_floats[3:]
-    parsed_props = dict(zip(QM9_PROPERTIES, remaining_properties))
+    parsed_props = dict(zip(QM9_PROPERTIES, remaining_properties, strict=False))
     parsed_props["rotational_constants"] = rotational_constants  # type: ignore
     for key in FIELD_IN_HARTREE:
         parsed_props[key] *= 27.211396641308
@@ -119,9 +118,9 @@ def initialize_mol(molecule_str="C6H6"):
 # Taken from MACE
 def setup_logger(
     name: str | None = None,
-    level: Union[int, str] = logging.INFO,
-    tag: Optional[str] = None,
-    directory: Optional[str] = None,
+    level: int | str = logging.INFO,
+    tag: str | None = None,
+    directory: str | None = None,
 ):
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -227,7 +226,7 @@ def get_reference_data(
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
     remove_halogenides: bool = True,
-) -> List[Atoms]:
+) -> list[Atoms]:
     """
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
@@ -243,7 +242,11 @@ def get_reference_data(
         rng = np.random.default_rng(0)
 
     if num_to_sample_uniformly_per_size > 0:
-        training_data, already_sampled_indices = sample_uniformly_across_heavy_atom_number(all_data, num_to_sample_uniformly_per_size, rng)  # type: ignore
+        training_data, already_sampled_indices = (
+            sample_uniformly_across_heavy_atom_number(
+                all_data, num_to_sample_uniformly_per_size, rng
+            )
+        )  # type: ignore
         already_sampled = len(training_data)
         all_data = [
             mol
@@ -266,8 +269,8 @@ def get_reference_data(
 
 
 def sample_uniformly_across_heavy_atom_number(
-    data: List[Atoms], num_mols_per_size: int, rng: np.random.Generator
-) -> Tuple[List[Atoms], List[int]]:
+    data: list[Atoms], num_mols_per_size: int, rng: np.random.Generator
+) -> tuple[list[Atoms], list[int]]:
     mol_sizes = {len(mol) for mol in data}
     selected_indices = []
     for size in mol_sizes:

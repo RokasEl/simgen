@@ -1,3 +1,5 @@
+import itertools
+
 import ase.io as aio
 import numpy as np
 import torch
@@ -27,7 +29,7 @@ def atomic_data_to_ase(node_attrs, positions):
 
 def batch_to_ase(batch):
     ptr = batch.ptr.detach().cpu().numpy()
-    for i, j in zip(ptr[:-1], ptr[1:]):
+    for i, j in itertools.pairwise(ptr):
         node_attrs = batch.node_attrs[i:j]
         positions = batch.positions[i:j]
         yield atomic_data_to_ase(node_attrs, positions)

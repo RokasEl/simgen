@@ -6,7 +6,6 @@ import numpy as np
 import typer
 
 from simgen.element_swapping import SwappingAtomicNumberTable
-from simgen.generation_utils import calculate_restorative_force_strength
 from simgen.integrators import IntegrationParameters
 from simgen.manifolds import LinePrior, MultivariateGaussianPrior
 from simgen.particle_filtering import ParticleFilterGenerator
@@ -97,9 +96,6 @@ def main(
         logging.info(f"Generating molecule {i}")
         size = int(prior.curve_length * atoms_per_angstrom)
         mol = initialize_mol(f"C{size}")
-        additional_multiplier = (
-            line_length - 5.0
-        ) * 0.07 + 1  # 5 is the default line length
         restorative_force_strength = 1.0
         particle_filter = ParticleFilterGenerator(
             score_model,

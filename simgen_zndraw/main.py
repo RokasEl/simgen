@@ -1,14 +1,12 @@
-import eventlet
-eventlet.monkey_patch()
-
 import logging
 import typing as t
 
 import ase
+import eventlet
 import numpy as np
 import requests
-from pydantic import BaseModel, Field, ConfigDict
-from zndraw import ZnDraw, Extension
+from pydantic import BaseModel, ConfigDict, Field
+from zndraw import Extension, ZnDraw
 
 from simgen.atoms_cleanup import (
     remove_isolated_atoms_using_covalent_radii,
@@ -23,6 +21,7 @@ from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
 from .utils import get_anchor_point_positions
 
+eventlet.monkey_patch()
 setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
 
 
@@ -66,7 +65,7 @@ class Generate(Extension):
     num_steps: int = Field(
         50, le=100, ge=20, description="Number of steps in the generation."
     )
-    atom_number: t.Union[FixedNumber, PerAngstrom]
+    atom_number: FixedNumber | PerAngstrom
     guiding_force_multiplier: float = Field(
         1.0,
         ge=1.0,
@@ -298,7 +297,7 @@ class Hydrogenate(Extension):
         return atoms
 
 
-run_types = t.Union[Generate, Hydrogenate, Relax]
+run_types = Generate | Hydrogenate | Relax
 
 
 class DiffusionModelling(Extension):
@@ -389,7 +388,9 @@ class SiMGenDemo(Extension):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    model_config = ConfigDict(json_schema_extra=_format_fields) # Not working on ZnDraw side yet
+    model_config = ConfigDict(
+        json_schema_extra=_format_fields
+    )  # Not working on ZnDraw side yet
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         vis.log("Sending request to inference server.")
@@ -397,7 +398,9 @@ class SiMGenDemo(Extension):
             del vis[vis.step + 1 :]
         if calculators is None:
             raise ValueError("No calculators provided")
-        vis.bookmarks = vis.bookmarks | {int(vis.step): "SiMGen: Generating a structure."}
+        vis.bookmarks = vis.bookmarks | {
+            int(vis.step): "SiMGen: Generating a structure."
+        }
         timeout = kwargs.get("timeout", 60)
         gen_class = Generate(
             discriminator="Generate",
@@ -411,7 +414,9 @@ class SiMGenDemo(Extension):
             calculators=calculators,
             timeout=timeout,
         )
-        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
+        vis.bookmarks = vis.bookmarks | {
+            len(vis): "SiMGen: Hydrogenating the structure."
+        }
         hydrogenate_class = Hydrogenate(
             discriminator="Hydrogenate",
             max_steps=30,

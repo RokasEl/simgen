@@ -35,5 +35,7 @@ all = [
     "rdkit>=2023.9.4"
 ]
 
-[tool.ruff.lint]
-ignore = ["E731"]
+[tool.ruff]
+lint.select = ["I", "UP", "F", "E", "W", "C90", "B", "A", "RUF"]
+lint.ignore = ["E501", "B008", "E731"]
+lint.exclude = ["airss_baseline/*", "energy_model/*", "simgen/sascrorer.py"]

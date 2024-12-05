@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import List
 
 import ase
 import ase.io as ase_io
@@ -27,7 +26,7 @@ app = typer.Typer()
 
 
 def construct_prior_from_atoms(
-    ligand_atoms: List[ase.Atoms], beta: float, include_h: bool = False
+    ligand_atoms: list[ase.Atoms], beta: float, include_h: bool = False
 ) -> PointCloudPrior:
     """
     Generate a PointCloudPrior from a list of ase.Atoms objects.

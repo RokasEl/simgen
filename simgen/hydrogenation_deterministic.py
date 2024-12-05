@@ -1,5 +1,3 @@
-from typing import List
-
 import numpy as np
 from frozendict import frozendict
 from numpy import typing as npt
@@ -195,6 +193,8 @@ NATURAL_VALENCES = frozendict(
 
 MARGIN1, MARGIN2, MARGIN3 = 10, 5, 3
 
+# ruff: noqa: C901
+
 
 def get_bond_order(
     atom1: str,
@@ -255,7 +255,7 @@ def single_bond_only(threshold: float, length: float, stretch_factor: float = 1.
 
 def build_xae_molecule(
     positions: npt.NDArray[np.float64],
-    atom_types: List[str],
+    atom_types: list[str],
     single_bond_stretch_factor: float = 1.0,
     multi_bond_stretch_factor: float = 1.0,
     use_margins: bool = False,

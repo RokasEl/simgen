@@ -38,8 +38,8 @@ def get_edge_array(atoms: ase.Atoms) -> np.ndarray:
         logging.info("Will build an edge array for hydrogenation using covalent radii")
         edge_array = get_edge_array_from_atoms(atoms)
         return edge_array
-    except Exception:
-        raise Exception
+    except Exception as e:
+        raise Exception from e
 
 
 def make_mace_config_jsonifiable(mace_config: dict) -> dict:
@@ -47,7 +47,7 @@ def make_mace_config_jsonifiable(mace_config: dict) -> dict:
     for key, value in jsonifiable_mace.items():
         if isinstance(value, np.ndarray):
             jsonifiable_mace[key] = value.tolist()
-        elif isinstance(value, (int, float)):
+        elif isinstance(value, int | float):
             pass
         else:
             jsonifiable_mace[key] = str(value)

@@ -1,23 +1,23 @@
 from dataclasses import dataclass
-from io import StringIO
 
 import ase
-import ase.io as aio
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdDetermineBonds
 
 from .calculators import MaceSimilarityCalculator
 from .hydrogenation import NATURAL_VALENCES
 from .hydrogenation_deterministic import build_xae_molecule
+from .sascrorer import calculateScore
 
 
 @dataclass
 class BaseReport:
     composition: None | str = None
+    total_num_atoms: None | int = None
     num_heavy_atoms: None | int = None
     atom_valences_possible: None | np.ndarray = None
     num_atoms_stable: None | int = None
+    num_atoms_stable_no_h: None | int = None
     molecule_stable: None | bool = None
     bond_lengths: None | np.ndarray = None
 
@@ -26,6 +26,11 @@ class BaseReport:
 class RDKitReport:
     smiles: None | str = None
     error: None | str = None
+    atom_is_radical: None | list[bool] = None
+    num_atoms_radical: None | int = None
+    num_heavy_atoms_stable: None | int = None
+    molecule_stable: None | bool = None
+    sa_score: None | float = None
     descriptors: None | dict = None
     num_fragments: None | int = None
     num_rings: None | int = None
@@ -40,14 +45,19 @@ class CalculatorReport:
     mace_energy: None | float = None
 
 
-def get_number_of_nearest_neighbours(atoms: ase.Atoms):
+def get_number_of_nearest_neighbours(atoms: ase.Atoms, strict=False):
     positions, atomic_symbols = atoms.get_positions(), atoms.get_chemical_symbols()
     _, _, edge_array = build_xae_molecule(
         positions,
         atomic_symbols,
         use_margins=True,
     )
-    return edge_array, edge_array.sum(axis=1)
+    if strict:
+        num_neighs = edge_array.sum(axis=1)
+    else:
+        adj_mat = edge_array != 0
+        num_neighs = adj_mat.sum(axis=1)
+    return edge_array, num_neighs
 
 
 def check_valences(atoms: ase.Atoms, nearest_neigh_array):
@@ -74,25 +84,6 @@ def get_bond_lengths(atoms: ase.Atoms, edge_array):
     return bond_lengths
 
 
-def atoms_to_rdkit_mol(atoms: ase.Atoms):
-    if np.isnan(atoms.get_positions()).any():
-        raise ValueError("Atoms has NaN positions")
-    holder = StringIO()
-    aio.write(holder, atoms, format="xyz")
-    raw_mol = Chem.MolFromXYZBlock(holder.getvalue())
-    conn_mol = Chem.Mol(raw_mol)
-    rdDetermineBonds.DetermineBonds(conn_mol, charge=0)
-    return conn_mol
-
-
-def get_rdkit_mol(atoms: ase.Atoms):
-    try:
-        mol = atoms_to_rdkit_mol(atoms)
-        return mol, None
-    except Exception as e:
-        return None, e
-
-
 def analyse_rings(mol):
     ssr = Chem.GetSymmSSSR(mol)
     num_rings = len(ssr)
@@ -108,6 +99,15 @@ def analyse_base(atoms: ase.Atoms):
     valences_possible, num_atoms_stable, molecule_stable = check_valences(
         atoms, neigbour_numbers
     )
+    atoms_no_h = atoms.copy()
+    numbers = atoms.numbers
+    atoms_no_h = atoms_no_h[numbers != 1]
+    edge_array_no_h, neigbour_numbers_no_h = get_number_of_nearest_neighbours(
+        atoms_no_h
+    )
+    valences_possible_no_h, num_atoms_stable_no_h, molecule_stable_no_h = (
+        check_valences(atoms_no_h, neigbour_numbers_no_h)
+    )
     composition = str(atoms.symbols)
     # bond lengths and num of heavy atoms
     bond_lengths = get_bond_lengths(atoms, edge_array)
@@ -115,31 +115,71 @@ def analyse_base(atoms: ase.Atoms):
     report = BaseReport(
         composition=composition,
         num_heavy_atoms=num_heavy_atoms,
+        total_num_atoms=len(atoms),
         atom_valences_possible=valences_possible,
         num_atoms_stable=num_atoms_stable,
+        num_atoms_stable_no_h=num_atoms_stable_no_h,
         molecule_stable=molecule_stable,
         bond_lengths=bond_lengths,
     )
     return report
 
 
-def analyse_rdkit(atoms: ase.Atoms):
-    mol, error = get_rdkit_mol(atoms)
+def check_for_unrecognized_bonds(atom):
+    connected_atoms = atom.GetNeighbors()
+    neighbor_radicals = [
+        neighbor.GetNumRadicalElectrons() for neighbor in connected_atoms
+    ]
+    if sum(neighbor_radicals) == 1:
+        return True
+    else:
+        return False
+
+
+def check_mol_is_radical(mol) -> tuple[list[bool], int]:
+    is_radical = []
+    num_heavy_atoms_stable = 0
+    for atom in mol.GetAtoms():
+        num_radical = atom.GetNumRadicalElectrons()
+        if num_radical == 0:
+            is_radical.append(False)
+            num_heavy_atoms_stable += 1 if atom.GetAtomicNum() != 1 else 0
+        elif num_radical == 1:
+            # Check if there's a connected atom with a radical, i.e., an unrecognized bond
+            _stable = check_for_unrecognized_bonds(atom)
+            is_radical.append(not _stable)
+            num_heavy_atoms_stable += 1 if (atom.GetAtomicNum() != 1 and _stable) else 0
+        else:
+            is_radical.append(True)
+    return is_radical, num_heavy_atoms_stable
+
+
+def analyse_rdkit(smiles: str):
+    mol = Chem.MolFromSmiles(smiles)
 
     if mol is None:
-        error_text = f"Failed to convert atoms to rdkit mol: {error}"
-        report = RDKitReport(error=error_text)
+        error_text = f"Failed to build mol from smiles: {smiles}"
+        report = RDKitReport(error=error_text, molecule_stable=False)
         return report
     else:
         mol_frags = Chem.rdmolops.GetMolFrags(mol, asMols=True)
         largest_mol = max(mol_frags, default=mol, key=lambda m: m.GetNumAtoms())
+        sa_score = calculateScore(largest_mol)
         smiles = Chem.CanonSmiles(Chem.MolToSmiles(largest_mol))
         num_fragments = len(mol_frags)
         num_rings, ring_sizes = analyse_rings(largest_mol)
-        descriptors = Descriptors.CalcMolDescriptors(largest_mol)
+        # descriptors = Descriptors.CalcMolDescriptors(largest_mol)
+        atom_is_radical, num_heavy_atoms_stable = check_mol_is_radical(largest_mol)
+        num_atoms_radical = sum(atom_is_radical)
+        molecule_stable = num_atoms_radical == 0
         report = RDKitReport(
             smiles=smiles,
-            descriptors=descriptors,
+            # descriptors=descriptors,
+            atom_is_radical=atom_is_radical,
+            num_atoms_radical=num_atoms_radical,
+            sa_score=sa_score,
+            num_heavy_atoms_stable=num_heavy_atoms_stable,
+            molecule_stable=molecule_stable,
             num_fragments=num_fragments,
             num_rings=num_rings,
             ring_sizes=ring_sizes,

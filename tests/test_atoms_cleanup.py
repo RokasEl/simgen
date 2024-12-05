@@ -45,7 +45,9 @@ def test_remove_isolated_atoms_with_molecule_with_increasingly_isolated_atoms(
     mol = linear_molecule_with_increasingly_isolated_atoms
     cutoffs = [2**i for i in range(10)]
     expected_remaining_atoms = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10]
-    for cutoff, expected_remaining_atom in zip(cutoffs, expected_remaining_atoms):
+    for cutoff, expected_remaining_atom in zip(
+        cutoffs, expected_remaining_atoms, strict=True
+    ):
         pruned_atoms = remove_isolated_atoms_fixed_cutoff(mol, cutoff)
         assert len(pruned_atoms) == expected_remaining_atom
 
@@ -61,7 +63,7 @@ stretched_CC = ase.Atoms("CC", positions=[[0, 0, 0], [0, 0, 1.1]])
     "atoms, expected",
     [
         (initialize_mol("H2O"), initialize_mol("H2O")),
-        (stretched_CH, initialize_mol("")),  # too far apart
+        (stretched_CH, None),  # Return None if all atoms are isolated
         (stretched_CC, stretched_CC),  # not too far apart for a CC bond
     ],
 )
@@ -79,7 +81,7 @@ def test_get_highest_energy_unswapped_idx():
     expected_swapped_indices = ([1], [1, 4], [1, 4, 3], [1, 4, 3, 0], [1, 4, 3, 0, 2])
 
     for expected_idx, expected_swapped_idx in zip(
-        expected_indices, expected_swapped_indices
+        expected_indices, expected_swapped_indices, strict=True
     ):
         idx = get_higest_energy_unswapped_idx(swapped_indices, energies)
         assert idx == expected_idx
@@ -104,7 +106,7 @@ def test_relax_hydrogens_keeps_positions_of_heavy_elements_unchanged(
         mol.info["calculation_type"] = "mace"
     original_mols = [mol.copy() for mol in mols]
     relaxed_mols = relax_hydrogens(mols, loaded_mace_similarity_calculator)
-    for mol, relaxed_mol in zip(original_mols, relaxed_mols):
+    for mol, relaxed_mol in zip(original_mols, relaxed_mols, strict=True):
         non_h_indices = np.where(mol.get_atomic_numbers() != 1)[0]
         np.testing.assert_allclose(
             mol.get_positions()[non_h_indices],
@@ -186,7 +188,7 @@ def test_calculate_mace_interaction_energies_and_forces_gives_same_node_energies
         .cpu()
         .numpy()
     )
-    mace_interaction_energies = node_energies - node_e0s
+    mace_interaction_energies = node_energies - node_e0s.flatten()
     mace_forces = out["forces"].detach().cpu().numpy()
     mace_mol_energies = out["interaction_energy"].detach().cpu().numpy()
     calculator_interaction_energies = []

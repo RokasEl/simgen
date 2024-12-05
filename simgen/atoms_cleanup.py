@@ -1,5 +1,5 @@
 import logging
-from typing import List, Literal, Tuple
+from typing import Literal
 
 import ase
 import numpy as np
@@ -23,7 +23,7 @@ from simgen.hydrogenation import (
 )
 
 
-def run_dynamics(atoms_list: List[ase.Atoms], num_steps=5, max_step=0.2):
+def run_dynamics(atoms_list: list[ase.Atoms], num_steps=5, max_step=0.2):
     for atom in atoms_list:
         dyn = LBFGS(atom, maxstep=max_step)
         dyn.run(fmax=0.01, steps=num_steps)
@@ -45,7 +45,7 @@ def remove_isolated_atoms_fixed_cutoff(atoms: ase.Atoms, cutoff: float) -> ase.A
 
 def remove_isolated_atoms_using_covalent_radii(
     atoms: ase.Atoms, multiplier: float = 1.2
-) -> ase.Atoms:
+) -> ase.Atoms | None:
     """
     Remove unconnected atoms from the final atoms object.
     """
@@ -54,6 +54,11 @@ def remove_isolated_atoms_using_covalent_radii(
     unique_indices = np.unique(indices_of_connected_atoms)
     stripped_atoms = atoms.copy()
     stripped_atoms = stripped_atoms[unique_indices]
+    if not isinstance(stripped_atoms, ase.Atom) and len(stripped_atoms) == 0:
+        logging.warning(
+            "All atoms were removed during cleanup. Adjust the generation parameters."
+        )
+        return None
     return stripped_atoms  # type: ignore
 
 
@@ -74,9 +79,9 @@ def attach_calculator(
     for atoms in atoms_list:
         atoms.info["calculation_type"] = calculation_type
         if mask is not None:
-            atoms.info["mask"] = mask
+            atoms.arrays["mask"] = mask
         elif "mask" in atoms.info:
-            del atoms.info["mask"]
+            del atoms.arrays["mask"]
         atoms.calc = calculator
     return atoms_list
 
@@ -99,10 +104,10 @@ def add_hydrogens(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc)
     return atoms
 
 
-def relax_hydrogens(atoms_list: List[ase.Atoms], calculator, num_steps=5, max_step=0.2):
+def relax_hydrogens(atoms_list: list[ase.Atoms], calculator, num_steps=5, max_step=0.2):
     for atoms in atoms_list:
         atoms.info["calculation_type"] = "mace"
-        atoms.info["mask"] = np.where(atoms.get_atomic_numbers() != 1)[0]
+        atoms.arrays["mask"] = atoms.get_atomic_numbers() != 1
         atoms.calc = calculator
     atoms_list = run_dynamics(atoms_list, num_steps=num_steps, max_step=max_step)
     return atoms_list
@@ -117,7 +122,7 @@ def determine_number_of_element_swaps(num_element_sweeps, already_switched, mol)
 
 def get_swapping_candidates(
     mol, idx, neighbours, already_switched, z_table
-) -> Tuple[List[ase.Atoms], List[int]]:
+) -> tuple[list[ase.Atoms], list[int]]:
     """
     Generate ensemble of molecules with one element swapped.
     We construct the ensemble by swapping the highest energy atom and its neighbours.
@@ -153,8 +158,8 @@ def relax_elements(
     calc = atoms.calc
     for _ in range(num_element_sweeps):
         mol.calc = calc
-        if "mask" in mol.info:
-            del mol.info["mask"]
+        if "mask" in mol.arrays:
+            del mol.arrays["mask"]
         calc.calculate(mol)
         energies = mol.get_potential_energies()
         idx = get_higest_energy_unswapped_idx(already_switched, energies)
@@ -281,6 +286,8 @@ def cleanup_atoms(
     assert atoms.calc is not None
     calc: Calculator = atoms.calc
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
+    if pruned_atoms is None:
+        return [atoms]
     cleanup_function = globals()[cleanup_scheme]
     intermediate_atoms = cleanup_function(
         pruned_atoms, hydrogenation_type, hydrogenation_calc, calc

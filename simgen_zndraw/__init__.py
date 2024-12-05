@@ -1,21 +1,20 @@
-import eventlet
-eventlet.monkey_patch()
-
-
 import json
 import pathlib
-import typing as t
 from dataclasses import dataclass
+
+import eventlet
 
 from simgen.element_swapping import SwappingAtomicNumberTable
 from simgen.integrators import IntegrationParameters
+
+eventlet.monkey_patch()
 
 
 @dataclass()
 class DefaultGenerationParams:
     prior_beta: float = 5.0
-    swapping_table_zs: t.Tuple[int, ...] = (6, 7, 8)
-    swapping_table_freqs: t.Tuple[int, ...] = (1, 1, 1)
+    swapping_table_zs: tuple[int, ...] = (6, 7, 8)
+    swapping_table_freqs: tuple[int, ...] = (1, 1, 1)
     num_particles: int = 10
     particle_swap_frequency: int = 4
     default_model_path: str = "https://github.com/RokasEl/MACE-Models"
@@ -29,7 +28,7 @@ class DefaultGenerationParams:
     @classmethod
     def from_file(cls, path="~/.simgen/config.json"):
         load_path = pathlib.Path(path).expanduser()
-        with open(load_path, "r") as f:
+        with open(load_path) as f:
             return cls(**json.load(f))
 
     @classmethod

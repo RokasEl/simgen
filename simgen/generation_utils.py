@@ -1,5 +1,5 @@
+import itertools
 from copy import deepcopy
-from typing import Dict, List
 
 import ase
 import numpy as np
@@ -60,7 +60,7 @@ def interpolate_points(points, num_interpolated_points=100):
 
 def calculate_path_length(points):
     path_length = 0
-    for p1, p2 in zip(points[:-1], points[1:]):
+    for p1, p2 in itertools.pairwise(points):
         path_length += np.linalg.norm(p1 - p2)
     return path_length
 
@@ -72,7 +72,7 @@ def change_indices_to_atomic_numbers(
     return to_atomic_numbers_fn(indices)
 
 
-def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> List[ase.Atoms]:
+def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> list[ase.Atoms]:
     """Convert batch to ase.Atoms"""
     atoms_list = []
     for i in range(len(batch.ptr) - 1):
@@ -94,7 +94,7 @@ def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> List[ase.Atoms]:
 
 
 def convert_atoms_to_atomic_data(
-    atoms: ase.Atoms | List[ase.Atoms],
+    atoms: ase.Atoms | list[ase.Atoms],
     z_table: AtomicNumberTable,
     cutoff: float,
     device: str,
@@ -102,9 +102,14 @@ def convert_atoms_to_atomic_data(
     if isinstance(atoms, ase.Atoms):
         atoms = [atoms]
     confs = [config_from_atoms(x) for x in atoms]
-    atomic_datas = [
-        AtomicData.from_config(conf, z_table, cutoff).to(device) for conf in confs
-    ]
+    try:
+        atomic_datas = [
+            AtomicData.from_config(conf, z_table, cutoff).to(device) for conf in confs
+        ]
+    except Exception as e:
+        print(e)
+        print("Error in converting atoms to atomic data")
+        raise e
     return atomic_datas
 
 
@@ -122,16 +127,14 @@ def batch_atoms(
 
 def batch_to_correct_dtype(batch: AtomicData, dtype: torch.dtype):
     if dtype != torch.get_default_dtype():
-        keys = filter(
-            lambda x: torch.is_floating_point(batch[x]), batch.keys
-        )  # type:ignore
+        keys = filter(lambda x: torch.is_floating_point(batch[x]), batch.keys)  # type:ignore
         batch = batch.to(dtype, *keys)
         return batch
     else:
         return batch
 
 
-def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: List[int]) -> ase.Atoms:
+def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: list[int]) -> ase.Atoms:
     """
     Remove all hydrogens from the atoms object
     """
@@ -159,7 +162,7 @@ class ExponentialRepulsionBlock(nn.Module):
         super().__init__()
         self.register_buffer("alpha", torch.tensor(alpha))
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, data: dict[str, torch.Tensor]) -> torch.Tensor:
         data["positions"].requires_grad_(True)
         _, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
