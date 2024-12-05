@@ -53,6 +53,9 @@ def main(
     save_path: str = typer.Option(
         ..., help="Path to save generated molecules, can be file or directory"
     ),
+    hydrogenation_model_name: str = typer.Option(
+        "hydromace", help="Name of hydrogenation model to use"
+    ),
     num_molecules: int = typer.Option(
         default=100, help="Number of molecules to generate"
     ),
@@ -76,6 +79,9 @@ def main(
     use_scaffold: bool = typer.Option(
         default=False, help="If true, use the OA as a scaffold"
     ),
+    cleanup_scheme: str = typer.Option(
+        default="add_hs_once",
+    ),
 ):
     setup_logger(level=logging.INFO, tag="OA_generation", directory="./logs")
 
@@ -89,7 +95,9 @@ def main(
         rng=rng,
     )
     hydromace_calc = get_hydromace_calculator(
-        model_repo_path=model_repo_path, device=DEVICE
+        model_repo_path=model_repo_path,
+        model_name=hydrogenation_model_name,
+        device=DEVICE,
     )
     integration_params = IntegrationParameters(S_churn=1.3, S_min=2e-3, S_noise=0.5)
 
@@ -103,7 +111,7 @@ def main(
 
     if use_scaffold:
         oa_structure = zntrack.from_rev("OA_parent", remote=model_repo_path)
-        oa_structure = oa_structure.get_atoms()
+        oa_structure = oa_structure.get_atoms()[0]
     else:
         oa_structure = None
 
@@ -130,6 +138,7 @@ def main(
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
             scaffold=oa_structure,
+            cleanup_scheme=cleanup_scheme,
         )
 
         if save_path.is_dir():
