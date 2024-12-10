@@ -107,6 +107,12 @@ class Generate(Extension):
             modified_atoms.append(
                 remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
             )
+            for atoms in modified_atoms:
+                if "radii" in atoms.arrays:
+                    del atoms.arrays["radii"]
+                if "colors" in atoms.arrays:
+                    del atoms.arrays["colors"]
+
             vis.extend(modified_atoms)
             vis.step = len(vis) - 1
             return modified_atoms[-1]
@@ -236,6 +242,11 @@ class Relax(Extension):
         modified_atoms.append(
             remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
         )
+        for atoms in modified_atoms:
+            if "radii" in atoms.arrays:
+                del atoms.arrays["radii"]
+            if "colors" in atoms.arrays:
+                del atoms.arrays["colors"]
         vis.extend(modified_atoms)
         vis.step = len(vis) - 1
         vis.log(f"Received back {len(modified_atoms)} atoms.")
@@ -279,6 +290,11 @@ class Hydrogenate(Extension):
         modified_atoms.append(
             remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
         )
+        for atoms in modified_atoms:
+            if "radii" in atoms.arrays:
+                del atoms.arrays["radii"]
+            if "colors" in atoms.arrays:
+                del atoms.arrays["colors"]
         vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         vis.step = len(vis) - 1
@@ -307,7 +323,7 @@ class DiffusionModelling(Extension):
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    run_type: run_types = Field(discriminator="discriminator")
+    run_type: run_types
     client_address: str = Field("http://127.0.0.1:5000/run")
 
     def run(
@@ -322,9 +338,9 @@ class DiffusionModelling(Extension):
         if calculators is None:
             raise ValueError("No calculators provided")
         logging.debug("Accessing vis.bookmarks")
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
+        vis.bookmarks.update({
+            vis.step: f"Running {self.run_type.__class__.__name__}"
+        })
         self.run_type.run(
             vis=vis,
             client_address=None,
@@ -341,7 +357,7 @@ class SiMGen(Extension):
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    run_type: run_types = Field(discriminator="discriminator")
+    run_type: run_types
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         logging.debug("-" * 72)
@@ -353,9 +369,9 @@ class SiMGen(Extension):
         if calculators is None:
             raise ValueError("No calculators provided")
         logging.debug("Accessing vis.bookmarks")
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
+        vis.bookmarks.update({
+            vis.step: f"Running {self.run_type.__class__.__name__}"
+        })
         timeout = kwargs.get("timeout", 60)
         self.run_type.run(
             vis=vis,
@@ -397,10 +413,9 @@ class SiMGenDemo(Extension):
             del vis[vis.step + 1 :]
         if calculators is None:
             raise ValueError("No calculators provided")
-        vis.bookmarks = vis.bookmarks | {int(vis.step): "SiMGen: Generating a structure."}
+        vis.bookmarks.update({int(vis.step): "SiMGen: Generating a structure."})
         timeout = kwargs.get("timeout", 60)
         gen_class = Generate(
-            discriminator="Generate",
             num_steps=50,
             atom_number=PerAngstrom(atoms_per_angstrom=self.atoms_per_angstrom),
             guiding_force_multiplier=self.guiding_force_multiplier,
@@ -411,9 +426,8 @@ class SiMGenDemo(Extension):
             calculators=calculators,
             timeout=timeout,
         )
-        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Hydrogenating the structure."}
+        vis.bookmarks.update({len(vis): "SiMGen: Hydrogenating the structure."})
         hydrogenate_class = Hydrogenate(
-            discriminator="Hydrogenate",
             max_steps=30,
         )
         hydrogenate_class.run(
@@ -422,9 +436,8 @@ class SiMGenDemo(Extension):
             calculators=calculators,
             timeout=timeout,
         )
-        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
+        vis.bookmarks.update({len(vis): "SiMGen: Relaxing the structure."})
         relax_class = Relax(
-            discriminator="Relax",
             max_steps=50,
         )
         relax_class.run(

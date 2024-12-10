@@ -77,6 +77,13 @@ def hydrogenate(
     relaxation_trajectory = [to_relax.copy()]
     dyn = LBFGS(to_relax, maxstep=0.2)
     start = monotonic()
+    print(f"{request.max_steps=}")
+    print(f"{type(request.max_steps)=}")
+    print(f"{request=}")
+    e = to_relax.get_potential_energy()
+    print(f"{e=}")
+    f = to_relax.get_forces()
+    print(f"{f=}")
     for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
         if monotonic() - start > request.timeout:
             logging.info("Relaxation taking too long, stopping")
