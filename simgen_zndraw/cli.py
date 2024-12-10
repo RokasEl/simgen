@@ -1,12 +1,11 @@
 import logging
 import pathlib
 from enum import Enum
-from typing import Optional
 
+import eventlet
 import typer
 import zntrack
 from zndraw import ZnDraw
-# from zndraw.settings import GlobalConfig
 
 from simgen.utils import (
     get_hydromace_calculator,
@@ -17,6 +16,8 @@ from simgen_zndraw.main import SiMGen, SiMGenDemo
 
 from .local_server import app
 from .utils import get_default_mace_models_path
+
+eventlet.monkey_patch()
 
 cli_app = typer.Typer()
 
@@ -35,9 +36,6 @@ class SupportedModels(str, Enum):
 def init(
     path: str = typer.Argument(..., help="Path to clone of MACE-models repo"),
     force: bool = typer.Option(False, help="Overwrite existing config file"),
-    add_to_zndraw: bool = typer.Option(
-        True, help="Add the DiffusionModelling class to the list of ZnDraw modifiers"
-    ),
 ):
     print(f"Initializing SiMGen ZnDraw integration with the model path at {path}")
 
@@ -60,30 +58,10 @@ def init(
         config.save()
         print(f"Saved configuration to {config_path}")
 
-    if add_to_zndraw:
-        print("Adding the DiffusionModelling class to the list of ZnDraw modifiers")
-        config_path = "~/.zincware/zndraw/config.json"
-        config_path = pathlib.Path(config_path).expanduser()
-        if config_path.exists():
-            print(f"Found an existing ZnDraw configuration at {config_path}")
-            config = GlobalConfig.from_file(config_path)  # type: ignore
-        else:
-            config = GlobalConfig()
-
-        pkg = "simgen_zndraw.main.DiffusionModelling"
-        config.modify_functions = list(
-            filter(
-                lambda x: "DiffusionModelling".lower() not in x.lower(),
-                config.modify_functions,
-            )
-        )
-        config.modify_functions = [pkg] + config.modify_functions
-        config.save()
-
 
 @cli_app.command(help="Launch a local server for molecule generation")
 def launch(
-    path: Optional[str] = typer.Option(
+    path: str | None = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
     mace_model_name: SupportedModels = typer.Option(
@@ -112,7 +90,7 @@ def connect(
     url: str = typer.Option(
         "http://127.0.0.1:1234", help="URL of the ZnDraw instance to connect to"
     ),
-    path: Optional[str] = typer.Option(
+    path: str | None = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
     ),
     mace_model_name: SupportedModels = typer.Option(
@@ -122,7 +100,7 @@ def connect(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
     add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
-    auth_token: Optional[str] = typer.Option(None, help="Authentication token"),
+    auth_token: str | None = typer.Option(None, help="Authentication token"),
     device: Device = typer.Option(Device.cpu),
 ):
     logging.info("Loading models...")
@@ -144,13 +122,22 @@ def connect(
         linkers = zntrack.from_rev("linker_examples", path).get_atoms()
     else:
         linkers = []
-    vis = ZnDraw(url=url, token="SIMGenModifier", auth_token=auth_token, maximum_message_size=50_000)
-    vis.timeout['modifier'] = 1.0
+    vis = ZnDraw(
+        url=url,
+        token="SIMGenModifier",
+        auth_token=auth_token,
+        maximum_message_size=500_000,
+    )
+    vis.timeout["modifier"] = 1.0
+    vis.timeout["emit_retries"] = 5
+    vis.timeout["call_retries"] = 5
 
     if add_linkers:
         vis.extend(linkers)
     vis.register_modifier(
-        SiMGenDemo, run_kwargs={"calculators": models}, public=True  # type: ignore
+        SiMGenDemo,
+        run_kwargs={"calculators": models},
+        public=True,  # type: ignore
     )
     vis.socket.sleep(2)
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, public=True)
