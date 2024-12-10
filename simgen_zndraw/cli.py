@@ -2,7 +2,6 @@ import logging
 import pathlib
 from enum import Enum
 
-import eventlet
 import typer
 import zntrack
 from zndraw import ZnDraw
@@ -16,8 +15,6 @@ from simgen_zndraw.main import SiMGen, SiMGenDemo
 
 from .local_server import app
 from .utils import get_default_mace_models_path
-
-eventlet.monkey_patch()
 
 cli_app = typer.Typer()
 
@@ -126,7 +123,6 @@ def connect(
         url=url,
         token="SIMGenModifier",
         auth_token=auth_token,
-        maximum_message_size=500_000,
     )
     vis.timeout["modifier"] = 1.0
     vis.timeout["emit_retries"] = 5
@@ -139,21 +135,9 @@ def connect(
         run_kwargs={"calculators": models},
         public=True,  # type: ignore
     )
-    vis.socket.sleep(2)
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, public=True)
     logging.info("All modifiers registered. Waiting for requests...")
     vis.socket.wait()
-    # while True:
-    #     try:
-    #         vis.socket.emit("modifier:available", vis._available)
-    #     except Exception as e:
-    #         logging.critical(32 * "-")
-    #         logging.critical("Not connected to ZnDraw: %s", e)
-    #         logging.critical("Trying to reconnect...")
-    #         vis.socket.connect(vis.url, wait_timeout=10)
-    #         logging.critical("Reconnected to ZnDraw")
-    #     finally:
-    #         vis.socket.sleep(10)
 
 
 if __name__ == "__main__":
