@@ -106,12 +106,12 @@ def main(
         save_path.mkdir(parents=True, exist_ok=True)
 
     data_loader = zntrack.from_rev("OA_ligands", remote=model_repo_path)
-    OA_ligands = data_loader.get_atoms()
+    OA_ligands = data_loader.frames
     prior = construct_prior_from_atoms(OA_ligands, beta=beta)
 
     if use_scaffold:
         oa_structure = zntrack.from_rev("OA_parent", remote=model_repo_path)
-        oa_structure = oa_structure.get_atoms()[0]
+        oa_structure = oa_structure.frames[0]
     else:
         oa_structure = None
 

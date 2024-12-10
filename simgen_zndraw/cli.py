@@ -119,7 +119,7 @@ def connect(
     }
     logging.info("Connecting to ZnDraw...")
     if add_linkers:
-        linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+        linkers = zntrack.from_rev("linker_examples", path).frames
     else:
         linkers = []
     vis = ZnDraw(

@@ -19,7 +19,7 @@ from simgen.utils import setup_logger
 
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
-from .utils import get_anchor_point_positions
+from .utils import get_anchor_point_positions, remove_color_and_radii
 
 eventlet.monkey_patch()
 setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
@@ -73,7 +73,9 @@ class Generate(Extension):
         description="Multiplier for guiding force. Increase if molecules falls apart.",
     )
 
-    def run(self, vis: ZnDraw, client_address, calculators: dict, timeout) -> ase.Atoms:
+    def run(
+        self, vis: ZnDraw, client_address, calculators: dict, timeout
+    ) -> ase.Atoms | None:
         vis.log("Running Generation")
         logging.debug("Reached Generate run method")
         run_specific_settings = self._get_run_specific_settings(vis)
@@ -103,9 +105,12 @@ class Generate(Extension):
         else:
             logging.debug("Generate function returned, adding atoms to vis")
             vis.log(f"Received back {len(modified_atoms)} atoms.")
-            modified_atoms.append(
-                remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+            no_isolated_atoms = remove_isolated_atoms_using_covalent_radii(
+                modified_atoms[-1]
             )
+            if no_isolated_atoms:
+                modified_atoms.append(no_isolated_atoms)
+            remove_color_and_radii(modified_atoms)
             vis.extend(modified_atoms)
             vis.step = len(vis) - 1
             return modified_atoms[-1]
@@ -208,7 +213,9 @@ class Generate(Extension):
 class Relax(Extension):
     max_steps: int = Field(50, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
+    def run(
+        self, vis: ZnDraw, client_address, calculators, timeout
+    ) -> ase.Atoms | None:
         vis.log("Running Relax")
         logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
@@ -232,10 +239,12 @@ class Relax(Extension):
             logging.debug("Calling relax function")
             modified_atoms, _ = relax(run_settings, generation_calc)
         logging.debug("Relax function returned, adding atoms to vis")
-        modified_atoms.append(
-            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        no_isolated_atoms = remove_isolated_atoms_using_covalent_radii(
+            modified_atoms[-1]
         )
-        vis.extend(modified_atoms)
+        if no_isolated_atoms:
+            modified_atoms.append(no_isolated_atoms)
+        remove_color_and_radii(modified_atoms)
         vis.step = len(vis) - 1
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         return modified_atoms[-1]
@@ -244,7 +253,9 @@ class Relax(Extension):
 class Hydrogenate(Extension):
     max_steps: int = Field(30, ge=1)
 
-    def run(self, vis: ZnDraw, client_address, calculators, timeout) -> ase.Atoms:
+    def run(
+        self, vis: ZnDraw, client_address, calculators, timeout
+    ) -> ase.Atoms | None:
         logging.debug("Reached Hydrogenate run method")
         vis.log("Running Hydrogenate")
         run_settings = format_run_settings(
@@ -275,10 +286,12 @@ class Hydrogenate(Extension):
                 run_settings, generation_calc, hydrogenation_calc
             )
         logging.debug("Hydrogenate function returned, adding atoms to vis")
-        modified_atoms.append(
-            remove_isolated_atoms_using_covalent_radii(modified_atoms[-1])
+        no_isolated_atoms = remove_isolated_atoms_using_covalent_radii(
+            modified_atoms[-1]
         )
-        vis.extend(modified_atoms)
+        if no_isolated_atoms:
+            modified_atoms.append(no_isolated_atoms)
+        remove_color_and_radii(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         vis.step = len(vis) - 1
         return modified_atoms[-1]
@@ -306,7 +319,7 @@ class DiffusionModelling(Extension):
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    run_type: run_types = Field(discriminator="discriminator")
+    run_type: run_types
     client_address: str = Field("http://127.0.0.1:5000/run")
 
     def run(
@@ -321,9 +334,7 @@ class DiffusionModelling(Extension):
         if calculators is None:
             raise ValueError("No calculators provided")
         logging.debug("Accessing vis.bookmarks")
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
+        vis.bookmarks.update({vis.step: f"Running {self.run_type.__class__.__name__}"})
         self.run_type.run(
             vis=vis,
             client_address=None,
@@ -340,7 +351,7 @@ class SiMGen(Extension):
     The usual workflow is to first generate a structure, then hydrogenate it, and finally relax it.
     """
 
-    run_type: run_types = Field(discriminator="discriminator")
+    run_type: run_types
 
     def run(self, vis: ZnDraw, calculators: dict | None = None, **kwargs) -> None:
         logging.debug("-" * 72)
@@ -352,9 +363,7 @@ class SiMGen(Extension):
         if calculators is None:
             raise ValueError("No calculators provided")
         logging.debug("Accessing vis.bookmarks")
-        vis.bookmarks = vis.bookmarks | {
-            vis.step: f"Running {self.run_type.discriminator}"
-        }
+        vis.bookmarks.update({vis.step: f"Running {self.run_type.__class__.__name__}"})
         timeout = kwargs.get("timeout", 60)
         self.run_type.run(
             vis=vis,
@@ -398,12 +407,9 @@ class SiMGenDemo(Extension):
             del vis[vis.step + 1 :]
         if calculators is None:
             raise ValueError("No calculators provided")
-        vis.bookmarks = vis.bookmarks | {
-            int(vis.step): "SiMGen: Generating a structure."
-        }
+        vis.bookmarks.update({int(vis.step): "SiMGen: Generating a structure."})
         timeout = kwargs.get("timeout", 60)
         gen_class = Generate(
-            discriminator="Generate",
             num_steps=50,
             atom_number=PerAngstrom(atoms_per_angstrom=self.atoms_per_angstrom),
             guiding_force_multiplier=self.guiding_force_multiplier,
@@ -414,11 +420,8 @@ class SiMGenDemo(Extension):
             calculators=calculators,
             timeout=timeout,
         )
-        vis.bookmarks = vis.bookmarks | {
-            len(vis): "SiMGen: Hydrogenating the structure."
-        }
+        vis.bookmarks.update({len(vis): "SiMGen: Hydrogenating the structure."})
         hydrogenate_class = Hydrogenate(
-            discriminator="Hydrogenate",
             max_steps=30,
         )
         hydrogenate_class.run(
@@ -429,7 +432,6 @@ class SiMGenDemo(Extension):
         )
         vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
         relax_class = Relax(
-            discriminator="Relax",
             max_steps=50,
         )
         relax_class.run(
