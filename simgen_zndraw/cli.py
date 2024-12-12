@@ -85,7 +85,7 @@ def launch(
 @cli_app.command(help="connect to a running ZnDraw instance")
 def connect(
     url: str = typer.Option(
-        "http://127.0.0.1:1234", help="URL of the ZnDraw instance to connect to"
+        "http://127.0.0.1:1234", help="URL of the ZnDraw instance to connect to", envvar="SIMGEN_URL"
     ),
     path: str | None = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
@@ -97,7 +97,7 @@ def connect(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
     add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
-    auth_token: str | None = typer.Option(None, help="Authentication token"),
+    auth_token: str | None = typer.Option(None, help="Authentication token", envvar="SIMGEN_AUTH_TOKEN"),
     device: Device = typer.Option(Device.cpu),
 ):
     logging.info("Loading models...")

@@ -2,7 +2,6 @@ import logging
 import typing as t
 
 import ase
-import eventlet
 import numpy as np
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +20,6 @@ from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
 from .utils import get_anchor_point_positions, remove_keys_from_arrays
 
-eventlet.monkey_patch()
 setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
 
 
