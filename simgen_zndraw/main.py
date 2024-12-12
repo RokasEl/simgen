@@ -19,7 +19,7 @@ from simgen.utils import setup_logger
 
 from .data import atoms_from_json, format_run_settings, settings_to_json
 from .endpoints import generate, hydrogenate, relax
-from .utils import get_anchor_point_positions, remove_color_and_radii
+from .utils import get_anchor_point_positions, remove_keys_from_arrays
 
 eventlet.monkey_patch()
 setup_logger(directory="./logs", tag="simgen_zndraw", level=logging.INFO)
@@ -110,7 +110,7 @@ class Generate(Extension):
             )
             if no_isolated_atoms:
                 modified_atoms.append(no_isolated_atoms)
-            remove_color_and_radii(modified_atoms)
+            remove_keys_from_arrays(modified_atoms)
             vis.extend(modified_atoms)
             vis.step = len(vis) - 1
             return modified_atoms[-1]
@@ -244,7 +244,8 @@ class Relax(Extension):
         )
         if no_isolated_atoms:
             modified_atoms.append(no_isolated_atoms)
-        remove_color_and_radii(modified_atoms)
+        remove_keys_from_arrays(modified_atoms)
+        vis.extend(modified_atoms)
         vis.step = len(vis) - 1
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         return modified_atoms[-1]
@@ -272,26 +273,21 @@ class Hydrogenate(Extension):
         hydrogenation_calc = calculators.get("hydrogenation", None)
 
         if generation_calc is None or hydrogenation_calc is None:
-            vis.log("No loaded generation model, will try posting remote request")
-            json_request = settings_to_json(run_settings)
-            response = _post_request(
-                client_address, json_data_str=json_request, name="hydrogenate"
-            )
-            modified_atoms = [
-                atoms_from_json(atoms_json) for atoms_json in response.json()["atoms"]
-            ]
+            raise ValueError("No hydrogenation calculator found.")
         else:
-            logging.debug("Calling hydrogenate function")
             modified_atoms, _ = hydrogenate(
                 run_settings, generation_calc, hydrogenation_calc
             )
-        logging.debug("Hydrogenate function returned, adding atoms to vis")
+        remove_keys_from_arrays(
+            modified_atoms, keys_to_remove=("colors", "radii", "mask")
+        )
+
         no_isolated_atoms = remove_isolated_atoms_using_covalent_radii(
             modified_atoms[-1]
         )
         if no_isolated_atoms:
             modified_atoms.append(no_isolated_atoms)
-        remove_color_and_radii(modified_atoms)
+        vis.extend(modified_atoms)
         vis.log(f"Received back {len(modified_atoms)} atoms.")
         vis.step = len(vis) - 1
         return modified_atoms[-1]
@@ -430,7 +426,7 @@ class SiMGenDemo(Extension):
             calculators=calculators,
             timeout=timeout,
         )
-        vis.bookmarks = vis.bookmarks | {len(vis): "SiMGen: Relaxing the structure."}
+        vis.bookmarks.update({len(vis): "SiMGen: Relaxing the structure."})
         relax_class = Relax(
             max_steps=50,
         )

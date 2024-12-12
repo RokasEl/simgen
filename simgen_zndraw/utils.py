@@ -67,9 +67,10 @@ def get_default_mace_models_path() -> str:
         return DefaultGenerationParams.default_model_path
 
 
-def remove_color_and_radii(atoms_list: list[ase.Atoms]) -> None:
+def remove_keys_from_arrays(
+    atoms_list: list[ase.Atoms], keys_to_remove: tuple = ("radii", "colors")
+) -> None:
     for atoms in atoms_list:
-        if "radii" in atoms.arrays:
-            del atoms.arrays["radii"]
-        if "colors" in atoms.arrays:
-            del atoms.arrays["colors"]
+        for key in keys_to_remove:
+            if key in atoms.arrays:
+                del atoms.arrays[key]
