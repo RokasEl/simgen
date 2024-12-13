@@ -269,7 +269,7 @@ class Hydrogenate(Extension):
         logging.debug("Formated run settings; vis.atoms was accessed")
         generation_calc = calculators.get("generation", None)
         hydrogenation_calc = calculators.get("hydrogenation", None)
-
+        logging.info(hydrogenation_calc)
         if generation_calc is None or hydrogenation_calc is None:
             raise ValueError("No hydrogenation calculator found.")
         else:
