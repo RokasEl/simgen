@@ -102,7 +102,7 @@ def relax(request: RequestAtoms, simgen_calc: MaceSimilarityCalculator, *args):
     relaxation_trajectory = [relaxed_atoms.copy()]
     dyn = LBFGS(relaxed_atoms, maxstep=0.2)
     start = monotonic()
-    for _ in dyn.irun(fmax=0.01, steps=request.max_steps):
+    for _ in dyn.irun(fmax=request.f_max, steps=request.max_steps):
         if monotonic() - start > request.timeout:
             logging.info("Relaxation taking too long, stopping")
             break

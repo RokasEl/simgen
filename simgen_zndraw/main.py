@@ -210,6 +210,7 @@ class Generate(Extension):
 
 class Relax(Extension):
     max_steps: int = Field(50, ge=1)
+    f_max: float = Field(0.05, ge=0.001, le=0.5)
 
     def run(
         self, vis: ZnDraw, client_address, calculators, timeout
@@ -217,7 +218,11 @@ class Relax(Extension):
         vis.log("Running Relax")
         logging.debug("Reached Relax run method")
         run_settings = format_run_settings(
-            vis, run_type="relax", max_steps=self.max_steps, timeout=timeout
+            vis,
+            run_type="relax",
+            max_steps=self.max_steps,
+            timeout=timeout,
+            f_max=self.f_max,
         )
         if run_settings.atoms is None or len(run_settings.atoms) == 0:
             vis.log("No atoms to relax")
@@ -426,6 +431,7 @@ class SiMGenDemo(Extension):
         vis.bookmarks.update({len(vis): "SiMGen: Relaxing the structure."})
         relax_class = Relax(
             max_steps=50,
+            f_max=0.05,
         )
         relax_class.run(
             vis=vis,
