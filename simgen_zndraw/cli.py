@@ -146,7 +146,7 @@ def connect(
     )
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, public=True)
     logging.info("All modifiers registered. Waiting for requests...")
-    vis.socket.wait()
+    vis.socket.wait()  # type: ignore
 
 
 if __name__ == "__main__":

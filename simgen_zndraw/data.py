@@ -35,6 +35,7 @@ class RequestAtoms:
     restorative_force_multiplier: float = 1
     # hydrogenate and relax params
     max_steps: int = 50
+    f_max: float = 0.05
     # experimental
     timeout: float = 10.0
 
