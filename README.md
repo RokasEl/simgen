@@ -69,6 +69,27 @@ python scripts/generate_mols_cli.py --save-path PATH_TO_SAVE_MOLS \
 
 To construct molecules with more complicated shapes, you will have to manually define the shape via a point cloud prior. See `scripts/paper_examples/generate_macrocycles.py` for an example.
 
+### `docker-compose` setup
+Given you have setup [ZnDraw](https://github.com/zincware/ZnDraw) you can setup SiMGen via [docker-compose.yaml](https://docs.docker.com/compose/) as follows:
+
+```yaml
+services:
+  simgen:
+    image: pythonf/simgen
+    restart: always
+    command: simgen connect --device "cuda" --mace-model-name "medium_spice" --reference-data-name "simgen_reference_data_medium" --path . --hydrogenation-model-name hydromace_spice_only
+    environment:
+      - SIMGEN_AUTH_TOKEN=XXXXXXXXXXX
+      - SIMGEN_URL=XXXXXXXXXXX
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
 ## References
 
 If you use SiMGen in your research, please cite the following paper:
