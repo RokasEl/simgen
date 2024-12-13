@@ -70,9 +70,7 @@ def hydrogenate(
         hydrogenated = hydrogenate_deterministically(
             request.atoms, edge_array=edge_array
         )
-    logging.info(hydrogenated)
     mask = np.where(hydrogenated.get_atomic_numbers() != 1)[0]
-    logging.info(mask)
     to_relax = attach_calculator(
         [hydrogenated.copy()], simgen_calc, calculation_type="mace", mask=mask
     )[0]

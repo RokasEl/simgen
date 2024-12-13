@@ -1,5 +1,3 @@
-import logging
-
 import ase
 import numpy as np
 from ase.data import covalent_radii
@@ -59,9 +57,7 @@ def get_edge_array_from_atoms(
 def hydrogenate_hydromace(atoms: ase.Atoms, hydromace_calc: HydroMaceCalculator):
     atoms = atoms.copy()
     num_hs_to_add = hydromace_calc.predict_missing_hydrogens(atoms)
-    logging.info(f"Adding {num_hs_to_add} hydrogens")
     num_hs_to_add_per_atom = np.round(num_hs_to_add).astype(int)
-    logging.info(f"Adding {num_hs_to_add_per_atom} hydrogens")
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)
     return atoms_with_hs
 
