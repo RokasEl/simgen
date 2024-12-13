@@ -1,13 +1,14 @@
+# ruff: noqa: I001, E402
+import eventlet
+
+eventlet.monkey_patch()
+
 import json
 import pathlib
 from dataclasses import dataclass
 
-import eventlet
-
 from simgen.element_swapping import SwappingAtomicNumberTable
 from simgen.integrators import IntegrationParameters
-
-eventlet.monkey_patch()
 
 
 @dataclass()

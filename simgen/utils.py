@@ -231,7 +231,7 @@ def get_reference_data(
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
     data_loader = zntrack.from_rev(data_name, remote=model_repo_path)
-    all_data = data_loader.get_atoms()
+    all_data = data_loader.frames
     if remove_halogenides:
         all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
     if num_reference_mols == -1:

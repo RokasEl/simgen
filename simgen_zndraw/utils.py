@@ -4,6 +4,7 @@ import pathlib
 import ase
 import networkx as nx
 import numpy as np
+from zndraw.type_defs import CameraData
 from znframe.frame import get_radius
 
 from simgen.hydrogenation import get_edge_array_from_atoms
@@ -11,13 +12,13 @@ from simgen_zndraw import DefaultGenerationParams
 
 
 def get_anchor_point_positions(
-    atoms: ase.Atoms, selection: list[int], camera_dict: dict[str, list[float]]
+    atoms: ase.Atoms, selection: list[int], camera_data: CameraData
 ) -> np.ndarray:
     if len(selection) < 2:
         raise ValueError("Need at least two atoms to define a connection")
     positions = atoms.positions[selection]
     numbers = atoms.numbers[selection]
-    camera_position = np.array(camera_dict["position"])[None, :]  # 1x3
+    camera_position = np.array(camera_data["position"])[None, :]  # 1x3
 
     radii: np.ndarray = get_radius(numbers)[0][:, None]  # Nx1
     direction = camera_position - positions  # Nx3
@@ -64,3 +65,12 @@ def get_default_mace_models_path() -> str:
         return path
     else:
         return DefaultGenerationParams.default_model_path
+
+
+def remove_keys_from_arrays(
+    atoms_list: list[ase.Atoms], keys_to_remove: tuple = ("radii", "colors")
+) -> None:
+    for atoms in atoms_list:
+        for key in keys_to_remove:
+            if key in atoms.arrays:
+                del atoms.arrays[key]

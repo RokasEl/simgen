@@ -167,3 +167,4 @@ slurm*
 
 git-credentials
 dvc-credentials
+*.env

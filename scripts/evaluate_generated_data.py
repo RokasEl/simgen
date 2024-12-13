@@ -205,7 +205,7 @@ def main(
     ref_data = {
         name: zntrack.from_rev(
             f"simgen_reference_data_{name}", remote=model_repo_path
-        ).get_atoms()
+        ).frames
         for name in ref_data_names
     }
     ref_data_smiles = {

@@ -2,7 +2,6 @@ import logging
 import pathlib
 from enum import Enum
 
-import eventlet
 import typer
 import zntrack
 from zndraw import ZnDraw
@@ -16,8 +15,6 @@ from simgen_zndraw.main import SiMGen, SiMGenDemo
 
 from .local_server import app
 from .utils import get_default_mace_models_path
-
-eventlet.monkey_patch()
 
 cli_app = typer.Typer()
 
@@ -88,7 +85,7 @@ def launch(
 @cli_app.command(help="connect to a running ZnDraw instance")
 def connect(
     url: str = typer.Option(
-        "http://127.0.0.1:1234", help="URL of the ZnDraw instance to connect to"
+        "http://127.0.0.1:1234", help="URL of the ZnDraw instance to connect to", envvar="SIMGEN_URL"
     ),
     path: str | None = typer.Option(
         None, "--path", help="Path to clone of MACE-models repo"
@@ -100,7 +97,7 @@ def connect(
         "simgen_reference_data_small", help="Name of reference data to use"
     ),
     add_linkers: bool = typer.Option(False, help="Add example linkers to the scene"),
-    auth_token: str | None = typer.Option(None, help="Authentication token"),
+    auth_token: str | None = typer.Option(None, help="Authentication token", envvar="SIMGEN_AUTH_TOKEN"),
     device: Device = typer.Option(Device.cpu),
 ):
     logging.info("Loading models...")
@@ -119,14 +116,13 @@ def connect(
     }
     logging.info("Connecting to ZnDraw...")
     if add_linkers:
-        linkers = zntrack.from_rev("linker_examples", path).get_atoms()
+        linkers = zntrack.from_rev("linker_examples", path).frames
     else:
         linkers = []
     vis = ZnDraw(
         url=url,
         token="SIMGenModifier",
         auth_token=auth_token,
-        maximum_message_size=500_000,
     )
     vis.timeout["modifier"] = 1.0
     vis.timeout["emit_retries"] = 5
@@ -139,21 +135,9 @@ def connect(
         run_kwargs={"calculators": models},
         public=True,  # type: ignore
     )
-    vis.socket.sleep(2)
     vis.register_modifier(SiMGen, run_kwargs={"calculators": models}, public=True)
     logging.info("All modifiers registered. Waiting for requests...")
     vis.socket.wait()
-    # while True:
-    #     try:
-    #         vis.socket.emit("modifier:available", vis._available)
-    #     except Exception as e:
-    #         logging.critical(32 * "-")
-    #         logging.critical("Not connected to ZnDraw: %s", e)
-    #         logging.critical("Trying to reconnect...")
-    #         vis.socket.connect(vis.url, wait_timeout=10)
-    #         logging.critical("Reconnected to ZnDraw")
-    #     finally:
-    #         vis.socket.sleep(10)
 
 
 if __name__ == "__main__":
