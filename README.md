@@ -77,7 +77,7 @@ services:
   simgen:
     image: pythonf/simgen
     restart: always
-    command: simgen connect --device "cuda" --mace-model-name "medium_spice" --reference-data-name "simgen_reference_data_medium" --path .
+    command: simgen connect --device "cuda" --mace-model-name "medium_spice" --reference-data-name "simgen_reference_data_medium" --path . --hydrogenation-model-name hydromace_spice_only
     environment:
       - SIMGEN_AUTH_TOKEN=XXXXXXXXXXX
       - SIMGEN_URL=XXXXXXXXXXX
