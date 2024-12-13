@@ -4,23 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simgen"
-version = "0.1"
+version = "0.2.0"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "Rokas Elijošius", email = "re344@cam.ac.uk" }]
 dependencies = [
-    "ase>=3.22.1",
+    "ase>=3.23",
     "einops>=0.6.1",
     "fire>=0.5.0",
     "frozendict>=2.3.7",
-    "typer[all]>=0.7.0",
+    "typer>=0.13",
     "decorator",
     "mace-models>=0.1.2",
-    "hydromace",
+    "mace-torch>=0.3.9",
+    "hydromace>=0.2",
     "znframe",
-    "zndraw",
+    "zndraw>=0.5.7",
 ]
+# if in doubt, swithc >= to ==
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -34,3 +36,8 @@ simgen = "simgen_zndraw.cli:cli_app"
 all = [
     "rdkit>=2023.9.4"
 ]
+
+[tool.ruff]
+lint.select = ["I", "UP", "F", "E", "W", "C90", "B", "A", "RUF"]
+lint.ignore = ["E501", "B008", "E731"]
+lint.exclude = ["airss_baseline/*", "energy_model/*", "simgen/sascrorer.py"]

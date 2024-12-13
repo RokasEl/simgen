@@ -1,5 +1,4 @@
 from collections import Counter
-from typing import Dict, List, Tuple
 
 import ase
 import ase.io as aio
@@ -53,7 +52,7 @@ def do_hot_airss_relaxation(
     prior=None,
     num_steps=100,
     step_size=0.2,
-) -> Tuple[List[ase.Atoms], Dict[str, List[float]]]:
+) -> tuple[list[ase.Atoms], dict[str, list[float]]]:
     restorative_calc = RestorativeCalculator(prior_manifold=prior, zero_energy_radius=0)
     mopac_calc = MopacCalculator(f_max=50.0)
     calc = LinearCombinationCalculator([mopac_calc, restorative_calc], [1.0, 0.0])
@@ -106,7 +105,8 @@ def get_composition(sybmol_list):
 def get_composition_counter(qm9_path):
     all_atoms = aio.read(qm9_path, index=":", format="extxyz")
     compositions = [
-        get_composition(atoms.get_chemical_symbols()) for atoms in all_atoms  # type: ignore
+        get_composition(atoms.get_chemical_symbols())
+        for atoms in all_atoms  # type: ignore
     ]
     counts = Counter(compositions)
     return counts

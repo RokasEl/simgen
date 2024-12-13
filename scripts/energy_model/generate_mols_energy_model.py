@@ -1,13 +1,12 @@
+import itertools
+
+import ase.io as aio
 import numpy as np
 import torch
-from mace import data, tools
-from mace.tools import torch_geometric
-
-torch.set_default_dtype(torch.float64)
-import ase
-import ase.io as aio
 from ase import Atoms
 from fire import Fire
+from mace import data, tools
+from mace.tools import torch_geometric
 
 from energy_model.diffusion_tools import (
     HeunSampler,
@@ -15,6 +14,7 @@ from energy_model.diffusion_tools import (
 )
 from simgen.utils import get_system_torch_device_str, initialize_mol
 
+torch.set_default_dtype(torch.float64)
 DEVICE = get_system_torch_device_str()
 
 
@@ -29,7 +29,7 @@ def atomic_data_to_ase(node_attrs, positions):
 
 def batch_to_ase(batch):
     ptr = batch.ptr.detach().cpu().numpy()
-    for i, j in zip(ptr[:-1], ptr[1:]):
+    for i, j in itertools.pairwise(ptr):
         node_attrs = batch.node_attrs[i:j]
         positions = batch.positions[i:j]
         yield atomic_data_to_ase(node_attrs, positions)

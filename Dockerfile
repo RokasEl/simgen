@@ -1,19 +1,16 @@
-FROM pytorch/pytorch
-# EXPOSE 5000
+# Base image
+ARG PYTHON_VERSION="3.11"
+FROM python:${PYTHON_VERSION}
 
-RUN conda install -c anaconda git
+# Set environment variables for non-interactive installs
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN pip install git+https://github.com/ACEsuit/mace.git
+# Update and install essential packages
+RUN apt update -y && apt install -y --no-install-recommends git && apt clean && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/RokasEl/MACE-Models /workspace/MACE-Models
+RUN cd /workspace/MACE-Models && pip install . && dvc pull
 
 COPY ./ /workspace/simgen
-WORKDIR /workspace/simgen
-RUN pip install -e .
-RUN pip install --upgrade git+https://github.com/zincware/zndraw
-
-RUN git clone https://github.com/RokasEl/MACE-Models /workspace/MACE-Models
+RUN cd /workspace/simgen && pip install .
 WORKDIR /workspace/MACE-Models
-RUN dvc pull
-RUN simgen init . --no-add-to-zndraw
 
-
-ENTRYPOINT [ "simgen", "connect" ]

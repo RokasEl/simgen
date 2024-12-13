@@ -9,14 +9,16 @@ from znframe import Frame
 def atoms_from_json(atoms_json: dict) -> ase.Atoms:
     try:
         return Frame.from_dict(atoms_json).to_atoms()
-    except:
+    except Exception as e:
+        print(f"Failed to convert atoms from json: {e}. Returning empty atoms")
         return ase.Atoms()
 
 
 def atoms_to_json(atoms: ase.Atoms) -> dict:
     try:
         return Frame.from_atoms(atoms).to_dict()
-    except:
+    except Exception as e:
+        print(f"Failed to convert atoms to json: {e}. Returning empty dict")
         return {}
 
 

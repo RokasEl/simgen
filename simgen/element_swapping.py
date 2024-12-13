@@ -1,5 +1,5 @@
 import logging
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 from ase import Atoms
@@ -41,7 +41,7 @@ def get_element_and_swap_frequency_dictionary(z_table):
         swap_table = SwappingAtomicNumberTable(z_table.zs)
     else:
         swap_table = z_table
-    return dict(zip(swap_table.zs, swap_table.swap_frequencies))
+    return dict(zip(swap_table.zs, swap_table.swap_frequencies, strict=False))
 
 
 def get_new_element_from_swapping_dictionary(current_element, swap_dictionary):
@@ -109,7 +109,7 @@ def choose_indices_to_change(energies: np.ndarray, beta: float, num_change: int)
 
 def create_element_swapped_particles(
     atoms: Atoms, beta: float, num_particles: int, z_table: AtomicNumberTable, mask=None
-) -> List[Atoms]:
+) -> list[Atoms]:
     assert atoms.calc is not None
     if mask is None:
         mask = np.ones(len(atoms))
@@ -137,9 +137,9 @@ def apply_mask_to_probabilities(probibilities, mask):
 
 
 def collect_particles(
-    ensemble: List[Atoms],
+    ensemble: list[Atoms],
     beta: float,
-) -> Tuple[Atoms, int]:
+) -> tuple[Atoms, int]:
     energies = np.array([mol.get_potential_energy() for mol in ensemble])
     energies = energies.flatten()
     num_atoms = np.mean([len(mol) for mol in ensemble])

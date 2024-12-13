@@ -1,14 +1,17 @@
+import logging
 import os
 
+import ase.io as ase_io
 import numpy as np
 import torch
-
-from simgen.particle_filtering import ParticleFilterGenerator
-
-torch.set_default_dtype(torch.float64)
-from ase import Atoms
+from hydromace.interface import HydroMaceCalculator
 
 from simgen.atoms_cleanup import cleanup_atoms
+from simgen.element_swapping import SwappingAtomicNumberTable
+from simgen.generation_utils import calculate_restorative_force_strength
+from simgen.integrators import IntegrationParameters
+from simgen.manifolds import MultivariateGaussianPrior
+from simgen.particle_filtering import ParticleFilterGenerator
 from simgen.utils import (
     get_mace_similarity_calculator,
     get_system_torch_device_str,
@@ -16,22 +19,12 @@ from simgen.utils import (
     setup_logger,
 )
 
-DEVICE = get_system_torch_device_str()
-
-import logging
-
-import ase.io as ase_io
-from hydromace.interface import HydroMaceCalculator
-
-from simgen.element_swapping import SwappingAtomicNumberTable
-from simgen.generation_utils import calculate_restorative_force_strength
-from simgen.integrators import IntegrationParameters
-from simgen.manifolds import CirclePrior, MultivariateGaussianPrior
-
 """
 To generate with an untrained model, we'll have to hack into the ParticleFilterGenerator class and do the
 generation in multiple steps, whereas usually it would all be handled by the class.
 """
+torch.set_default_dtype(torch.float64)
+DEVICE = get_system_torch_device_str()
 
 
 def main(

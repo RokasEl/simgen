@@ -1,11 +1,8 @@
-from itertools import product
-
 import ase
 import numpy as np
 from ase.data import covalent_radii
 from frozendict import frozendict
 from hydromace.interface import HydroMaceCalculator
-from scipy.stats import binom
 
 from simgen.hydrogenation_deterministic import build_xae_molecule
 
@@ -58,6 +55,7 @@ def get_edge_array_from_atoms(
 
 
 def hydrogenate_hydromace(atoms: ase.Atoms, hydromace_calc: HydroMaceCalculator):
+    atoms = atoms.copy()
     num_hs_to_add = hydromace_calc.predict_missing_hydrogens(atoms)
     num_hs_to_add_per_atom = np.round(num_hs_to_add).astype(int)
     atoms_with_hs = add_hydrogens_to_atoms(atoms, num_hs_to_add_per_atom)

@@ -3,17 +3,7 @@ import pytest
 import torch
 from mace.tools.scatter import scatter_sum
 
-from simgen.calculators import MaceSimilarityCalculator
 from simgen.utils import get_system_torch_device_str, initialize_mol
-
-from .fixtures import (
-    loaded_mace_similarity_calculator,
-    loaded_model,
-    mace_model,
-    test_molecules,
-    training_molecules,
-    z_table,
-)
 
 torch.set_default_dtype(torch.float64)
 
@@ -67,7 +57,7 @@ def test_log_kernel_density_of_training_data_much_higher_than_new_data(
     test_embs = [get_embedding(calc, mol) for mol in test_molecules]
     training_log_dens = [
         calc._calculate_log_k(emb, nd_atr, 0)
-        for emb, nd_atr in zip(training_embs, node_attrs)
+        for emb, nd_atr in zip(training_embs, node_attrs, strict=True)
     ]
     training_log_dens = [
         dens.detach().cpu().numpy().mean() for dens in training_log_dens
@@ -75,7 +65,7 @@ def test_log_kernel_density_of_training_data_much_higher_than_new_data(
     node_attrs = [calc.batch_atoms(mol).node_attrs for mol in test_molecules]
     test_log_dens = [
         calc._calculate_log_k(emb, nd_atr, 0)
-        for emb, nd_atr in zip(test_embs, node_attrs)
+        for emb, nd_atr in zip(test_embs, node_attrs, strict=True)
     ]
     test_log_dens = [dens.detach().cpu().numpy().mean() for dens in test_log_dens]
     assert np.min(training_log_dens) - np.max(test_log_dens) > 10  # type: ignore
@@ -247,7 +237,7 @@ def test_element_sigmas_adjusts_the_distance_matrix(
     ]
     distance_mats = [
         loaded_mace_similarity_calculator._calculate_distance_matrix(emb, nd_attr)
-        for emb, nd_attr in zip(embeddings, node_attrs)
+        for emb, nd_attr in zip(embeddings, node_attrs, strict=True)
     ]
     distance_mats_original = [mat.detach().cpu().numpy() for mat in distance_mats]
 
@@ -255,7 +245,7 @@ def test_element_sigmas_adjusts_the_distance_matrix(
     loaded_mace_similarity_calculator.adjust_element_sigmas({"H": 0.25, "C": 2})
     distance_mats = [
         loaded_mace_similarity_calculator._calculate_distance_matrix(emb, nd_attr)
-        for emb, nd_attr in zip(embeddings, node_attrs)
+        for emb, nd_attr in zip(embeddings, node_attrs, strict=True)
     ]
     distance_mats_new = [mat.detach().cpu().numpy() for mat in distance_mats]
     for i, mol in enumerate(training_molecules):

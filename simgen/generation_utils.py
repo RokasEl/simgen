@@ -1,5 +1,5 @@
+import itertools
 from copy import deepcopy
-from typing import Dict, List
 
 import ase
 import numpy as np
@@ -9,7 +9,9 @@ from e3nn.util.jit import compile_mode
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.data.utils import config_from_atoms
 from mace.modules.blocks import RadialEmbeddingBlock
+from mace.modules.utils import get_edge_vectors_and_lengths
 from mace.tools import AtomicNumberTable
+from mace.tools.scatter import scatter_sum
 from scipy.interpolate import splev, splprep  # type: ignore
 from torch import nn
 
@@ -58,7 +60,7 @@ def interpolate_points(points, num_interpolated_points=100):
 
 def calculate_path_length(points):
     path_length = 0
-    for p1, p2 in zip(points[:-1], points[1:]):
+    for p1, p2 in itertools.pairwise(points):
         path_length += np.linalg.norm(p1 - p2)
     return path_length
 
@@ -70,7 +72,7 @@ def change_indices_to_atomic_numbers(
     return to_atomic_numbers_fn(indices)
 
 
-def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> List[ase.Atoms]:
+def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> list[ase.Atoms]:
     """Convert batch to ase.Atoms"""
     atoms_list = []
     for i in range(len(batch.ptr) - 1):
@@ -92,7 +94,7 @@ def get_atoms_from_batch(batch, z_table: AtomicNumberTable) -> List[ase.Atoms]:
 
 
 def convert_atoms_to_atomic_data(
-    atoms: ase.Atoms | List[ase.Atoms],
+    atoms: ase.Atoms | list[ase.Atoms],
     z_table: AtomicNumberTable,
     cutoff: float,
     device: str,
@@ -100,9 +102,14 @@ def convert_atoms_to_atomic_data(
     if isinstance(atoms, ase.Atoms):
         atoms = [atoms]
     confs = [config_from_atoms(x) for x in atoms]
-    atomic_datas = [
-        AtomicData.from_config(conf, z_table, cutoff).to(device) for conf in confs
-    ]
+    try:
+        atomic_datas = [
+            AtomicData.from_config(conf, z_table, cutoff).to(device) for conf in confs
+        ]
+    except Exception as e:
+        print(e)
+        print("Error in converting atoms to atomic data")
+        raise e
     return atomic_datas
 
 
@@ -120,16 +127,14 @@ def batch_atoms(
 
 def batch_to_correct_dtype(batch: AtomicData, dtype: torch.dtype):
     if dtype != torch.get_default_dtype():
-        keys = filter(
-            lambda x: torch.is_floating_point(batch[x]), batch.keys
-        )  # type:ignore
+        keys = filter(lambda x: torch.is_floating_point(batch[x]), batch.keys)  # type:ignore
         batch = batch.to(dtype, *keys)
         return batch
     else:
         return batch
 
 
-def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: List[int]) -> ase.Atoms:
+def remove_elements(atoms: ase.Atoms, atomic_numbers_to_remove: list[int]) -> ase.Atoms:
     """
     Remove all hydrogens from the atoms object
     """
@@ -151,17 +156,13 @@ def get_edge_array_and_neighbour_numbers(atoms: ase.Atoms, mult: float = 1.2):
     return edge_array, neighbour_numbers
 
 
-from mace.modules.utils import get_edge_vectors_and_lengths
-from mace.tools.scatter import scatter_sum
-
-
 @compile_mode("script")
 class ExponentialRepulsionBlock(nn.Module):
     def __init__(self, alpha: float):
         super().__init__()
         self.register_buffer("alpha", torch.tensor(alpha))
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, data: dict[str, torch.Tensor]) -> torch.Tensor:
         data["positions"].requires_grad_(True)
         _, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
@@ -185,14 +186,11 @@ class RadialDistanceTransformBlock(RadialEmbeddingBlock):
             "r_min", torch.tensor(r_min, dtype=torch.get_default_dtype())
         )
 
-    def forward(
-        self,
-        edge_lengths: torch.Tensor,  # [n_edges, 1]
-    ):
+    def forward(self, edge_lengths: torch.Tensor, *args):  # [n_edges, 1]
         transformed_edges = (
             torch.nn.functional.relu(edge_lengths - self.r_min) + self.r_min
         )
-        return super().forward(transformed_edges)
+        return super().forward(transformed_edges, *args)
 
 
 def get_model_dtype(model: torch.nn.Module) -> torch.dtype:

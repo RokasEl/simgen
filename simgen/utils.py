@@ -3,7 +3,6 @@ import os
 import sys
 from contextlib import contextmanager
 from time import perf_counter
-from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -79,7 +78,7 @@ def _get_qm9_props(line):
     clean_floats = [_parse_to_float(p) for p in properties[2:]]
     rotational_constants = clean_floats[:3]
     remaining_properties = clean_floats[3:]
-    parsed_props = dict(zip(QM9_PROPERTIES, remaining_properties))
+    parsed_props = dict(zip(QM9_PROPERTIES, remaining_properties, strict=False))
     parsed_props["rotational_constants"] = rotational_constants  # type: ignore
     for key in FIELD_IN_HARTREE:
         parsed_props[key] *= 27.211396641308
@@ -94,8 +93,8 @@ def read_qm9_xyz(filename):
     natoms = int(lines[0])
     parsed_props = _get_qm9_props(lines[1])
     elements, coords, charges = [], [], []
-    for l in lines[2:-3]:
-        element, *coord, charge = _process_line(l)
+    for line in lines[2:-3]:
+        element, *coord, charge = _process_line(line)
         elements.append(element)
         coords.append(coord)
         charges.append(charge)
@@ -111,7 +110,7 @@ def read_qm9_xyz(filename):
 def initialize_mol(molecule_str="C6H6"):
     try:
         mol = molecule(molecule_str)
-    except:
+    except KeyError:
         mol = Atoms(molecule_str)
     return mol
 
@@ -119,9 +118,9 @@ def initialize_mol(molecule_str="C6H6"):
 # Taken from MACE
 def setup_logger(
     name: str | None = None,
-    level: Union[int, str] = logging.INFO,
-    tag: Optional[str] = None,
-    directory: Optional[str] = None,
+    level: int | str = logging.INFO,
+    tag: str | None = None,
+    directory: str | None = None,
 ):
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -176,9 +175,11 @@ def get_mace_similarity_calculator(
     return mace_similarity_calculator
 
 
-def get_hydromace_calculator(model_repo_path, device):
+def get_hydromace_calculator(
+    model_repo_path: str, model_name: str = "hydromace", device: str = "cuda"
+):
     try:
-        model_loader = zntrack.from_rev("hydromace", remote=model_repo_path)
+        model_loader = zntrack.from_rev(model_name, remote=model_repo_path)
         model = model_loader.get_model(device=device)
         hydrogenation_model = HydroMaceCalculator(model, device=device)
         return hydrogenation_model
@@ -225,19 +226,27 @@ def get_reference_data(
     num_reference_mols: int = 256,
     num_to_sample_uniformly_per_size: int = 2,
     remove_halogenides: bool = True,
-) -> List[Atoms]:
+) -> list[Atoms]:
     """
     Reference data is assumed to be a single xyz file containing all reference molecules.
     """
     data_loader = zntrack.from_rev(data_name, remote=model_repo_path)
-    all_data = data_loader.get_atoms()
+    all_data = data_loader.frames
     if remove_halogenides:
         all_data = [remove_elements(mol, [1, 9]) for mol in all_data]  # type: ignore
     if num_reference_mols == -1:
         return all_data
 
+    # now add further random molecules
+    if rng is None:
+        rng = np.random.default_rng(0)
+
     if num_to_sample_uniformly_per_size > 0:
-        training_data, already_sampled_indices = sample_uniformly_across_heavy_atom_number(all_data, num_to_sample_uniformly_per_size, rng)  # type: ignore
+        training_data, already_sampled_indices = (
+            sample_uniformly_across_heavy_atom_number(
+                all_data, num_to_sample_uniformly_per_size, rng
+            )
+        )  # type: ignore
         already_sampled = len(training_data)
         all_data = [
             mol
@@ -248,9 +257,6 @@ def get_reference_data(
         training_data = []
         already_sampled = 0
 
-    # now add further random molecules
-    if rng is None:
-        rng = np.random.default_rng(0)
     too_add = num_reference_mols - already_sampled
     if too_add <= 0:
         logging.info("After sampling uniformly, got more molecules than requested.")
@@ -263,8 +269,8 @@ def get_reference_data(
 
 
 def sample_uniformly_across_heavy_atom_number(
-    data: List[Atoms], num_mols_per_size: int, rng: np.random.Generator
-) -> Tuple[List[Atoms], List[int]]:
+    data: list[Atoms], num_mols_per_size: int, rng: np.random.Generator
+) -> tuple[list[Atoms], list[int]]:
     mol_sizes = {len(mol) for mol in data}
     selected_indices = []
     for size in mol_sizes:

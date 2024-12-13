@@ -1,4 +1,5 @@
-from typing import List, Literal, Tuple
+import logging
+from typing import Literal
 
 import ase
 import numpy as np
@@ -16,12 +17,13 @@ from simgen.generation_utils import (
     get_edge_array_and_neighbour_numbers,
 )
 from simgen.hydrogenation import (
+    add_hydrogens_to_atoms,
     hydrogenate_deterministically,
     hydrogenate_hydromace,
 )
 
 
-def run_dynamics(atoms_list: List[ase.Atoms], num_steps=5, max_step=0.2):
+def run_dynamics(atoms_list: list[ase.Atoms], num_steps=5, max_step=0.2):
     for atom in atoms_list:
         dyn = LBFGS(atom, maxstep=max_step)
         dyn.run(fmax=0.01, steps=num_steps)
@@ -43,7 +45,7 @@ def remove_isolated_atoms_fixed_cutoff(atoms: ase.Atoms, cutoff: float) -> ase.A
 
 def remove_isolated_atoms_using_covalent_radii(
     atoms: ase.Atoms, multiplier: float = 1.2
-) -> ase.Atoms:
+) -> ase.Atoms | None:
     """
     Remove unconnected atoms from the final atoms object.
     """
@@ -52,6 +54,11 @@ def remove_isolated_atoms_using_covalent_radii(
     unique_indices = np.unique(indices_of_connected_atoms)
     stripped_atoms = atoms.copy()
     stripped_atoms = stripped_atoms[unique_indices]
+    if not isinstance(stripped_atoms, ase.Atom) and len(stripped_atoms) == 0:
+        logging.warning(
+            "All atoms were removed during cleanup. Adjust the generation parameters."
+        )
+        return None
     return stripped_atoms  # type: ignore
 
 
@@ -72,7 +79,9 @@ def attach_calculator(
     for atoms in atoms_list:
         atoms.info["calculation_type"] = calculation_type
         if mask is not None:
-            atoms.info["mask"] = mask
+            atoms.arrays["mask"] = mask
+        elif "mask" in atoms.info:
+            del atoms.arrays["mask"]
         atoms.calc = calculator
     return atoms_list
 
@@ -86,6 +95,7 @@ def add_hydrogens(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc)
                 "Trying to use model to hydrogenate, but no model provided."
             )
         atoms = hydrogenate_hydromace(atoms, hydrogenation_calc)
+        print(atoms)
     else:
         raise NotImplementedError(
             f"Hydrogenation type {hydrogenation_type} not implemented."
@@ -94,10 +104,10 @@ def add_hydrogens(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc)
     return atoms
 
 
-def relax_hydrogens(atoms_list: List[ase.Atoms], calculator, num_steps=5, max_step=0.2):
+def relax_hydrogens(atoms_list: list[ase.Atoms], calculator, num_steps=5, max_step=0.2):
     for atoms in atoms_list:
         atoms.info["calculation_type"] = "mace"
-        atoms.info["mask"] = np.where(atoms.get_atomic_numbers() != 1)[0]
+        atoms.arrays["mask"] = atoms.get_atomic_numbers() != 1
         atoms.calc = calculator
     atoms_list = run_dynamics(atoms_list, num_steps=num_steps, max_step=max_step)
     return atoms_list
@@ -112,7 +122,7 @@ def determine_number_of_element_swaps(num_element_sweeps, already_switched, mol)
 
 def get_swapping_candidates(
     mol, idx, neighbours, already_switched, z_table
-) -> Tuple[List[ase.Atoms], List[int]]:
+) -> tuple[list[ase.Atoms], list[int]]:
     """
     Generate ensemble of molecules with one element swapped.
     We construct the ensemble by swapping the highest energy atom and its neighbours.
@@ -148,8 +158,8 @@ def relax_elements(
     calc = atoms.calc
     for _ in range(num_element_sweeps):
         mol.calc = calc
-        if "mask" in mol.info:
-            del mol.info["mask"]
+        if "mask" in mol.arrays:
+            del mol.arrays["mask"]
         calc.calculate(mol)
         energies = mol.get_potential_energies()
         idx = get_higest_energy_unswapped_idx(already_switched, energies)
@@ -165,6 +175,102 @@ def relax_elements(
     return mol
 
 
+### Cleanup Schemes ###
+
+
+def add_hs_once(atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc):
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    final_relaxed_atoms = attach_calculator(
+        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
+    )
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    return [hydrogenated_atoms, relaxed_hydrogenated_atoms, final_relaxed_atoms]
+
+
+def add_and_relax_hydrogens_iteratively(
+    atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
+):
+    assert hydrogenation_type == "hydromace"
+    out = []
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    out.append(hydrogenated_atoms)
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    out.append(relaxed_hydrogenated_atoms)
+    num_hs_to_add = hydrogenation_calc.predict_missing_hydrogens(
+        relaxed_hydrogenated_atoms
+    )
+    if np.any(num_hs_to_add > 0):
+        logging.info(
+            f"Adding additional {num_hs_to_add.sum()} hydrogens to the relaxed atoms."
+        )
+        second_hydrogenated_atoms = add_hydrogens_to_atoms(
+            relaxed_hydrogenated_atoms, num_hs_to_add
+        )
+        out.append(second_hydrogenated_atoms)
+        second_relaxed = relax_hydrogens(
+            [second_hydrogenated_atoms], calc, num_steps=15, max_step=0.1
+        )[0]
+        out.append(second_relaxed)
+        to_relax = second_relaxed.copy()
+    else:
+        to_relax = relaxed_hydrogenated_atoms.copy()
+    final_relaxed_atoms = attach_calculator([to_relax], calc, calculation_type="mace")
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    out.append(final_relaxed_atoms)
+    return out
+
+
+def add_hydrogens_after_full_relaxation(
+    atoms: ase.Atoms, hydrogenation_type: str, hydrogenation_calc, calc
+):
+    assert hydrogenation_type == "hydromace"
+    out = []
+    hydrogenated_atoms = add_hydrogens(
+        atoms.copy(), hydrogenation_type, hydrogenation_calc
+    )
+    out.append(hydrogenated_atoms)
+    relaxed_hydrogenated_atoms = relax_hydrogens(
+        [hydrogenated_atoms.copy()], calc, num_steps=15, max_step=0.1
+    )[0]
+    out.append(relaxed_hydrogenated_atoms)
+    final_relaxed_atoms = attach_calculator(
+        [relaxed_hydrogenated_atoms.copy()], calc, calculation_type="mace"
+    )
+    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=25, max_step=0.1)[
+        0
+    ]
+    out.append(final_relaxed_atoms)
+    num_hs_to_add = hydrogenation_calc.predict_missing_hydrogens(final_relaxed_atoms)
+    if np.any(num_hs_to_add > 0):
+        logging.info(
+            f"Adding additional {num_hs_to_add.sum()} hydrogens to the relaxed atoms."
+        )
+        second_hydrogenated_atoms = add_hydrogens_to_atoms(
+            final_relaxed_atoms, num_hs_to_add
+        )
+        second_relaxed = relax_hydrogens(
+            [second_hydrogenated_atoms], calc, num_steps=20, max_step=0.1
+        )[0]
+        out.extend([second_hydrogenated_atoms, second_relaxed])
+    return out
+
+
+### /Cleanup Schemes ###
+
+
 def cleanup_atoms(
     atoms: ase.Atoms,
     hydrogenation_type: str,
@@ -172,6 +278,7 @@ def cleanup_atoms(
     z_table: AtomicNumberTable,
     num_element_sweeps: int | Literal["all"] = "all",
     mask=None,
+    cleanup_scheme: str = "add_hs_once",
 ) -> list[ase.Atoms]:
     """
     Wrapper function to allow easy extension with other cleanup functions if needed.
@@ -179,31 +286,14 @@ def cleanup_atoms(
     assert atoms.calc is not None
     calc: Calculator = atoms.calc
     pruned_atoms = remove_isolated_atoms_using_covalent_radii(atoms)
-    hydrogenated_atoms = add_hydrogens(
-        pruned_atoms.copy(), hydrogenation_type, hydrogenation_calc
+    if pruned_atoms is None:
+        return [atoms]
+    cleanup_function = globals()[cleanup_scheme]
+    intermediate_atoms = cleanup_function(
+        pruned_atoms, hydrogenation_type, hydrogenation_calc, calc
     )
-    relaxed_hydrogenated_atoms = relax_hydrogens(
-        [hydrogenated_atoms.copy()], calc, num_steps=30, max_step=0.05
-    )[0]
-    element_relaxed_atoms = relax_elements(
-        relaxed_hydrogenated_atoms,
-        z_table,
-        num_element_sweeps=num_element_sweeps,
-        mask=mask,
-    )
-    final_relaxed_atoms = attach_calculator(
-        [element_relaxed_atoms.copy()], calc, calculation_type="mace"
-    )
-    final_relaxed_atoms = run_dynamics(final_relaxed_atoms, num_steps=30, max_step=0.1)[
-        0
-    ]
     final_relaxed_atoms = remove_isolated_atoms_using_covalent_radii(
-        final_relaxed_atoms
+        intermediate_atoms[-1]
     )
-    return [
-        pruned_atoms,
-        hydrogenated_atoms,
-        relaxed_hydrogenated_atoms,
-        element_relaxed_atoms,
-        final_relaxed_atoms,
-    ]
+    out = [pruned_atoms, *intermediate_atoms, final_relaxed_atoms]
+    return out

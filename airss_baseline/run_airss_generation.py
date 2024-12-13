@@ -18,7 +18,7 @@ def get_composition_generator(
 ):
     if composition_counter is None:
         composition_counter = Counter([most_common_qm9_composition])
-    compositions, counts = zip(*composition_counter.items())
+    compositions, counts = zip(*composition_counter.items(), strict=False)
     compositions = np.array(compositions, dtype=object)
     counts = np.asarray(counts)
     probs = counts / np.sum(counts)

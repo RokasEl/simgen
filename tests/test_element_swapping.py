@@ -1,3 +1,4 @@
+from collections import Counter
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -67,7 +68,7 @@ def test_sweep_all_elements(mol, idx, z_table, expected_swapped_mols):
     swapped_mols = sweep_all_elements(mol, idx, z_table)
     assert mol == original_mol
     assert len(swapped_mols) == len(expected_swapped_mols)
-    for x, y in zip(swapped_mols, expected_swapped_mols):
+    for x, y in zip(swapped_mols, expected_swapped_mols, strict=True):
         assert x == y
 
 
@@ -189,9 +190,6 @@ def test_create_element_swapped_particles_doesnt_swap_masked_particles():
 )
 def test_get_element_and_swap_frequency_dictionary(z_table, expected_dict):
     assert get_element_and_swap_frequency_dictionary(z_table) == expected_dict
-
-
-from collections import Counter
 
 
 @pytest.mark.parametrize(

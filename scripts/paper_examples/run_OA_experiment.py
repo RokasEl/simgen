@@ -1,14 +1,16 @@
 import logging
 from pathlib import Path
 
+import ase
 import ase.io as ase_io
 import numpy as np
 import typer
+import zntrack
 
 from simgen.element_swapping import SwappingAtomicNumberTable
 from simgen.generation_utils import calculate_restorative_force_strength
 from simgen.integrators import IntegrationParameters
-from simgen.manifolds import MultivariateGaussianPrior
+from simgen.manifolds import PointCloudPrior
 from simgen.particle_filtering import ParticleFilterGenerator
 from simgen.utils import (
     get_hydromace_calculator,
@@ -20,8 +22,23 @@ from simgen.utils import (
 
 DEVICE = get_system_torch_device_str()
 
+app = typer.Typer()
 
-app = typer.Typer(pretty_exceptions_show_locals=False)
+
+def construct_prior_from_atoms(
+    ligand_atoms: list[ase.Atoms], beta: float, include_h: bool = False
+) -> PointCloudPrior:
+    """
+    Generate a PointCloudPrior from a list of ase.Atoms objects.
+    Beta controls the size of the attractive region around each point. Low beta -> fuzzy cloud, high beta -> tight cloud.
+    """
+    if not include_h:
+        ligand_positions = np.concatenate(
+            [mol[mol.numbers != 1].get_positions() for mol in ligand_atoms]
+        )
+    else:
+        ligand_positions = np.concatenate([mol.get_positions() for mol in ligand_atoms])
+    return PointCloudPrior(ligand_positions, beta)
 
 
 @app.command()
@@ -39,15 +56,18 @@ def main(
     hydrogenation_model_name: str = typer.Option(
         "hydromace", help="Name of hydrogenation model to use"
     ),
-    prior_gaussian_covariance: tuple[float, float, float] = typer.Option(
-        default=(1.0, 1.0, 2.0),
-        help="Covariance matrix for prior Gaussian distribution",
-    ),
     num_molecules: int = typer.Option(
         default=100, help="Number of molecules to generate"
     ),
     num_heavy_atoms: int = typer.Option(
         default=4, help="Number of heavy atoms in generated molecules"
+    ),
+    beta: float = typer.Option(default=1.0, help="Beta for the prior"),
+    additional_force_multiplier: float = typer.Option(
+        1.0,
+        "--additional-force-multiplier",
+        "-mult",
+        help="Additional multiplier for the restorative force strength",
     ),
     num_integration_steps: int = typer.Option(
         default=50, help="Number of integration steps for particle filter"
@@ -56,15 +76,15 @@ def main(
         default=False,
         help="If true, save all trajectory configurations instead of just the last",
     ),
-    do_final_cleanup: bool = typer.Option(
-        default=True,
-        help="If true, clean up generated molecules by hydrogenating them and relaxing them. False if you want to save the raw output of the particle filter.",
+    use_scaffold: bool = typer.Option(
+        default=False, help="If true, use the OA as a scaffold"
     ),
     cleanup_scheme: str = typer.Option(
         default="add_hs_once",
     ),
 ):
-    setup_logger(level=logging.INFO, tag="particle_filter", directory="./logs")
+    setup_logger(level=logging.INFO, tag="OA_generation", directory="./logs")
+
     rng = np.random.default_rng(0)
     score_model = get_mace_similarity_calculator(
         model_repo_path,
@@ -85,17 +105,27 @@ def main(
     if save_path.is_dir():
         save_path.mkdir(parents=True, exist_ok=True)
 
-    prior_gaussian_covariance_arr = np.diag(prior_gaussian_covariance).astype(float)
+    data_loader = zntrack.from_rev("OA_ligands", remote=model_repo_path)
+    OA_ligands = data_loader.frames
+    prior = construct_prior_from_atoms(OA_ligands, beta=beta)
+
+    if use_scaffold:
+        oa_structure = zntrack.from_rev("OA_parent", remote=model_repo_path)
+        oa_structure = oa_structure.frames[0]
+    else:
+        oa_structure = None
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
         size = num_heavy_atoms
         mol = initialize_mol(f"C{size}")
-        restorative_force_strength = 0.7 * calculate_restorative_force_strength(size)
+        restorative_force_strength = (
+            additional_force_multiplier * calculate_restorative_force_strength(size)
+        )
         particle_filter = ParticleFilterGenerator(
             score_model,
-            guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance_arr),
+            guiding_manifold=prior,
             integration_parameters=integration_params,
             restorative_force_strength=restorative_force_strength,
             num_steps=num_integration_steps,
@@ -107,7 +137,7 @@ def main(
             particle_swap_frequency=2,
             hydrogenation_type="hydromace",
             hydrogenation_calc=hydromace_calc,
-            do_final_cleanup=do_final_cleanup,
+            scaffold=oa_structure,
             cleanup_scheme=cleanup_scheme,
         )
 

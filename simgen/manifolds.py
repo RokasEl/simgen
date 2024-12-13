@@ -1,4 +1,3 @@
-import warnings
 from abc import ABC, abstractmethod
 
 import ase
@@ -110,7 +109,7 @@ class PointCloudPrior(PriorManifold):
     ):
         """
         points: (N, 3) array of points
-        beta: 1/sigma of each point in the manifold, for calculating restorative force
+        beta: 1/sigma^2 of each point in the manifold, for calculating restorative force
         """
         self.points = points
         self.beta = beta
@@ -159,6 +158,34 @@ class PointCloudPrior(PriorManifold):
         )  # (n_atoms, 3)
         return -forces
 
+    def calculate_energy(self, positions: np.ndarray | torch.Tensor) -> npt.ArrayLike:
+        """
+        Calculate the energy of the current positions
+        """
+        points, precision_matrix = self.points, self.point_shape.precision_matrix
+        if isinstance(positions, torch.Tensor):
+            dtype, device = positions.dtype, positions.device
+            points = torch.tensor(points, dtype=dtype, device=device)
+            precision_matrix = torch.tensor(
+                precision_matrix, dtype=dtype, device=device
+            )
+
+        differences = (
+            positions[:, None, :] - points[None, :, :]
+        )  # (n_atoms, n_points, 3)
+        distances = (
+            differences @ precision_matrix * differences
+        )  # (n_atoms, n_points, 3)
+        distances = reduce(distances, "i j k -> i j", "sum")  # (n_atoms, n_points)
+        exp_argument = distances * -0.5 * self.beta
+
+        if isinstance(exp_argument, torch.Tensor):
+            energy = exp_argument.exp().sum(dim=-1)
+            return -torch.log(energy)
+        else:
+            energy = np.exp(exp_argument).sum(axis=-1)
+            return -np.log(energy)
+
     @staticmethod
     def get_weights(distance_matrix):
         if isinstance(distance_matrix, torch.Tensor):
@@ -181,7 +208,7 @@ class CirclePrior(PointCloudPrior):
     def __init__(
         self,
         radius,
-        num_points=20,
+        num_points: int = 20,
         beta: float = 1,
         point_shape: PointShape = StandardGaussianPrior(),
     ):
@@ -196,3 +223,33 @@ class CirclePrior(PointCloudPrior):
     @property
     def curve_length(self):
         return 2 * np.pi * self.radius
+
+
+class LinePrior(PointCloudPrior):
+    def __init__(
+        self,
+        length,
+        num_points: int = 20,
+        beta: float = 1,
+        point_shape: PointShape = StandardGaussianPrior(),
+    ):
+        self.length = length
+        x = np.linspace(-length / 2, length / 2, num_points)
+        y = np.zeros(num_points)
+        z = np.zeros(num_points)
+        points = np.stack([x, y, z], axis=1)
+        super().__init__(points, beta, point_shape)
+
+    def initialise_positions(self, molecule: ase.Atoms, scale: float) -> ase.Atoms:
+        """
+        Initialise the atom positions randomly around the point cloud
+        """
+        mol = molecule.copy()
+        x_pos = np.linspace(-self.length / 2, self.length / 2, len(mol))
+        positions = np.stack([x_pos, np.zeros(len(mol)), np.zeros(len(mol))], axis=1)
+        mol.set_positions(positions)
+        return mol
+
+    @property
+    def curve_length(self):
+        return self.length

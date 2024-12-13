@@ -6,9 +6,8 @@ import numpy as np
 import typer
 
 from simgen.element_swapping import SwappingAtomicNumberTable
-from simgen.generation_utils import calculate_restorative_force_strength
 from simgen.integrators import IntegrationParameters
-from simgen.manifolds import MultivariateGaussianPrior
+from simgen.manifolds import LinePrior, MultivariateGaussianPrior
 from simgen.particle_filtering import ParticleFilterGenerator
 from simgen.utils import (
     get_hydromace_calculator,
@@ -39,15 +38,14 @@ def main(
     hydrogenation_model_name: str = typer.Option(
         "hydromace", help="Name of hydrogenation model to use"
     ),
-    prior_gaussian_covariance: tuple[float, float, float] = typer.Option(
-        default=(1.0, 1.0, 2.0),
-        help="Covariance matrix for prior Gaussian distribution",
+    line_length: float = typer.Option(
+        default=3.0, help="Length of the line to generate"
+    ),
+    atoms_per_angstrom: float = typer.Option(
+        default=1.2, help="Lengthwise atom density"
     ),
     num_molecules: int = typer.Option(
         default=100, help="Number of molecules to generate"
-    ),
-    num_heavy_atoms: int = typer.Option(
-        default=4, help="Number of heavy atoms in generated molecules"
     ),
     num_integration_steps: int = typer.Option(
         default=50, help="Number of integration steps for particle filter"
@@ -85,17 +83,23 @@ def main(
     if save_path.is_dir():
         save_path.mkdir(parents=True, exist_ok=True)
 
-    prior_gaussian_covariance_arr = np.diag(prior_gaussian_covariance).astype(float)
+    num_points = int(line_length * 5)
+    point_shape = MultivariateGaussianPrior(
+        covariance_matrix=np.diag([1.0, 0.5, 0.5]), normalise_covariance=False
+    )
+    prior = LinePrior(
+        line_length, num_points=num_points, beta=1.0, point_shape=point_shape
+    )
 
     swapping_z_table = SwappingAtomicNumberTable([6, 7, 8], [1, 1, 1])
     for i in range(num_molecules):
         logging.info(f"Generating molecule {i}")
-        size = num_heavy_atoms
+        size = int(prior.curve_length * atoms_per_angstrom)
         mol = initialize_mol(f"C{size}")
-        restorative_force_strength = 0.7 * calculate_restorative_force_strength(size)
+        restorative_force_strength = 1.0
         particle_filter = ParticleFilterGenerator(
             score_model,
-            guiding_manifold=MultivariateGaussianPrior(prior_gaussian_covariance_arr),
+            guiding_manifold=prior,
             integration_parameters=integration_params,
             restorative_force_strength=restorative_force_strength,
             num_steps=num_integration_steps,

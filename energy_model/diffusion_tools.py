@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
 
 import einops
 import numpy as np
@@ -102,7 +102,7 @@ class iDDPMLossFunction:
 
     @staticmethod
     def _calculate_loss(
-        original_data: AtomicData, reconstructed_data: Dict[str, torch.Tensor]
+        original_data: AtomicData, reconstructed_data: dict[str, torch.Tensor]
     ):
         position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
         position_loss = einops.reduce(
@@ -199,7 +199,7 @@ class EDMLossFn:
 
     @staticmethod
     def _calculate_loss(
-        original_data: AtomicData, reconstructed_data: Dict[str, torch.Tensor]
+        original_data: AtomicData, reconstructed_data: dict[str, torch.Tensor]
     ):
         position_loss = (original_data.positions - reconstructed_data["positions"]) ** 2
         position_loss = einops.reduce(
@@ -283,7 +283,9 @@ class HeunSampler:
         # Main sampling loop. A second order Heun integrator is used.
         # read the integrator parameters from the noise parameters.
         S_churn, S_min, S_max, S_noise = self._get_integrator_parameters()
-        for i, (sigma_cur, sigma_next) in enumerate(zip(sigmas[:-1], sigmas[1:])):
+        for i, (sigma_cur, sigma_next) in enumerate(
+            zip(sigmas[:-1], sigmas[1:], strict=False)
+        ):
             x_cur = x_next.clone()
             x_cur.positions.grad = None
             x_cur.node_attrs.grad = None
@@ -403,7 +405,7 @@ class ResidualReadoutBlock(torch.nn.Module):
         self,
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
-        gate: Optional[Callable],
+        gate: Callable | None,
         n_layers: int = 5,
     ):
         super().__init__()
@@ -489,10 +491,10 @@ class EnergyMACEDiffusion(MACE):
 
     def forward(
         self,
-        data: Dict[str, torch.Tensor],
+        data: dict[str, torch.Tensor],
         sigmas: torch.Tensor,
         training: bool = False,
-    ) -> Dict[str, Optional[torch.Tensor]]:
+    ) -> dict[str, torch.Tensor | None]:
         # Setup
         data["positions"].requires_grad_(True)
         data["node_attrs"].requires_grad_(True)
@@ -514,7 +516,7 @@ class EnergyMACEDiffusion(MACE):
         energies = []
         node_energies_list = []
         for interaction, product, readout in zip(
-            self.interactions, self.products, self.readouts
+            self.interactions, self.products, self.readouts, strict=False
         ):
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
@@ -542,7 +544,7 @@ class EnergyMACEDiffusion(MACE):
         node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
         # Outputs
 
-        grad_outputs: List[Optional[torch.Tensor]] = [
+        grad_outputs: list[torch.Tensor | None] = [
             torch.ones_like(total_energy),
             torch.ones_like(total_energy),
         ]

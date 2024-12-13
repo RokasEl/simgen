@@ -1,18 +1,12 @@
-"""ASE calculator comparing SOAP similarity"""
-import logging
 import warnings
 from functools import partial
-from typing import List
+from typing import ClassVar
 
 import ase
 import einops
 import numpy as np
 import torch
-from ase.calculators.calculator import (
-    Calculator,
-    PropertyNotImplementedError,
-    all_changes,
-)
+from ase.calculators.calculator import Calculator, all_changes
 from mace.data.atomic_data import AtomicData, get_data_loader
 from mace.modules.models import MACE
 from mace.tools import AtomicNumberTable
@@ -24,20 +18,20 @@ from simgen.generation_utils import (
     batch_to_correct_dtype,
     convert_atoms_to_atomic_data,
     get_model_dtype,
-    remove_elements,
 )
 
 
 class MaceSimilarityCalculator(Calculator):
-    implemented_properties = ["energy", "forces", "energies"]
+    implemented_properties: ClassVar = ["energy", "forces", "energies"]
 
     def __init__(
         self,
         model: MACE,
-        reference_data: List[ase.Atoms],
+        reference_data: list[ase.Atoms],
         device: str = "cpu",
         alpha: float = 8.0,
         element_sigma_array: np.ndarray | None = None,
+        max_norm: float | None = np.sqrt(3),
         *args,
         restart=None,
         label=None,
@@ -65,6 +59,7 @@ class MaceSimilarityCalculator(Calculator):
         self.dtype = get_model_dtype(model)
         self.repulsion_block = ExponentialRepulsionBlock(alpha=alpha).to(device)
         self.device = device
+        self.max_norm = max_norm
         self.z_table = AtomicNumberTable([int(z) for z in model.atomic_numbers])
         self.element_kernel_sigmas = self._init_element_kernel_sigmas(
             element_sigma_array
@@ -101,7 +96,7 @@ class MaceSimilarityCalculator(Calculator):
         repulsive_force = self._get_gradient(
             atomic_data.positions, repulsive_energy * -1
         )
-        grad = self._clip_grad_norm(grad, max_norm=np.sqrt(3))
+        grad = self._clip_grad_norm(grad, max_norm=self.max_norm)
         return grad + repulsive_force
 
     def calculate(
@@ -123,7 +118,7 @@ class MaceSimilarityCalculator(Calculator):
             raise ValueError(
                 "`atoms.info['calculation_type']` must be either 'similarity' or 'mace'"
             )
-        mask = atoms.info.get("mask", np.zeros(len(atoms), dtype=bool))
+        mask = atoms.arrays.get("mask", np.zeros(len(atoms), dtype=bool))
         if calculation_type == "similarity":
             (
                 node_energies,
@@ -148,8 +143,8 @@ class MaceSimilarityCalculator(Calculator):
     def _calculate_similarity_energies_and_forces(self, atoms: ase.Atoms):
         try:
             time = atoms.info["time"]
-        except KeyError:
-            raise KeyError("Atoms object must have a time attribute")
+        except KeyError as e:
+            raise KeyError("Atoms object must have a time attribute") from e
 
         batched = self.batch_atoms(atoms)
         embedding = self._get_node_embeddings(batched)
@@ -167,7 +162,7 @@ class MaceSimilarityCalculator(Calculator):
         out = self.model(batched.to_dict())
         forces = out["forces"].detach().cpu().numpy()
         node_energies = out["node_energy"]
-        node_e0s = self.model.atomic_energies_fn(batched.node_attrs)
+        node_e0s = self.model.atomic_energies_fn(batched.node_attrs).squeeze()
         node_interaction_energies = node_energies - node_e0s
         molecule_energies = scatter_sum(node_interaction_energies, batched.batch, dim=0)
         molecule_energies = molecule_energies.detach().cpu().numpy()
@@ -188,8 +183,10 @@ class MaceSimilarityCalculator(Calculator):
 
     @staticmethod
     def _clip_grad_norm(
-        grad: np.ndarray | torch.Tensor, max_norm: float = 1
+        grad: np.ndarray | torch.Tensor, max_norm: float | None = 1
     ) -> np.ndarray | torch.Tensor:
+        if max_norm is None:
+            return grad
         if isinstance(grad, np.ndarray):
             norm = np.linalg.norm(grad, axis=1)
         elif isinstance(grad, torch.Tensor):
@@ -218,7 +215,7 @@ class MaceSimilarityCalculator(Calculator):
         return node_feats
 
     def _calculate_reference_embeddings(
-        self, training_data: List[ase.Atoms]
+        self, training_data: list[ase.Atoms]
     ) -> torch.Tensor:
         as_atomic_data = self.convert_to_atomic_data(training_data)
         dloader = get_data_loader(as_atomic_data, batch_size=128, shuffle=False)
@@ -255,7 +252,7 @@ class MaceSimilarityCalculator(Calculator):
         # overlapping atoms can cause nans or very large gradients
         # convert nans to zeros
         if np.isnan(grad).any() or np.isinf(grad).any():
-            warnings.warn("nan or inf in grad")
+            warnings.warn("nan or inf in grad", stacklevel=2)
             grad = np.nan_to_num(grad, nan=0, posinf=0, neginf=0)
         return grad
 
@@ -274,7 +271,8 @@ class MaceSimilarityCalculator(Calculator):
         else:
             if element_sigma_array is not None:
                 warnings.warn(
-                    f"element_sigma_array has length {len(element_sigma_array)}, but there are {len(self.z_table)} elements in the model. Using default values of 1.0 for all elements"
+                    f"element_sigma_array has length {len(element_sigma_array)}, but there are {len(self.z_table)} elements in the model. Using default values of 1.0 for all elements",
+                    stacklevel=2,
                 )
             element_kernel_sigmas = torch.ones(
                 len(self.z_table), device=self.device, dtype=self.dtype

@@ -21,9 +21,8 @@ from simgen.utils import get_system_torch_device_str, initialize_mol
 
 
 def test_calculate_path_length():
-    f = lambda x: x**2
     xs = np.array([-1, 0, 1])
-    ys = f(xs)
+    ys = xs**2
     points = np.stack([xs, ys, np.zeros_like(xs)], axis=1)
     length = calculate_path_length(points)
     expected_length = 2 * np.sqrt(2)

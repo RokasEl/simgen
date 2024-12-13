@@ -1,6 +1,5 @@
 import re
 import subprocess
-from typing import Tuple
 
 import ase
 import numpy as np
@@ -137,13 +136,15 @@ class MopacCalculator(Calculator):
         command += "\nTitle: ASE calculation\n\n"
 
         # Write coordinates:
-        for xyz, symbol in zip(atoms.positions, atoms.get_chemical_symbols()):
+        for xyz, symbol in zip(
+            atoms.positions, atoms.get_chemical_symbols(), strict=False
+        ):
             command += " {0:2} {1} {2} {3}\n".format(symbol, *xyz)
 
         with open(f"{self.input_file_name}.in", "w") as fd:
             fd.write(command)
 
-    def read_results(self) -> Tuple[float, np.ndarray, ase.Atoms]:
+    def read_results(self) -> tuple[float, np.ndarray, ase.Atoms]:
         with open(f"{self.input_file_name}.in.out") as fd:
             lines = fd.readlines()
         energy = self.find_energy(lines) * 0.0433641153087705

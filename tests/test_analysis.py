@@ -1,7 +1,6 @@
 from collections import Counter
 
 import numpy as np
-import pytest
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 

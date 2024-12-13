@@ -135,6 +135,8 @@ wandb/*
 ./trained_models/*
 ./logs/*
 *.xyz
+*.extxyz
+*.txt
 *.model
 *.png
 *.pdf
@@ -165,3 +167,4 @@ slurm*
 
 git-credentials
 dvc-credentials
+*.env
