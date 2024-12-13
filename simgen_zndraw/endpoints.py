@@ -66,9 +66,6 @@ def hydrogenate(
             request.atoms, hydromace_calc=hydromace_calc
         )
     else:
-        logging.info(
-            "Hydromace calculator not provided, using deterministic hydrogenation"
-        )
         edge_array = get_edge_array(request.atoms)
         hydrogenated = hydrogenate_deterministically(
             request.atoms, edge_array=edge_array
