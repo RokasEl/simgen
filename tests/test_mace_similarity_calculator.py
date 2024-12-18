@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
 import torch
+from mace.calculators import mace_off
 from mace.tools.scatter import scatter_sum
 
+from simgen.calculators import MaceSimilarityCalculator
 from simgen.utils import get_system_torch_device_str, initialize_mol
 
 torch.set_default_dtype(torch.float64)
@@ -263,3 +265,35 @@ def test_element_sigmas_adjusts_the_distance_matrix(
         the_rest_distances_original = distance_mats_original[i][the_rest_of_the_indices]
         the_rest_distances_new = distance_mats_new[i][the_rest_of_the_indices]
         np.testing.assert_allclose(the_rest_distances_new, the_rest_distances_original)
+
+
+def test_ref_data_mask_gets_correct_atoms(training_molecules):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    mace_calc = mace_off("small", device=device, default_dtype="float32")
+    mace_model = mace_calc.models[0]
+    kept_indices = [
+        np.arange(len(training_molecules[0])),
+        np.array([0, 1]),
+        np.array([-2, -1]),
+        np.array([5]),
+    ]
+    masks = [
+        np.zeros(len(training_molecules[i]), dtype=bool)
+        for i in range(len(training_molecules))
+    ]
+    for i, indices in enumerate(kept_indices):
+        masks[i][indices] = True
+    sim_calc = MaceSimilarityCalculator(
+        model=mace_model,
+        reference_data=training_molecules,
+        ref_data_mask=masks,
+        device="cuda",
+    )
+    expected_embs = []
+    for mol, mask in zip(training_molecules, masks, strict=True):
+        emb = mace_calc.get_descriptors(mol, invariants_only=True, num_layers=1)
+        emb = emb[mask]
+        expected_embs.append(emb)
+    expected_embs = np.concatenate(expected_embs, axis=0)
+    actual_embs = sim_calc.reference_embeddings.detach().cpu().numpy()
+    np.testing.assert_allclose(actual_embs, expected_embs, atol=1e-6)
