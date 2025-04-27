@@ -1,4 +1,4 @@
-[![DOI](https://img.shields.io/badge/arXiv-2402.08708-red)](https://arxiv.org/abs/2402.08708)
+[![DOI](https://img.shields.io/badge/arXiv-2402.08708-red)](https://arxiv.org/abs/2402.08708) [![DOI](https://zenodo.org/badge/593278428.svg)](https://zenodo.org/badge/latestdoi/593278428)
 
 # Similarity based Molecular Generation (SiMGen)
 
