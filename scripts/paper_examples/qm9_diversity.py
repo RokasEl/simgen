@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from rdkit import Chem
-from scipy.spatial.distance import jaccard
 from sklearn.cluster import DBSCAN
 from typer import Typer
 
@@ -12,7 +11,7 @@ def get_dbscan_results(
     fingerprints, min_dist: float = 0.3, min_samples: int = 2, n_procs: int = -1
 ):
     db = DBSCAN(
-        eps=min_dist, min_samples=min_samples, metric=jaccard, p=1, n_jobs=n_procs
+        eps=min_dist, min_samples=min_samples, metric="jaccard", p=1, n_jobs=n_procs
     )
     db.fit(fingerprints)
     return db
@@ -35,3 +34,6 @@ def main(qm9_summary_path: str, n_procs: int = -1):
     diversity = calculate_diversity(db)
     np.save("./results/qm9_diversity.npy", db.labels_)
     print(f"Diversity: {diversity}")
+    
+if __name__ == "__main__":
+    app()
