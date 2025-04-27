@@ -28,6 +28,7 @@ class MaceSimilarityCalculator(Calculator):
         self,
         model: MACE,
         reference_data: list[ase.Atoms],
+        ref_data_mask: list[np.ndarray] | None = None,
         device: str = "cpu",
         alpha: float = 8.0,
         element_sigma_array: np.ndarray | None = None,
@@ -77,7 +78,9 @@ class MaceSimilarityCalculator(Calculator):
             device=self.device,
         )
 
-        self.reference_embeddings = self._calculate_reference_embeddings(reference_data)
+        self.reference_embeddings = self._calculate_reference_embeddings(
+            reference_data, ref_data_mask
+        )
         self.typical_length_scale = self._calculate_mean_dot_product(
             self.reference_embeddings
         )
@@ -215,7 +218,9 @@ class MaceSimilarityCalculator(Calculator):
         return node_feats
 
     def _calculate_reference_embeddings(
-        self, training_data: list[ase.Atoms]
+        self,
+        training_data: list[ase.Atoms],
+        ref_data_mask: list[np.ndarray] | None = None,
     ) -> torch.Tensor:
         as_atomic_data = self.convert_to_atomic_data(training_data)
         dloader = get_data_loader(as_atomic_data, batch_size=128, shuffle=False)
@@ -224,7 +229,20 @@ class MaceSimilarityCalculator(Calculator):
                 self._get_node_embeddings(batch_to_correct_dtype(data, self.dtype))
                 for data in dloader
             ]
-        return torch.concatenate(node_embeddings, dim=0)
+        all_embs = torch.concatenate(node_embeddings, dim=0)
+        if ref_data_mask is not None:
+            assert len(ref_data_mask) == len(training_data)
+            assert all(
+                [
+                    len(mask) == len(data)
+                    for mask, data in zip(ref_data_mask, training_data, strict=True)
+                ]
+            )
+            ref_data_mask_ = torch.tensor(
+                np.concatenate(ref_data_mask), device=self.device
+            )
+            all_embs = all_embs[ref_data_mask_]
+        return all_embs
 
     def _calculate_distance_matrix(self, embedding, node_attrs):
         embedding_deltas = embedding[:, None, :] - self.reference_embeddings[None, :, :]
