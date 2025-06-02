@@ -508,7 +508,9 @@ class EnergyMACEDiffusion(MACE):
             shifts=data["shifts"],
         )
         edge_attrs = self.spherical_harmonics(vectors)
-        edge_feats = self.radial_embedding(lengths)
+        edge_feats = self.radial_embedding(
+            lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
+        )
         sigma_embedding = self.noise_embedding(sigmas) / self.noise_embed_dim
         node_feats = torch.cat([node_feats, sigma_embedding], dim=-1)
         node_feats = self.noise_linear(node_feats)

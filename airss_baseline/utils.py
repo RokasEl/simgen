@@ -72,7 +72,7 @@ def do_hot_airss_relaxation(
         print(f"Step {i} of {num_steps}, weight {weight}")
         print(f"Restorative weight: {restorative_weight}")
         print(f"Mopac weight: {mopac_weight}")
-        atoms.calc.weights = [mopac_weight, restorative_weight]
+        atoms.calc.mixer.weights = [mopac_weight, restorative_weight]
         traj.append(atoms.copy())
         _update_energy_dict(
             energies_dict, mopac_calc, restorative_calc, restorative_weight
