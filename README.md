@@ -95,12 +95,20 @@ services:
 If you use SiMGen in your research, please cite the following paper:
 
 ```bibtex
-@misc{elijosiusZeroShotMolecular2024,
-  title = {Zero {{Shot Molecular Generation}} via {{Similarity Kernels}}},
-  author = {Elijo{\v s}ius, Rokas and Zills, Fabian and Batatia, Ilyes and Norwood, Sam Walton and Kov{\'a}cs, D{\'a}vid P{\'e}ter and Holm, Christian and Cs{\'a}nyi, G{\'a}bor},
-  year = {2024},
-  eprint = {2402.08708},
-  archiveprefix = {arxiv},
+@article{elijosius_zero_2025,
+	title = {Zero shot molecular generation via similarity kernels},
+	volume = {16},
+	issn = {2041-1723},
+	url = {https://www.nature.com/articles/s41467-025-60963-3},
+	doi = {10.1038/s41467-025-60963-3},
+	number = {1},
+	urldate = {2025-07-01},
+	journal = {Nature Communications},
+	author = {Elijošius, Rokas and Zills, Fabian and Batatia, Ilyes and Norwood, Sam Walton and Kovács, Dávid Péter and Holm, Christian and Csányi, Gábor},
+	month = jul,
+	year = {2025},
+	note = {Publisher: Nature Publishing Group},
+	pages = {1--16},
 }
 ```
 
