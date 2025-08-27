@@ -10,6 +10,8 @@ SiMGen is a local similarity based molecular generation method. It uses a pretra
 
 SiMGen is available as an online web-tool at [https://zndraw.icp.uni-stuttgart.de/](https://zndraw.icp.uni-stuttgart.de/).
 
+The paper is now out on [Nature Communications](https://www.nature.com/articles/s41467-025-60963-3)!
+
 ## Installation
 
 The package can be installed using `pip`:
