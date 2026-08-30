@@ -3897,7 +3897,7 @@ wheels = [
 
 [[package]]
 name = "simgen"
-version = "0.2.3"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "ase" },
