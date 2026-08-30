@@ -151,6 +151,7 @@ def main(
             to_write,
             format="extxyz",
             append=True,
+            write_results=False,
         )
 
 

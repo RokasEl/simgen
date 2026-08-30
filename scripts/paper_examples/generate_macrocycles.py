@@ -85,6 +85,7 @@ def main(
             trajectories,
             format="extxyz",
             append=True,
+            write_results=False,
         )
 
 

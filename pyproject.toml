@@ -4,25 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simgen"
-version = "0.2.2"
+version = "0.2.3"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Rokas Elijošius", email = "re344@cam.ac.uk" }]
 dependencies = [
-    "ase>=3.23",
-    "einops>=0.6.1",
-    "fire>=0.5.0",
-    "frozendict>=2.3.7",
-    "typer>=0.13",
-    "decorator",
-    "mace-models>=0.1.2",
-    "mace-torch>=0.3.9",
-    "hydromace>=0.2",
-    "znframe",
-    "zndraw>=0.5.7",
+    "ase==3.29.0",
+    "einops==0.8.2",
+    "fire==0.7.1",
+    "frozendict==2.4.7",
+    "typer==0.27.2",
+    "decorator==5.3.1",
+    "mace-models==0.1.6",
+    "mace-torch==0.3.16",
+    "hydromace==0.2.1",
+    "znframe==0.1.5",
+    "zndraw==0.6.0",
+    "e3nn==0.4.4",
+    "torch>=2.0",
+    "numpy==1.26.4",
 ]
-# if in doubt, swithc >= to ==
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -34,7 +36,7 @@ simgen = "simgen_zndraw.cli:cli_app"
 
 [project.optional-dependencies]
 all = [
-    "rdkit>=2023.9.4"
+    "rdkit==2026.3.5"
 ]
 
 [tool.ruff]
